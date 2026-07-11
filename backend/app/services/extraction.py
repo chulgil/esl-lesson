@@ -1,6 +1,7 @@
 """Claude API 번역 + 학습 항목 4종 추출 (docs/specs/content-pipeline.md 단계 3-4)."""
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -127,7 +128,7 @@ async def translate_texts(texts: list[str]) -> list[str]:
             system=TRANSLATE_SYSTEM,
             messages=[{"role": "user", "content": json.dumps(batch, ensure_ascii=False)}],
         )
-        translated = json.loads(_first_text(res))
+        translated = _parse_json_array(_first_text(res))
         if not isinstance(translated, list) or len(translated) != len(batch):
             raise ValueError("translation batch size mismatch")
         results.extend(str(t) for t in translated)
@@ -157,6 +158,20 @@ async def extract_items(segments: list[tuple[int, str]]) -> dict:
         for key in merged:
             merged[key].extend(data.get(key, []))
     return _filter_items(merged)
+
+
+def _parse_json_array(text: str) -> list:
+    """모델 응답에서 JSON 배열 파싱 — 코드펜스/서두 텍스트 허용 (haiku 실측)."""
+    stripped = text.strip()
+    stripped = re.sub(r"^```[a-zA-Z]*\s*", "", stripped)
+    stripped = re.sub(r"\s*```$", "", stripped)
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        start, end = stripped.find("["), stripped.rfind("]")
+        if start != -1 and end > start:
+            return json.loads(stripped[start : end + 1])
+        raise
 
 
 def _first_text(res) -> str:

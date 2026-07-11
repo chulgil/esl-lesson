@@ -53,3 +53,12 @@ def test_first_text_skips_thinking_block():
         ]
     )
     assert _first_text(res) == '["안녕"]'
+
+
+def test_parse_json_array_tolerates_fences_and_preamble():
+    """haiku 응답이 코드펜스/서두 텍스트를 붙이는 경우 (2026-07-11 운영 실측)."""
+    from app.services.extraction import _parse_json_array
+
+    assert _parse_json_array('["a", "b"]') == ["a", "b"]
+    assert _parse_json_array('```json\n["a"]\n```') == ["a"]
+    assert _parse_json_array('다음은 번역입니다:\n["안녕", "잘가"]') == ["안녕", "잘가"]
