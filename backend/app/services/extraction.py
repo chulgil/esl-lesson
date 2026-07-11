@@ -9,7 +9,7 @@ from anthropic import AsyncAnthropic
 
 from app.core.config import get_settings
 
-TRANSLATE_BATCH_SIZE = 50
+TRANSLATE_BATCH_SIZE = 20
 EXTRACT_CHUNK_WORDS = 8000
 
 EXTRACT_TOOL = {
@@ -116,23 +116,42 @@ def _client() -> AsyncAnthropic:
 
 
 async def translate_texts(texts: list[str]) -> list[str]:
-    """세그먼트 배치 번역. 배치 단위로 나눠 호출."""
+    """세그먼트 배치 번역. 배치 개수 불일치 시 문장별 개별 번역으로 폴백."""
     results: list[str] = []
     model = get_settings().anthropic_translate_model
     client = _client()
     for i in range(0, len(texts), TRANSLATE_BATCH_SIZE):
         batch = texts[i : i + TRANSLATE_BATCH_SIZE]
-        res = await client.messages.create(
-            model=model,
-            max_tokens=8000,
-            system=TRANSLATE_SYSTEM,
-            messages=[{"role": "user", "content": json.dumps(batch, ensure_ascii=False)}],
-        )
-        translated = _parse_json_array(_first_text(res))
-        if not isinstance(translated, list) or len(translated) != len(batch):
-            raise ValueError("translation batch size mismatch")
-        results.extend(str(t) for t in translated)
+        try:
+            results.extend(await _translate_batch(client, model, batch))
+        except (ValueError, json.JSONDecodeError):
+            # 모델이 개수를 안 맞추면 느리지만 확실한 개별 번역 (2026-07-11 운영 실측)
+            for text in batch:
+                results.append(await _translate_one(client, model, text))
     return results
+
+
+async def _translate_batch(client: AsyncAnthropic, model: str, batch: list[str]) -> list[str]:
+    res = await client.messages.create(
+        model=model,
+        max_tokens=8000,
+        system=TRANSLATE_SYSTEM,
+        messages=[{"role": "user", "content": json.dumps(batch, ensure_ascii=False)}],
+    )
+    translated = _parse_json_array(_first_text(res))
+    if not isinstance(translated, list) or len(translated) != len(batch):
+        raise ValueError("translation batch size mismatch")
+    return [str(t) for t in translated]
+
+
+async def _translate_one(client: AsyncAnthropic, model: str, text: str) -> str:
+    res = await client.messages.create(
+        model=model,
+        max_tokens=1000,
+        system="다음 영어 문장을 자연스러운 한국어로 번역한다. 번역문만 출력한다.",
+        messages=[{"role": "user", "content": text}],
+    )
+    return _first_text(res).strip()
 
 
 async def extract_items(segments: list[tuple[int, str]]) -> dict:

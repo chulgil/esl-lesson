@@ -62,3 +62,19 @@ def test_parse_json_array_tolerates_fences_and_preamble():
     assert _parse_json_array('["a", "b"]') == ["a", "b"]
     assert _parse_json_array('```json\n["a"]\n```') == ["a"]
     assert _parse_json_array('다음은 번역입니다:\n["안녕", "잘가"]') == ["안녕", "잘가"]
+
+
+async def test_translate_falls_back_to_per_item(monkeypatch):
+    """배치 개수 불일치 시 문장별 번역 폴백 (2026-07-11 운영 실측)."""
+    from app.services import extraction
+
+    async def bad_batch(client, model, batch):
+        raise ValueError("translation batch size mismatch")
+
+    async def one(client, model, text):
+        return f"번역:{text}"
+
+    monkeypatch.setattr(extraction, "_translate_batch", bad_batch)
+    monkeypatch.setattr(extraction, "_translate_one", one)
+    result = await extraction.translate_texts(["a", "b", "c"])
+    assert result == ["번역:a", "번역:b", "번역:c"]
