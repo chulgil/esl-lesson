@@ -64,6 +64,8 @@ export default function GamePage() {
               "게임에 쓸 단어가 부족해요 (최소 10개). 내 콘텐츠를 등록하거나 다른 소재를 선택해주세요.",
             content_not_yours: "내 콘텐츠만 소재로 쓸 수 있어요.",
             content_not_found: "콘텐츠를 찾을 수 없어요.",
+            already_in_match:
+              "진행 중인 대전이 있어요. 잠시 후 자동 복귀되거나, 10초 뒤 몰수 처리 후 새로 시작할 수 있어요.",
           }[msg.code] ?? msg.code,
         );
         break;

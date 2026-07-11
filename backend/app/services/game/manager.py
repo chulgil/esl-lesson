@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 TICK_SECONDS = 0.1
 STATE_BROADCAST_EVERY = 1  # 틱마다 전송 (페이로드 소형)
 RECONNECT_GRACE_SECONDS = 10.0
+COUNTDOWN_SECONDS = 3.0
 WORD_POOL_MIN = 40
 WORD_LEN_RANGE = (3, 12)
 
@@ -70,6 +71,11 @@ class GameManager:
 
     # --- 진입점 ---
 
+    def _guard_not_in_match(self, user_id: int) -> None:
+        session = self._session_of(user_id)
+        if session is not None and not session.match.finished:
+            raise WordPoolError("already_in_match")
+
     async def join_pve(
         self,
         user_id: int,
@@ -79,6 +85,7 @@ class GameManager:
         send: Sender,
         content_ids: list[int] | None = None,
     ) -> MatchSession:
+        self._guard_not_in_match(user_id)
         words = await select_word_pool(user_id, quiz, content_ids)
         seed = secrets.randbits(32)
         session = MatchSession(
@@ -97,6 +104,7 @@ class GameManager:
         return session
 
     async def join_pvp_queue(self, user_id: int, name: str, quiz: str, send: Sender) -> None:
+        self._guard_not_in_match(user_id)
         waiting = next((w for w in self.pvp_queue if w[2] == quiz and w[0] != user_id), None)
         if waiting is None:
             self.pvp_queue.append((user_id, name, quiz, send))
@@ -113,6 +121,7 @@ class GameManager:
         send: Sender,
         content_ids: list[int] | None = None,
     ) -> str:
+        self._guard_not_in_match(user_id)
         # 소재 유효성(소유/공용, 최소 단어 수)은 방 생성 시점에 검증
         await select_word_pool(user_id, quiz, content_ids)
         code = secrets.token_hex(3).upper()
@@ -132,6 +141,7 @@ class GameManager:
         return code
 
     async def join_room(self, user_id: int, name: str, code: str, send: Sender) -> None:
+        self._guard_not_in_match(user_id)
         match_id = self.rooms.get(code.upper())
         session = self.sessions.get(match_id) if match_id else None
         if session is None or session.started or 2 in session.players:
@@ -188,7 +198,7 @@ class GameManager:
                     "quiz": session.quiz,
                     "you": player_no,
                     "opponent": other.name if other else (opponent_name or "봇"),
-                    "countdown": 3,
+                    "countdown": int(COUNTDOWN_SECONDS),
                 },
             )
         session.task = asyncio.create_task(self._run_loop(session))
@@ -197,7 +207,7 @@ class GameManager:
 
     async def _run_loop(self, session: MatchSession) -> None:
         try:
-            await asyncio.sleep(3)  # 카운트다운
+            await asyncio.sleep(COUNTDOWN_SECONDS)  # 카운트다운
             last = time.monotonic()
             while not session.match.finished:
                 await asyncio.sleep(TICK_SECONDS)

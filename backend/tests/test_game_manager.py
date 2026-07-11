@@ -127,7 +127,8 @@ async def test_room_create_and_join(wired_db):
     session.task.cancel()
     assert session.match.board1.word_queue == session.match.board2.word_queue  # 공정성
 
-    # 없는 방
+    # 없는 방 (진행 중 매치 가드에 걸리지 않도록 먼저 종료)
+    session.match.forfeit(1)
     s3 = Collector()
     await gm.join_room(p2.id, p2.name, "ZZZZZZ", s3)
     assert any(m.get("code") == "room_not_found" for m in s3.messages)
