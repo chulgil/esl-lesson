@@ -41,3 +41,38 @@ def test_merge_keeps_snippets_when_no_punctuation():
     """자동 생성 자막(문장부호 없음)은 조각 그대로."""
     snippets = [Snippet("hello everyone today", 0, 2000), Snippet("we talk about", 2000, 4000)]
     assert merge_into_sentences(snippets) == snippets
+
+
+def test_transcript_api_uses_proxy_when_configured(monkeypatch):
+    """프록시 env 설정 시 GenericProxyConfig 로 생성 (docs/specs/content-pipeline.md)."""
+    from app.core.config import get_settings
+    from app.services.youtube import _transcript_api
+
+    monkeypatch.setenv("YT_PROXY_URL", "http://user:pass@proxy.example:8080")
+    get_settings.cache_clear()
+    try:
+        api = _transcript_api()
+        assert api is not None  # 프록시 설정으로도 생성 성공 (내부 구조 비의존)
+    finally:
+        monkeypatch.delenv("YT_PROXY_URL")
+        get_settings.cache_clear()
+
+
+def test_blocked_error_converted_to_friendly_message(monkeypatch):
+    from app.services import youtube
+
+    class RequestBlocked(Exception):
+        pass
+
+    class FakeApi:
+        def list(self, video_id):
+            raise RequestBlocked("cloud ip blocked")
+
+    monkeypatch.setattr(youtube, "_transcript_api", lambda: FakeApi())
+    try:
+        youtube.fetch_transcript("abc123def45")
+        raise AssertionError("should have raised")
+    except youtube.TranscriptNotFoundError as exc:
+        assert "차단" in str(exc)
+        assert "수기 입력" in str(exc)
+        assert len(str(exc)) < 200  # 라이브러리 장문 메시지 노출 금지

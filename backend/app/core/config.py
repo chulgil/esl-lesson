@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     public_service_url: str = "https://esl.lessonaza.app"
     public_admin_url: str = "https://esladmin.lessonaza.app"
 
+    # 유튜브 자막 프록시 (클라우드 IP 차단 우회 — docs/specs/content-pipeline.md)
+    webshare_proxy_username: str = ""
+    webshare_proxy_password: str = ""
+    yt_proxy_url: str = ""  # 일반 HTTP(S) 프록시 URL (webshare 미사용 시)
+
     # 추출 워커 (테스트에서는 비활성)
     enable_workers: bool = True
 

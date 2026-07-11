@@ -54,15 +54,50 @@ class TranscriptResult:
     snippets: list[Snippet]
 
 
+BLOCKED_MESSAGE = (
+    "유튜브가 서버 IP의 자막 요청을 차단했습니다. "
+    "프록시 설정(WEBSHARE_PROXY_* 또는 YT_PROXY_URL) 후 재시도하거나, "
+    "수기 입력으로 등록해주세요."
+)
+
+
+def _transcript_api():
+    """프록시 설정이 있으면 프록시 경유 (클라우드 IP 차단 우회)."""
+    from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
+
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.webshare_proxy_username and settings.webshare_proxy_password:
+        return YouTubeTranscriptApi(
+            proxy_config=WebshareProxyConfig(
+                proxy_username=settings.webshare_proxy_username,
+                proxy_password=settings.webshare_proxy_password,
+            )
+        )
+    if settings.yt_proxy_url:
+        return YouTubeTranscriptApi(
+            proxy_config=GenericProxyConfig(
+                http_url=settings.yt_proxy_url, https_url=settings.yt_proxy_url
+            )
+        )
+    return YouTubeTranscriptApi()
+
+
+def _is_blocked(exc: Exception) -> bool:
+    return type(exc).__name__ in ("RequestBlocked", "IpBlocked")
+
+
 def fetch_transcript(video_id: str, languages: tuple[str, ...] = ("en",)) -> TranscriptResult:
     """youtube-transcript-api 로 자막 추출. 수동 자막 우선 (동기 — 워커 스레드에서 호출)."""
-    from youtube_transcript_api import YouTubeTranscriptApi
-
-    api = YouTubeTranscriptApi()
+    api = _transcript_api()
     try:
         transcript_list = api.list(video_id)
     except Exception as exc:
-        raise TranscriptNotFoundError(str(exc)) from exc
+        if _is_blocked(exc):
+            raise TranscriptNotFoundError(BLOCKED_MESSAGE) from exc
+        raise TranscriptNotFoundError(f"자막 조회 실패: {type(exc).__name__}") from exc
 
     transcript = None
     for finder in ("find_manually_created_transcript", "find_generated_transcript"):
@@ -74,7 +109,12 @@ def fetch_transcript(video_id: str, languages: tuple[str, ...] = ("en",)) -> Tra
     if transcript is None:
         raise TranscriptNotFoundError(f"no {languages} transcript for {video_id}")
 
-    fetched = transcript.fetch()
+    try:
+        fetched = transcript.fetch()
+    except Exception as exc:
+        if _is_blocked(exc):
+            raise TranscriptNotFoundError(BLOCKED_MESSAGE) from exc
+        raise
     snippets = [
         Snippet(
             text=s.text.replace("\n", " ").strip(),
