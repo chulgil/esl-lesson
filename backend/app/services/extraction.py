@@ -111,13 +111,13 @@ def is_easy_word(en_text: str) -> bool:
 
 
 def _client() -> AsyncAnthropic:
-    return AsyncAnthropic(api_key=get_settings().anthropic_api_key)
+    return AsyncAnthropic(api_key=get_settings().anthropic_api_key, timeout=600, max_retries=2)
 
 
 async def translate_texts(texts: list[str]) -> list[str]:
     """세그먼트 배치 번역. 배치 단위로 나눠 호출."""
     results: list[str] = []
-    model = get_settings().anthropic_model
+    model = get_settings().anthropic_translate_model
     client = _client()
     for i in range(0, len(texts), TRANSLATE_BATCH_SIZE):
         batch = texts[i : i + TRANSLATE_BATCH_SIZE]
@@ -142,14 +142,16 @@ async def extract_items(segments: list[tuple[int, str]]) -> dict:
     client = _client()
     for chunk in chunks:
         body = "\n".join(f"[{seq}] {text}" for seq, text in chunk)
-        res = await client.messages.create(
+        # 장시간 생성 대비 스트리밍으로 수신 (비스트리밍은 대형 응답에서 타임아웃 위험)
+        async with client.messages.stream(
             model=model,
             max_tokens=16000,
             system=EXTRACT_SYSTEM,
             tools=[EXTRACT_TOOL],
             tool_choice={"type": "tool", "name": "save_learning_items"},
             messages=[{"role": "user", "content": body}],
-        )
+        ) as stream:
+            res = await stream.get_final_message()
         tool_use = next(b for b in res.content if b.type == "tool_use")
         data = tool_use.input
         for key in merged:
