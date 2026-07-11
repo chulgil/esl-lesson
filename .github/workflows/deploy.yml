@@ -1,0 +1,40 @@
+name: Deploy
+
+# main push → CI 통과 후 codenavi 서버 배포 (docs/architecture/deployment.md)
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to codenavi
+    runs-on: ubuntu-latest
+    # DEPLOY_ENABLED 리포지토리 변수를 'true' 로 설정해야 배포 활성화 (서버 준비 완료 후)
+    if: github.event.workflow_run.conclusion == 'success' && vars.DEPLOY_ENABLED == 'true'
+    environment: production
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            cd ~/apps/eng-lesson
+            git fetch origin main
+            git reset --hard origin/main
+            docker-compose -f docker-compose.prod.yml build
+            docker-compose -f docker-compose.prod.yml run --rm api uv run --no-dev alembic upgrade head
+            docker-compose -f docker-compose.prod.yml up -d
+            docker image prune -f
+
+      - name: Health check
+        run: |
+          sleep 15
+          curl -sf https://esladmin.lessonaza.com/api/health

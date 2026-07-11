@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* 노트 x 레고 디자인 토큰 (docs/specs/ui-design.md) */
+@theme {
+  --color-paper: #fdfbf3;
+  --color-paper-line: #c9e4f5;
+  --color-margin-red: #f5a9a9;
+  --color-ink: #2b2b33;
+  --color-brick-red: #d01012;
+  --color-brick-red-shadow: #9c0c0e;
+  --color-brick-yellow: #f5c518;
+  --color-brick-yellow-shadow: #b89412;
+  --color-brick-blue: #0d69ab;
+  --color-brick-blue-shadow: #0a4f80;
+  --color-brick-green: #237841;
+  --color-brick-green-shadow: #1a5a31;
+  --color-highlight: #fff176;
+
+  --font-hand: var(--font-gaegu);
+  --font-sans: var(--font-body), "Apple SD Gothic Neo", sans-serif;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* 줄노트 배경 (이미지 에셋 없이 CSS만) */
+.notebook-lines {
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 31px,
+    var(--color-paper-line) 31px,
+    var(--color-paper-line) 32px
+  );
+}
+
+.notebook-margin {
+  box-shadow: inset 56px 0 0 -54px var(--color-margin-red);
+}
+
+/* 형광펜 하이라이트 (섹션 헤딩용) */
+.hl {
+  background: linear-gradient(transparent 55%, var(--color-highlight) 55%, var(--color-highlight) 92%, transparent 92%);
+}
+
+/* 레고 브릭 스터드 (윗면 도트) */
+.brick-studs::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 12px;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0) 60%),
+    currentColor;
+  box-shadow: 18px 0 0 currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,180 @@
+"""Google OAuth 2.0 Authorization Code 흐름 (docs/specs/auth.md)."""
+
+import logging
+from datetime import UTC, datetime
+from typing import Annotated
+from urllib.parse import urlencode
+
+import httpx
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
+from fastapi.responses import RedirectResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import Settings, get_settings
+from app.core.db import get_db
+from app.core.security import (
+    SESSION_COOKIE,
+    STATE_COOKIE,
+    create_session_token,
+    create_state_token,
+    get_current_user,
+    safe_next_path,
+    verify_state_token,
+)
+from app.models.user import ROLE_ADMIN, User, UserSettings
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+
+
+def request_origin(request: Request, settings: Settings) -> str:
+    """요청이 들어온 도메인 기준으로 콜백 origin 구성 (허용 목록 검증)."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.url.netloc)
+    origin = f"{proto}://{host}"
+    allowed = {
+        settings.public_service_url.rstrip("/"),
+        settings.public_admin_url.rstrip("/"),
+        "http://localhost:3000",
+        "http://localhost:8000",
+    }
+    if origin not in allowed:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unknown origin")
+    return origin
+
+
+def set_session_cookie(response: RedirectResponse, token: str, settings: Settings) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=settings.jwt_expires_hours * 3600,
+        domain=settings.cookie_domain or None,
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+@router.get("/login")
+async def login(
+    request: Request,
+    next: str = Query(default="/"),
+) -> RedirectResponse:
+    settings = get_settings()
+    origin = request_origin(request, settings)
+    state_token, nonce = create_state_token(safe_next_path(next))
+    params = {
+        "client_id": settings.google_client_id,
+        "redirect_uri": f"{origin}/api/auth/callback",
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": nonce,
+        "prompt": "select_account",
+    }
+    response = RedirectResponse(f"{GOOGLE_AUTH_URL}?{urlencode(params)}")
+    response.set_cookie(
+        STATE_COOKIE,
+        state_token,
+        max_age=600,
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
+@router.get("/callback")
+async def callback(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    code: str = Query(default=""),
+    state: str = Query(default=""),
+    els_oauth_state: Annotated[str | None, Cookie()] = None,
+) -> RedirectResponse:
+    settings = get_settings()
+    origin = request_origin(request, settings)
+    if not code or not els_oauth_state:
+        return RedirectResponse(f"{origin}/login?error=oauth")
+    next_path = verify_state_token(els_oauth_state, state)
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            token_res = await client.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "code": code,
+                    "client_id": settings.google_client_id,
+                    "client_secret": settings.google_client_secret,
+                    "redirect_uri": f"{origin}/api/auth/callback",
+                    "grant_type": "authorization_code",
+                },
+            )
+            token_res.raise_for_status()
+            access_token = token_res.json()["access_token"]
+            userinfo_res = await client.get(
+                GOOGLE_USERINFO_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            userinfo_res.raise_for_status()
+            info = userinfo_res.json()
+    except (httpx.HTTPError, KeyError):
+        logger.exception("google oauth exchange failed")
+        return RedirectResponse(f"{origin}/login?error=oauth")
+
+    if not info.get("email_verified", False):
+        return RedirectResponse(f"{origin}/login?error=unverified")
+
+    user = await upsert_google_user(db, info, settings)
+    response = RedirectResponse(f"{origin}{next_path}")
+    response.delete_cookie(STATE_COOKIE)
+    set_session_cookie(response, create_session_token(user), settings)
+    return response
+
+
+async def upsert_google_user(db: AsyncSession, info: dict, settings: Settings) -> User:
+    """google_sub 기준 upsert + ADMIN_EMAILS 승격 + last_login 갱신."""
+    result = await db.execute(select(User).where(User.google_sub == info["sub"]))
+    user = result.scalar_one_or_none()
+    if user is None:
+        user = User(
+            google_sub=info["sub"],
+            email=info["email"],
+            name=info.get("name") or info["email"],
+            avatar_url=info.get("picture"),
+        )
+        db.add(user)
+        await db.flush()
+        db.add(UserSettings(user_id=user.id))
+    if user.email.lower() in settings.admin_email_set:
+        user.role = ROLE_ADMIN
+    user.last_login_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@router.post("/logout")
+async def logout() -> RedirectResponse:
+    settings = get_settings()
+    response = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie(SESSION_COOKIE, domain=settings.cookie_domain or None)
+    return response
+
+
+me_router = APIRouter(tags=["auth"])
+
+
+@me_router.get("/me")
+async def me(user: Annotated[User, Depends(get_current_user)]) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "avatar_url": user.avatar_url,
+        "role": user.role,
+    }

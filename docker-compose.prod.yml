@@ -1,0 +1,37 @@
+# codenavi 서버 배포용 — 설계: docs/architecture/deployment.md
+# 사전 준비(1회): .env.web / .env.api 작성, postgres 롤/DB 생성, DNS A 레코드
+version: "3.7"
+
+services:
+  web:
+    build: ./frontend
+    container_name: englesson-web
+    restart: unless-stopped
+    env_file: .env.web
+    networks: [traefiknet]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "traefiknet"
+      traefik.frontend.rule: "Host:esl.lessonaza.com,esladmin.lessonaza.com"
+      traefik.frontend.priority: "10"
+      traefik.port: "3000"
+
+  api:
+    build: ./backend
+    container_name: englesson-api
+    restart: unless-stopped
+    env_file: .env.api
+    networks: [traefiknet, dbnet]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "traefiknet"
+      traefik.frontend.rule: "Host:esl.lessonaza.com,esladmin.lessonaza.com;PathPrefix:/api,/ws"
+      traefik.frontend.priority: "100"
+      traefik.port: "8000"
+
+networks:
+  traefiknet:
+    external: true
+  dbnet:
+    # postgres 컨테이너가 속한 네트워크 — 배포 시 `docker inspect postgres` 로 확인 후 치환
+    external: true

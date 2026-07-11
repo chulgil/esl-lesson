@@ -1,0 +1,40 @@
+from datetime import datetime
+
+from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Integer, SmallInteger, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.base import Base, CreatedAtMixin, PkMixin
+from app.models.types import JsonDict
+
+MATCH_MODES = ("pvp", "pve")
+MATCH_STATUSES = ("waiting", "playing", "finished", "aborted")
+
+
+class GameMatch(Base, PkMixin, CreatedAtMixin):
+    """페이즈 2 — 워드 테트리스 대전 기록 (docs/specs/word-tetris.md)."""
+
+    __tablename__ = "game_matches"
+    __table_args__ = (
+        CheckConstraint("mode IN ('pvp','pve')", name="ck_matches_mode"),
+        CheckConstraint(
+            "status IN ('waiting','playing','finished','aborted')",
+            name="ck_matches_status",
+        ),
+    )
+
+    mode: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, default="waiting", server_default="waiting")
+    room_code: Mapped[str | None] = mapped_column(Text)
+    player1_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    player2_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    bot_level: Mapped[int | None] = mapped_column(SmallInteger)
+    winner_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    p1_score: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    p2_score: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    stats: Mapped[dict] = mapped_column(JsonDict, default=dict)
+    started_at: Mapped[datetime | None]
+    ended_at: Mapped[datetime | None]
