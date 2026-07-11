@@ -13,6 +13,8 @@ from app.api.admin_users import router as admin_users_router
 from app.api.auth import me_router
 from app.api.auth import router as auth_router
 from app.api.contents import router as contents_router
+from app.api.game import router as game_router
+from app.api.game import ws_router as game_ws_router
 from app.api.study import cards_router, settings_router
 from app.api.study import router as study_router
 from app.core.config import get_settings
@@ -40,6 +42,8 @@ app.include_router(contents_router, prefix="/api")
 app.include_router(study_router, prefix="/api")
 app.include_router(cards_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(game_router, prefix="/api")
+app.include_router(game_ws_router)  # /ws/game (traefik PathPrefix:/ws)
 
 
 @app.get("/api/health")

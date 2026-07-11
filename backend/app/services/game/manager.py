@@ -1,0 +1,462 @@
+"""매치 매니저 — 방/대기열/게임 루프/저장 (docs/specs/word-tetris.md).
+
+전송 계층(WebSocket)과 분리: 플레이어에게는 send(dict) 콜러블로만 통신한다.
+단일 프로세스 인메모리 상태 (tech-stack.md 결정).
+"""
+
+import asyncio
+import logging
+import secrets
+import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+
+from sqlalchemy import select
+
+from app.core.db import get_session_factory
+from app.models import GameMatch, LearningItem, ReviewCard
+from app.services.game.bots import Bot
+from app.services.game.engine import Board, Match, build_word_queue
+
+logger = logging.getLogger(__name__)
+
+TICK_SECONDS = 0.1
+STATE_BROADCAST_EVERY = 1  # 틱마다 전송 (페이로드 소형)
+RECONNECT_GRACE_SECONDS = 10.0
+WORD_POOL_MIN = 40
+WORD_LEN_RANGE = (3, 12)
+
+Sender = Callable[[dict], Awaitable[None]]
+
+
+@dataclass
+class PlayerSlot:
+    user_id: int
+    name: str
+    send: Sender | None = None
+    disconnected_at: float | None = None
+
+
+@dataclass
+class MatchSession:
+    match_id: int  # game_matches.id
+    mode: str  # pvp | pve
+    quiz: str  # en | ko2en
+    match: Match
+    players: dict[int, PlayerSlot]  # 1, 2 (pve 는 2 없음)
+    bot: Bot | None = None
+    room_code: str | None = None
+    started: bool = False
+    task: asyncio.Task | None = None
+    input_seq: dict[int, int] = field(default_factory=dict)
+
+
+class GameManager:
+    def __init__(self) -> None:
+        self.sessions: dict[int, MatchSession] = {}  # match_id -> session
+        self.by_user: dict[int, int] = {}  # user_id -> match_id
+        self.pvp_queue: list[tuple[int, str, str, Sender]] = []  # (user_id, name, quiz, send)
+        self.rooms: dict[str, int] = {}  # room_code -> match_id
+
+    # --- 진입점 ---
+
+    async def join_pve(
+        self, user_id: int, name: str, quiz: str, bot_level: int, send: Sender
+    ) -> MatchSession:
+        words = await load_word_pool(user_id, quiz)
+        seed = secrets.randbits(32)
+        session = MatchSession(
+            match_id=await self._create_match_row("pve", user_id, None, bot_level),
+            mode="pve",
+            quiz=quiz,
+            match=Match(
+                board1=Board(word_queue=build_word_queue(words, seed)),
+                board2=Board(word_queue=build_word_queue(words, seed)),
+            ),
+            players={1: PlayerSlot(user_id=user_id, name=name, send=send)},
+            bot=Bot.create(bot_level, seed),
+        )
+        self._register(session)
+        await self._start(session, opponent_name=f"봇 Lv.{session.bot.level}")
+        return session
+
+    async def join_pvp_queue(self, user_id: int, name: str, quiz: str, send: Sender) -> None:
+        waiting = next((w for w in self.pvp_queue if w[2] == quiz and w[0] != user_id), None)
+        if waiting is None:
+            self.pvp_queue.append((user_id, name, quiz, send))
+            await send({"t": "queue.waiting"})
+            return
+        self.pvp_queue.remove(waiting)
+        await self._start_pvp(waiting[0], waiting[1], waiting[3], user_id, name, send, quiz)
+
+    async def create_room(self, user_id: int, name: str, quiz: str, send: Sender) -> str:
+        code = secrets.token_hex(3).upper()
+        match_id = await self._create_match_row("pvp", user_id, None, None, room_code=code)
+        session = MatchSession(
+            match_id=match_id,
+            mode="pvp",
+            quiz=quiz,
+            match=Match(board1=Board(word_queue=[]), board2=Board(word_queue=[])),
+            players={1: PlayerSlot(user_id=user_id, name=name, send=send)},
+            room_code=code,
+        )
+        self._register(session)
+        self.rooms[code] = match_id
+        await send({"t": "room.created", "code": code})
+        return code
+
+    async def join_room(self, user_id: int, name: str, code: str, send: Sender) -> None:
+        match_id = self.rooms.get(code.upper())
+        session = self.sessions.get(match_id) if match_id else None
+        if session is None or session.started or 2 in session.players:
+            await send({"t": "error", "code": "room_not_found"})
+            return
+        words = await load_word_pool(session.players[1].user_id, session.quiz)
+        seed = secrets.randbits(32)
+        session.match.board1.word_queue = build_word_queue(words, seed)
+        session.match.board2.word_queue = build_word_queue(words, seed)
+        session.players[2] = PlayerSlot(user_id=user_id, name=name, send=send)
+        self.by_user[user_id] = session.match_id
+        del self.rooms[code.upper()]
+        await self._update_match_row(session, player2_id=user_id)
+        await self._start(session)
+
+    async def _start_pvp(
+        self, uid1: int, name1: str, send1: Sender, uid2: int, name2: str, send2: Sender, quiz: str
+    ) -> None:
+        words = await load_word_pool(uid1, quiz)
+        seed = secrets.randbits(32)
+        session = MatchSession(
+            match_id=await self._create_match_row("pvp", uid1, uid2, None),
+            mode="pvp",
+            quiz=quiz,
+            match=Match(
+                board1=Board(word_queue=build_word_queue(words, seed)),
+                board2=Board(word_queue=build_word_queue(words, seed)),
+            ),
+            players={
+                1: PlayerSlot(user_id=uid1, name=name1, send=send1),
+                2: PlayerSlot(user_id=uid2, name=name2, send=send2),
+            },
+        )
+        self._register(session)
+        await self._start(session)
+
+    def _register(self, session: MatchSession) -> None:
+        self.sessions[session.match_id] = session
+        for slot in session.players.values():
+            self.by_user[slot.user_id] = session.match_id
+
+    async def _start(self, session: MatchSession, opponent_name: str | None = None) -> None:
+        session.started = True
+        for player_no, slot in session.players.items():
+            other = session.players.get(3 - player_no)
+            await self._safe_send(
+                slot,
+                {
+                    "t": "match.found",
+                    "match_id": session.match_id,
+                    "mode": session.mode,
+                    "quiz": session.quiz,
+                    "you": player_no,
+                    "opponent": other.name if other else (opponent_name or "봇"),
+                    "countdown": 3,
+                },
+            )
+        session.task = asyncio.create_task(self._run_loop(session))
+
+    # --- 게임 루프 ---
+
+    async def _run_loop(self, session: MatchSession) -> None:
+        try:
+            await asyncio.sleep(3)  # 카운트다운
+            last = time.monotonic()
+            while not session.match.finished:
+                await asyncio.sleep(TICK_SECONDS)
+                now = time.monotonic()
+                dt, last = now - last, now
+                await self._step(session, dt)
+            await self._finish(session)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("game loop crashed match=%s", session.match_id)
+            session.match.finished = True
+            await self._finish(session, aborted=True)
+
+    async def _step(self, session: MatchSession, dt: float) -> None:
+        events = session.match.tick(dt)
+
+        if session.bot is not None and not session.match.finished:
+            text = session.bot.act(session.match.board2)
+            if text is not None:
+                session.match.submit(2, text)
+
+        # 이탈 유예 초과 → 몰수
+        for player_no, slot in session.players.items():
+            if (
+                slot.disconnected_at
+                and time.monotonic() - slot.disconnected_at > RECONNECT_GRACE_SECONDS
+            ):
+                session.match.forfeit(player_no)
+
+        await self._broadcast_state(session, events)
+
+    async def _broadcast_state(self, session: MatchSession, events: dict[int, list[str]]) -> None:
+        for player_no, slot in session.players.items():
+            me = session.match.board1 if player_no == 1 else session.match.board2
+            op = session.match.board2 if player_no == 1 else session.match.board1
+            await self._safe_send(
+                slot,
+                {
+                    "t": "state",
+                    "elapsed": round(session.match.elapsed, 1),
+                    "me": me.snapshot(),
+                    "op": op.snapshot(),
+                    "events": {
+                        "me": events.get(player_no, []),
+                        "op": events.get(3 - player_no, []),
+                    },
+                },
+            )
+
+    # --- 입력 ---
+
+    async def handle_input(self, user_id: int, text: str, seq: int) -> None:
+        session = self._session_of(user_id)
+        if session is None or not session.started or session.match.finished:
+            return
+        player_no = self._player_no(session, user_id)
+        result = session.match.submit(player_no, text)
+        slot = session.players[player_no]
+        await self._safe_send(
+            slot,
+            {
+                "t": "clear.result",
+                "seq": seq,
+                "ok": result.ok,
+                "brick_id": result.brick_id,
+                "combo": result.combo,
+                "effects": result.effects,
+                "score_gained": result.score_gained,
+            },
+        )
+        if result.attack:
+            other = session.players.get(3 - player_no)
+            if other:
+                await self._safe_send(other, {"t": "attack.recv", "count": result.attack})
+
+    # --- 접속 관리 ---
+
+    async def attach(self, user_id: int, send: Sender) -> MatchSession | None:
+        """재접속: 활성 세션이 있으면 복귀시킨다."""
+        session = self._session_of(user_id)
+        if session is None:
+            return None
+        player_no = self._player_no(session, user_id)
+        slot = session.players[player_no]
+        slot.send = send
+        slot.disconnected_at = None
+        other = session.players.get(3 - player_no)
+        await self._safe_send(
+            slot,
+            {
+                "t": "match.found",
+                "match_id": session.match_id,
+                "mode": session.mode,
+                "quiz": session.quiz,
+                "you": player_no,
+                "opponent": other.name
+                if other
+                else f"봇 Lv.{session.bot.level if session.bot else '?'}",
+                "countdown": 0,
+                "rejoined": True,
+            },
+        )
+        return session
+
+    def detach(self, user_id: int) -> None:
+        session = self._session_of(user_id)
+        if session is None:
+            return
+        # 대기열/대기방 정리
+        self.pvp_queue = [w for w in self.pvp_queue if w[0] != user_id]
+        if not session.started:
+            if session.room_code:
+                self.rooms.pop(session.room_code, None)
+            self._cleanup(session)
+            return
+        player_no = self._player_no(session, user_id)
+        slot = session.players[player_no]
+        slot.send = None
+        slot.disconnected_at = time.monotonic()
+
+    def leave_queue(self, user_id: int) -> None:
+        self.pvp_queue = [w for w in self.pvp_queue if w[0] != user_id]
+
+    # --- 종료/저장 ---
+
+    async def _finish(self, session: MatchSession, aborted: bool = False) -> None:
+        match = session.match
+        winner_no = match.winner
+        stats = {
+            "p1": _board_stats(match.board1),
+            "p2": _board_stats(match.board2),
+            "duration": round(match.elapsed, 1),
+        }
+        winner_user_id = None
+        if winner_no is not None:
+            slot = session.players.get(winner_no)
+            winner_user_id = slot.user_id if slot else None
+
+        await self._save_result(session, winner_user_id, stats, aborted)
+
+        for player_no, slot in session.players.items():
+            outcome = "draw"
+            if winner_no is not None:
+                outcome = "win" if player_no == winner_no else "lose"
+            await self._safe_send(
+                slot,
+                {"t": "match.end", "winner": outcome, "stats": stats, "aborted": aborted},
+            )
+        self._cleanup(session)
+
+    def _cleanup(self, session: MatchSession) -> None:
+        for slot in session.players.values():
+            if self.by_user.get(slot.user_id) == session.match_id:
+                del self.by_user[slot.user_id]
+        self.sessions.pop(session.match_id, None)
+
+    # --- DB ---
+
+    async def _create_match_row(
+        self,
+        mode: str,
+        player1_id: int,
+        player2_id: int | None,
+        bot_level: int | None,
+        room_code: str | None = None,
+    ) -> int:
+        async with get_session_factory()() as db:
+            row = GameMatch(
+                mode=mode,
+                status="waiting",
+                player1_id=player1_id,
+                player2_id=player2_id,
+                bot_level=bot_level,
+                room_code=room_code,
+            )
+            db.add(row)
+            await db.commit()
+            return row.id
+
+    async def _update_match_row(self, session: MatchSession, player2_id: int) -> None:
+        async with get_session_factory()() as db:
+            row = await db.get(GameMatch, session.match_id)
+            if row:
+                row.player2_id = player2_id
+                await db.commit()
+
+    async def _save_result(
+        self, session: MatchSession, winner_user_id: int | None, stats: dict, aborted: bool
+    ) -> None:
+        try:
+            async with get_session_factory()() as db:
+                row = await db.get(GameMatch, session.match_id)
+                if row is None:
+                    return
+                row.status = "aborted" if aborted else "finished"
+                row.winner_id = winner_user_id
+                row.p1_score = session.match.board1.score
+                row.p2_score = session.match.board2.score
+                row.stats = stats
+                row.started_at = row.started_at or datetime.now(UTC)
+                row.ended_at = datetime.now(UTC)
+                await db.commit()
+        except Exception:
+            logger.exception("failed to save match result %s", session.match_id)
+
+    # --- 헬퍼 ---
+
+    def _session_of(self, user_id: int) -> MatchSession | None:
+        match_id = self.by_user.get(user_id)
+        return self.sessions.get(match_id) if match_id else None
+
+    @staticmethod
+    def _player_no(session: MatchSession, user_id: int) -> int:
+        for player_no, slot in session.players.items():
+            if slot.user_id == user_id:
+                return player_no
+        raise ValueError("player not in session")
+
+    @staticmethod
+    async def _safe_send(slot: PlayerSlot, message: dict) -> None:
+        if slot.send is None:
+            return
+        try:
+            await slot.send(message)
+        except Exception:
+            slot.send = None  # 전송 실패 = 연결 끊김으로 간주
+            slot.disconnected_at = slot.disconnected_at or time.monotonic()
+
+
+def _board_stats(board) -> dict:
+    minutes = max(board.elapsed / 60.0, 1e-6)
+    return {
+        "score": board.score,
+        "cleared": board.cleared_words,
+        "misses": board.misses,
+        "max_combo": board.max_combo,
+        "wpm": round(board.cleared_words / minutes, 1),
+        "accuracy": round(board.cleared_words / max(1, board.cleared_words + board.misses), 3),
+    }
+
+
+async def load_word_pool(user_id: int, quiz: str) -> list[tuple[int, str, str]]:
+    """단어 소스: 내가 학습한 word 우선, 부족하면 전역 approved 로 보충."""
+    lo, hi = WORD_LEN_RANGE
+    async with get_session_factory()() as db:
+        learned = (
+            (
+                await db.execute(
+                    select(LearningItem)
+                    .join(ReviewCard, ReviewCard.item_id == LearningItem.id)
+                    .where(
+                        ReviewCard.user_id == user_id,
+                        LearningItem.item_type == "word",
+                        LearningItem.review_status == "approved",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        pool = [i for i in learned if lo <= len(i.en_text) <= hi and " " not in i.en_text]
+        if len(pool) < WORD_POOL_MIN:
+            extra = (
+                (
+                    await db.execute(
+                        select(LearningItem)
+                        .where(
+                            LearningItem.item_type == "word",
+                            LearningItem.review_status == "approved",
+                        )
+                        .limit(300)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            seen = {i.id for i in pool}
+            pool += [
+                i
+                for i in extra
+                if i.id not in seen and lo <= len(i.en_text) <= hi and " " not in i.en_text
+            ]
+    if quiz == "ko2en":
+        return [(i.id, i.en_text, i.ko_text) for i in pool]
+    return [(i.id, i.en_text, i.en_text) for i in pool]
+
+
+manager = GameManager()

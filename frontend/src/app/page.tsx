@@ -81,6 +81,9 @@ function Dashboard({ me }: { me: Me }) {
         <Brick color="blue" href="/library">
           콘텐츠 라이브러리
         </Brick>
+        <Brick color="red" href="/game">
+          워드 테트리스
+        </Brick>
         {me.role === "admin" && (
           <Brick color="yellow" href="/admin">
             백오피스
