@@ -37,4 +37,4 @@ jobs:
       - name: Health check
         run: |
           sleep 15
-          curl -sf https://esladmin.lessonaza.com/api/health
+          curl -sf https://esladmin.lessonaza.app/api/health
