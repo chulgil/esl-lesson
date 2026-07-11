@@ -59,6 +59,23 @@ body {
   box-shadow: 18px 0 0 currentColor;
 }
 
+/* 랜딩 타이포 배경 — 잉크가 종이 위에서 숨쉬는 느낌 */
+@keyframes typo-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--tw-rotate, 0));
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-10px) rotate(var(--tw-rotate, 0));
+    opacity: 1;
+  }
+}
+
+.animate-typo-float {
+  animation: typo-float 7s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

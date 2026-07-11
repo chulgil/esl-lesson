@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
-import { fetchMe, loginUrl, type Me } from "@/lib/api";
+import { Showcase } from "@/components/landing/Showcase";
+import { fetchMe, type Me } from "@/lib/api";
 import { studyApi, type Stats } from "@/lib/study-api";
 
 export default function HomePage() {
@@ -16,6 +17,15 @@ export default function HomePage() {
     });
   }, []);
 
+  if (!loading && !me) {
+    // 비로그인: 쇼케이스 랜딩 (타이포그래피 배경)
+    return (
+      <main className="notebook-lines notebook-margin min-h-screen">
+        <Showcase />
+      </main>
+    );
+  }
+
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-12 sm:px-16">
       <header className="mb-12">
@@ -27,20 +37,10 @@ export default function HomePage() {
         </p>
       </header>
 
-      {loading ? (
+      {loading || !me ? (
         <p className="text-sm opacity-60">불러오는 중...</p>
-      ) : me ? (
-        <Dashboard me={me} />
       ) : (
-        <section className="flex flex-col items-start gap-6">
-          <p className="max-w-md">
-            유튜브 영상 스크립트에서 단어 · 숙어 · 패턴 · 문장을 뽑아, 잊어버릴
-            만한 순간에 퀴즈로 다시 보여드려요.
-          </p>
-          <Brick color="red" href={loginUrl("/")}>
-            Google로 시작하기
-          </Brick>
-        </section>
+        <Dashboard me={me} />
       )}
     </main>
   );
