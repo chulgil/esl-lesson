@@ -176,6 +176,32 @@ function draw(
   }
 
   if (state) {
+    // 콤보 글로우 — 콤보가 높을수록 화면 가장자리가 밝게 (즐기는 맛)
+    if (state.combo >= 3 && !state.ko) {
+      const intensity = Math.min(1, (state.combo - 2) / 8);
+      const glow = ctx.createRadialGradient(
+        width / 2,
+        height / 2,
+        Math.min(width, height) * 0.3,
+        width / 2,
+        height / 2,
+        Math.max(width, height) * 0.7,
+      );
+      const color = state.combo >= 6 ? "245,197,24" : "13,105,171";
+      glow.addColorStop(0, "rgba(0,0,0,0)");
+      glow.addColorStop(1, `rgba(${color},${0.25 * intensity})`);
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    // 공격 수신 경고 — 흔들림 중 상단 붉은 띠 점멸
+    if (performance.now() < shakeUntil) {
+      const flash = 0.4 + 0.3 * Math.sin(performance.now() / 60);
+      ctx.fillStyle = `rgba(208,16,18,${flash})`;
+      ctx.fillRect(0, 0, width, 6);
+      ctx.fillRect(0, height - 6, width, 6);
+    }
+
     // 위험 상태 붉은 펄스
     if (state.danger && !state.ko) {
       const pulse = 0.18 + 0.12 * Math.sin(performance.now() / 200);

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContentSummary } from "@/lib/admin-api";
 import { Brick } from "@/components/brick/Brick";
 import { myApi } from "@/lib/my-api";
-import { BoardCanvas } from "@/components/game/BoardCanvas";
+import { PlayArea } from "@/app/game/PlayArea";
 import {
   GameSocket,
   type MatchEndMsg,
@@ -83,6 +83,13 @@ export default function GamePage() {
 
   useEffect(() => {
     if (phase === "playing") inputRef.current?.focus();
+  }, [phase]);
+
+  // 대전 중에는 전역 하단 탭바를 숨겨 입력바와 겹치지 않게 (집중 모드)
+  useEffect(() => {
+    const active = phase === "playing" || phase === "countdown";
+    document.body.classList.toggle("game-focus", active);
+    return () => document.body.classList.remove("game-focus");
   }, [phase]);
 
   useEffect(() => {
@@ -172,46 +179,17 @@ export default function GamePage() {
       )}
 
       {(phase === "playing" || phase === "ended") && (
-        <section className="flex flex-col gap-4 lg:flex-row">
-          <div className="flex w-full max-w-[340px] flex-col gap-2">
-            <Hud
-              label="나"
-              board={gameState?.me ?? null}
-              elapsed={gameState?.elapsed ?? 0}
-            />
-            <BoardCanvas
-              state={gameState?.me ?? null}
-              width={340}
-              height={480}
-            />
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitWord();
-              }}
-              disabled={phase !== "playing"}
-              placeholder="단어를 입력하고 Enter!"
-              autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              className="rounded-md border-2 border-ink/30 bg-white px-4 py-3 text-lg font-bold focus:border-brick-blue focus:outline-none"
-            />
-          </div>
-          <div className="flex w-full max-w-[240px] flex-col gap-2 opacity-90">
-            <Hud
-              label={matchInfo?.opponent ?? "상대"}
-              board={gameState?.op ?? null}
-            />
-            <BoardCanvas
-              state={gameState?.op ?? null}
-              width={240}
-              height={340}
-              mirror
-            />
-          </div>
-        </section>
+        <PlayArea
+          me={gameState?.me ?? null}
+          op={gameState?.op ?? null}
+          elapsed={gameState?.elapsed ?? 0}
+          opponentName={matchInfo?.opponent ?? "상대"}
+          input={input}
+          inputRef={inputRef}
+          disabled={phase !== "playing"}
+          onInput={setInput}
+          onSubmit={submitWord}
+        />
       )}
 
       {phase === "ended" && endResult && (
@@ -382,35 +360,6 @@ function ModeButton({
     >
       {children}
     </button>
-  );
-}
-
-function Hud({
-  label,
-  board,
-  elapsed,
-}: {
-  label: string;
-  board: { score: number; combo: number; speed_level: number } | null;
-  elapsed?: number;
-}) {
-  return (
-    <div className="flex items-center gap-4 text-sm">
-      <span className="font-bold">{label}</span>
-      <span>점수 {board?.score ?? 0}</span>
-      <span
-        className={
-          board && board.combo >= 3 ? "font-bold text-brick-yellow" : ""
-        }
-      >
-        콤보 {board?.combo ?? 0}
-      </span>
-      {elapsed !== undefined && (
-        <span className="ml-auto opacity-60">
-          {Math.max(0, 180 - Math.floor(elapsed))}s
-        </span>
-      )}
-    </div>
   );
 }
 

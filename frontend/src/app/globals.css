@@ -64,6 +64,10 @@ body {
   body.with-bottom-nav {
     padding-bottom: 4.5rem;
   }
+  /* 대전 중에는 하단 탭바 숨김 (게임 입력바와 겹침 방지, 집중 모드) */
+  body.game-focus nav[aria-label="주요 메뉴"] {
+    display: none;
+  }
 }
 
 /* 랜딩 타이포 배경 — 잉크가 종이 위에서 숨쉬는 느낌 */
