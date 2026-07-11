@@ -37,7 +37,7 @@ def test_spawn_and_fall_and_land():
 def test_submit_clears_matching_brick_and_scores():
     board = make_board()
     tick_until_spawn(board)
-    text = board.bricks[0].text
+    text = board.bricks[0].answer
     result = board.submit(text)
     assert result.ok and result.combo == 1 and result.score_gained > 0
     assert board.bricks == []
@@ -50,10 +50,10 @@ def test_miss_resets_combo_and_locks_input():
     result = board.submit("nonexistent")
     assert not result.ok and board.combo == 0
     # 잠금 시간(0.3s) 동안 정답도 거부
-    locked = board.submit(board.bricks[0].text)
+    locked = board.submit(board.bricks[0].answer)
     assert not locked.ok
     board.tick(0.4)  # 잠금 해제
-    ok = board.submit(board.bricks[0].text)
+    ok = board.submit(board.bricks[0].answer)
     assert ok.ok
 
 
@@ -63,7 +63,7 @@ def test_combo_attack_every_third_and_long_word():
     attacks = 0
     for _ in range(3):
         tick_until_spawn(board)
-        result = board.submit(board.bricks[0].text)
+        result = board.submit(board.bricks[0].answer)
         assert result.ok
         attacks += result.attack
     assert attacks >= 1
@@ -81,7 +81,7 @@ def test_garbage_stacks_and_cleared_by_any_word():
     while not [b for b in board.bricks if not b.is_garbage]:
         board.tick(0.1)
     normal = [b for b in board.bricks if not b.is_garbage]
-    result = board.submit(normal[0].text)
+    result = board.submit(normal[0].answer)
     assert result.ok and "garbage_cleared" in result.effects
     assert board.landed_count == 1  # garbage 하나 소멸
 
@@ -107,7 +107,7 @@ def test_match_winner_by_ko_and_garbage_transfer():
     for _ in range(3):
         while not match.board1.bricks:
             match.board1.tick(0.1)
-        match.submit(1, match.board1.bricks[0].text)
+        match.submit(1, match.board1.bricks[0].answer)
     assert match.board2.landed_count >= 1
     # p2 KO → p1 승
     match.board2.add_garbage(BOARD_ROWS)
@@ -153,3 +153,127 @@ def test_spawn_skips_when_word_queue_empty():
         board.tick(0.1)
     assert board.bricks == []
     assert not board.ko
+
+
+# --- 레벨 구간 방향 + 탭 + 아이템 (2026-07-11 추가) ---
+
+from app.services.game.engine import direction_for_level  # noqa: E402
+
+
+def bilingual_board():
+    words = [(i, f"word{i:02d}", f"뜻{i:02d}") for i in range(20)]
+    return Board(word_queue=words, _rng_seed=42)
+
+
+def test_segment_direction_by_level():
+    assert direction_for_level(0) == "en2ko"
+    assert direction_for_level(1) == "en2ko"
+    assert direction_for_level(2) == "ko2en"
+    assert direction_for_level(3) == "ko2en"
+    assert direction_for_level(4) == "en2ko"
+    assert direction_for_level(6) == "ko2en"
+
+
+def test_brick_direction_fixed_at_spawn_and_answer():
+    board = bilingual_board()
+    tick_until_spawn(board)
+    brick = board.bricks[0]
+    # 레벨 0 → en2ko: 표시는 영어, 정답은 한글 (탭)
+    assert brick.direction == "en2ko"
+    assert brick.display == brick.en
+    assert brick.answer == brick.ko
+    # 한글 뜻을 제출(탭)하면 제거
+    assert board.submit(brick.ko).ok
+
+
+def test_ko2en_segment_requires_english_and_hides_chip():
+    board = bilingual_board()
+    board.elapsed = 65.0  # 레벨 2 → ko2en
+    tick_until_spawn(board)
+    brick = board.bricks[0]
+    assert brick.direction == "ko2en"
+    assert brick.display == brick.ko  # 한글 표시
+    assert brick.answer == brick.en  # 영어 정답
+    snap = board.snapshot()
+    b = snap["bricks"][0]
+    assert b["chip"] is None  # ko2en 은 정답 미노출(치팅 방지)
+
+
+def test_en2ko_snapshot_reveals_chips():
+    board = bilingual_board()
+    tick_until_spawn(board)
+    snap = board.snapshot()
+    assert snap["direction"] == "en2ko"
+    assert len(snap["chips"]) >= 4  # 정답 뜻 + 오답 칩
+    assert board.bricks[0].ko in snap["chips"]
+
+
+def test_combo_grants_item_every_5():
+    board = bilingual_board()
+    gained = []
+    for _ in range(5):
+        tick_until_spawn(board)
+        r = board.submit(board.bricks[0].answer)
+        if r.item_gained:
+            gained.append(r.item_gained)
+    assert gained  # 5콤보에서 아이템 획득
+    assert board.items
+
+
+def test_item_brick_grants_item_on_clear():
+    board = bilingual_board()
+    # 아이템 브릭이 나올 때까지 스폰 (7스폰당 1회)
+    item_brick = None
+    for _ in range(2000):
+        board.tick(0.1)
+        item_brick = next((b for b in board.bricks if b.is_item), None)
+        if item_brick:
+            break
+    assert item_brick is not None and item_brick.display == "★"
+    before = len(board.items)
+    board.submit(item_brick.answer)
+    assert len(board.items) == before + 1
+
+
+def test_freeze_item_stops_fall_and_spawn():
+    board = bilingual_board()
+    board.items.append("freeze")
+    tick_until_spawn(board)
+    y0 = board.bricks[0].y
+    board.use_item("freeze")
+    assert board.frozen
+    for _ in range(20):
+        board.tick(0.1)  # 2초 — freeze 3초 안이므로 정지
+    assert board.bricks[0].y == y0  # 낙하 멈춤
+
+
+def test_shield_blocks_one_attack():
+    board = bilingual_board()
+    board.items.append("shield")
+    board.use_item("shield")
+    assert board.shield_count == 1
+    actual = board.add_garbage(2)
+    assert actual == 1  # 1개만 막힘
+    assert board.shield_count == 0
+
+
+def test_bomb_clears_garbage():
+    board = bilingual_board()
+    board.add_garbage(3)
+    board.items.append("bomb")
+    res = board.use_item("bomb")
+    assert res["cleared"] == 3
+    assert board.landed_count == 0
+
+
+def test_hint_returns_answer_of_lowest_brick():
+    board = bilingual_board()
+    board.items.append("hint")
+    tick_until_spawn(board)
+    res = board.use_item("hint")
+    assert res["hint_answer"] == board.bricks[0].answer
+
+
+def test_use_missing_item_returns_none():
+    board = bilingual_board()
+    assert board.use_item("freeze") is None

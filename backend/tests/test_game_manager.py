@@ -63,13 +63,12 @@ async def seed_user_and_words(db, count=45):
     return user
 
 
-async def test_word_pool_prefers_learned_and_pads(wired_db):
+async def test_word_pool_carries_en_and_ko(wired_db):
     user = await seed_user_and_words(wired_db, count=10)  # 학습 10 < 최소 40 → 전역 보충
-    pool = await load_word_pool(user.id, "en")
+    pool = await load_word_pool(user.id)
     assert len(pool) == 10  # 전역 풀도 같은 10개뿐 (dedup 확인)
-    assert all(answer == display for _, answer, display in pool)
-    ko_pool = await load_word_pool(user.id, "ko2en")
-    assert all(display.startswith("뜻") for _, _, display in ko_pool)
+    # (id, en, ko) — 방향은 스폰 시 레벨 구간으로 결정
+    assert all(en.startswith("gameword") and ko.startswith("뜻") for _, en, ko in pool)
 
 
 async def test_pve_session_flow_and_result_saved(wired_db):
@@ -88,7 +87,7 @@ async def test_pve_session_flow_and_result_saved(wired_db):
     # 브릭 스폰까지 수동 틱 → 정답 제출
     while not session.match.board1.bricks:
         session.match.tick(0.1)
-    text = session.match.board1.bricks[0].text
+    text = session.match.board1.bricks[0].answer
     await gm.handle_input(user.id, text, seq=7)
     clear = next(m for m in sender.messages if m["t"] == "clear.result")
     assert clear["ok"] is True and clear["seq"] == 7
@@ -168,3 +167,22 @@ async def test_pve_rejects_when_no_words_visible(wired_db):
     gm = GameManager()
     with pytest.raises(WordPoolError):
         await gm.join_pve(user.id, user.name, "en", bot_level=1, send=Collector())
+
+
+async def test_use_item_via_manager(wired_db):
+    user = await seed_user_and_words(wired_db)
+    gm = GameManager()
+    sender = Collector()
+    session = await gm.join_pve(user.id, user.name, "en", bot_level=2, send=sender)
+    session.task.cancel()
+    # 아이템 지급 후 사용
+    session.match.board1.items.append("shield")
+    await gm.handle_item(user.id, "shield")
+    assert session.match.board1.shield_count == 1
+    result = next(m for m in sender.messages if m["t"] == "item.result")
+    assert result["ok"] is True and result["item"] == "shield"
+    # 없는 아이템은 ok=false
+    await gm.handle_item(user.id, "bomb")
+    fail = [m for m in sender.messages if m["t"] == "item.result" and m.get("ok") is False]
+    assert fail and fail[-1]["item"] == "bomb"
+    session.match.forfeit(2)

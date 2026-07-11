@@ -226,6 +226,23 @@ function draw(
       const brickWidth = Math.min(width - 8, Math.max(52, textWidth + 26));
       const x = (width - brickWidth) / 2;
 
+      // 아이템(★) 브릭: 금색 + 반짝임 글로우
+      if (brick.item) {
+        ctx.save();
+        ctx.shadowColor = "#F5C518";
+        ctx.shadowBlur = 12 + 6 * Math.sin(performance.now() / 150);
+        ctx.fillStyle = "#F5C518";
+        roundRect(ctx, x, y, brickWidth, brickHeight, 5);
+        ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = "#2B2B33";
+        ctx.font = `bold ${fontSize + 4}px Inter, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("★", x + brickWidth / 2, y + brickHeight / 2 + 2);
+        continue;
+      }
+
       ctx.fillStyle = brick.garbage ? GARBAGE_COLOR : pickColor(brick.id);
       roundRect(ctx, x, y, brickWidth, brickHeight, 5);
       ctx.fill();
@@ -248,6 +265,16 @@ function draw(
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(label, x + brickWidth / 2, y + brickHeight / 2 + 2);
+    }
+
+    // 시간 정지(freeze) 아이템: 얼음 톤 오버레이
+    if (state.frozen) {
+      ctx.fillStyle = "rgba(120,190,255,0.18)";
+      ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = "rgba(180,220,255,0.9)";
+      ctx.font = `bold ${Math.min(20, width / 12)}px Inter, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText("FROZEN", width / 2, 20);
     }
 
     // 정리: 사라진 브릭의 보간 상태 제거

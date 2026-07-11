@@ -163,6 +163,8 @@ async def game_ws(websocket: WebSocket) -> None:
                 await manager.handle_input(
                     user_id, str(msg.get("text", "")), int(msg.get("seq", 0))
                 )
+            elif t == "item.use":
+                await manager.handle_item(user_id, str(msg.get("item", "")))
             else:
                 await send({"t": "error", "code": "unknown_message"})
     except WebSocketDisconnect:

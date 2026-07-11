@@ -2,6 +2,9 @@
 
 시간 단위: 초. 서버 매니저가 10Hz 로 tick() 을 호출한다.
 보드 좌표: y=0 천장, y=BOARD_ROWS 바닥. 브릭은 y 가 증가하며 낙하한다.
+
+방향은 브릭마다 섞지 않고 속도 레벨 구간으로 고정한다(en2ko ↔ ko2en 번갈아).
+브릭은 (en, ko) 를 모두 보유하고 스폰 시점의 구간 방향으로 표시/정답이 정해진다.
 """
 
 import random
@@ -23,15 +26,43 @@ COMBO_ATTACK_EVERY = 3  # 3콤보마다 garbage 1개
 LONG_WORD_LEN = 8  # 8자 이상 클리어 시 garbage 1개
 MISS_LOCK_SECONDS = 0.3
 
+# 아이템 시스템
+ITEM_KINDS = ("freeze", "hint", "bomb", "shield")
+ITEM_SPAWN_EVERY = 7  # 일반 스폰 N회당 1회 아이템(별) 브릭
+COMBO_ITEM_EVERY = 5  # 5콤보마다 아이템 1개
+MAX_ITEMS = 3
+FREEZE_SECONDS = 3.0
+TAP_DECOY_CHIPS = 3  # en2ko 탭 오답 칩 수
+
+
+def direction_for_level(level: int) -> str:
+    """레벨 구간별 출제 방향 (섞지 않음): 0-1 en2ko, 2-3 ko2en, 4-5 en2ko, 6+ ko2en."""
+    band = level // 2
+    return "en2ko" if band % 2 == 0 else "ko2en"
+
 
 @dataclass
 class Brick:
     brick_id: int
-    text: str  # 정답 입력 텍스트 (영단어)
-    display: str  # 브릭에 표시할 텍스트 (en 또는 ko)
+    en: str
+    ko: str
+    direction: str = "en2ko"  # 스폰 시 고정
     y: float = 0.0
     landed: bool = False
     is_garbage: bool = False
+    is_item: bool = False  # 별(★) 아이템 브릭
+
+    @property
+    def answer(self) -> str:
+        """정답 입력 텍스트 — en2ko 는 한글(탭), ko2en 은 영어(타이핑)."""
+        return self.ko if self.direction == "en2ko" else self.en
+
+    @property
+    def display(self) -> str:
+        """브릭에 표시 — en2ko 는 영단어, ko2en 은 한글 뜻."""
+        if self.is_item:
+            return "★"
+        return self.en if self.direction == "en2ko" else self.ko
 
 
 @dataclass
@@ -39,16 +70,17 @@ class ClearResult:
     ok: bool
     brick_id: int | None = None
     combo: int = 0
-    attack: int = 0  # 상대에게 보낼 garbage 수
+    attack: int = 0
     effects: list[str] = field(default_factory=list)
     score_gained: int = 0
+    item_gained: str | None = None
 
 
 @dataclass
 class Board:
     """플레이어 1명의 보드."""
 
-    word_queue: list[tuple[int, str, str]]  # (word_id, answer_text, display)
+    word_queue: list[tuple[int, str, str]]  # (word_id, en, ko)
     combo: int = 0
     score: int = 0
     cleared_words: int = 0
@@ -56,15 +88,32 @@ class Board:
     max_combo: int = 0
     elapsed: float = 0.0
     lock_until: float = 0.0
+    frozen_until: float = 0.0
+    shield_count: int = 0
     ko: bool = False
     bricks: list[Brick] = field(default_factory=list)
+    items: list[str] = field(default_factory=list)
     _next_brick_id: int = 1
     _next_word_idx: int = 0
     _spawn_timer: float = 0.0
+    _spawn_count: int = 0
+    _combo_item_marker: int = 0
+    _rng_seed: int = 0
+
+    def __post_init__(self) -> None:
+        self._rng = random.Random(self._rng_seed or 1)
 
     @property
     def speed_level(self) -> int:
         return min(MAX_SPEED_LEVEL, int(self.elapsed // SPEED_STEP_SECONDS))
+
+    @property
+    def direction(self) -> str:
+        return direction_for_level(self.speed_level)
+
+    @property
+    def frozen(self) -> bool:
+        return self.elapsed < self.frozen_until
 
     @property
     def fall_speed(self) -> float:
@@ -81,18 +130,23 @@ class Board:
         return sum(1 for b in self.bricks if b.landed)
 
     def floor_y(self) -> float:
-        """다음 브릭이 굳는 높이 (쌓인 만큼 위로 올라옴)."""
         return float(BOARD_ROWS - self.landed_count)
 
     def tick(self, dt: float) -> list[str]:
-        """시간 진행. 발생한 이벤트 이름 목록을 반환."""
         if self.ko:
             return []
         events: list[str] = []
         prev_level = self.speed_level
+        prev_dir = self.direction
         self.elapsed += dt
         if self.speed_level > prev_level:
             events.append("speed_up")
+        if self.direction != prev_dir:
+            events.append(f"segment:{self.direction}")
+
+        # 시간 정지(freeze) 아이템: 낙하/생성 멈춤
+        if self.frozen:
+            return events
 
         self._spawn_timer += dt
         if self._spawn_timer >= self.spawn_interval:
@@ -118,23 +172,36 @@ class Board:
 
     def _spawn_brick(self) -> bool:
         if not self.word_queue:
-            return False  # 단어 풀 없음 — 크래시 대신 스폰 스킵
+            return False
+        self._spawn_count += 1
+        is_item = self._spawn_count % ITEM_SPAWN_EVERY == 0
         if self._next_word_idx >= len(self.word_queue):
-            self._next_word_idx = 0  # 큐 소진 시 순환
-        word_id, text, display = self.word_queue[self._next_word_idx]
+            self._next_word_idx = 0
+        word_id, en, ko = self.word_queue[self._next_word_idx]
         self._next_word_idx += 1
-        self.bricks.append(Brick(brick_id=self._next_brick_id, text=text, display=display))
+        self.bricks.append(
+            Brick(
+                brick_id=self._next_brick_id,
+                en=en,
+                ko=ko,
+                direction=self.direction,
+                is_item=is_item,
+            )
+        )
         self._next_brick_id += 1
         return True
 
-    def add_garbage(self, count: int = 1) -> None:
-        """상대 공격 수신: 회색 브릭이 스택에 즉시 쌓인다."""
-        for _ in range(count):
+    def add_garbage(self, count: int = 1) -> int:
+        """상대 공격 수신. 방어막이 있으면 소모하고 막는다. 실제 쌓인 수 반환."""
+        blocked = min(self.shield_count, count)
+        self.shield_count -= blocked
+        actual = count - blocked
+        for _ in range(actual):
             self.bricks.append(
                 Brick(
                     brick_id=self._next_brick_id,
-                    text="",  # 직접 타이핑으로는 제거 불가
-                    display="###",
+                    en="",
+                    ko="",
                     y=self.floor_y(),
                     landed=True,
                     is_garbage=True,
@@ -143,9 +210,17 @@ class Board:
             self._next_brick_id += 1
         if self.landed_count >= BOARD_ROWS:
             self.ko = True
+        return actual
+
+    def _grant_item(self) -> str | None:
+        if len(self.items) >= MAX_ITEMS:
+            return None
+        item = self._rng.choice(ITEM_KINDS)
+        self.items.append(item)
+        return item
 
     def submit(self, text: str) -> ClearResult:
-        """타이핑 제출. 일치하는 가장 위험한 브릭 제거."""
+        """정답 제출(타이핑 영어 또는 탭한 한글). 일치하는 가장 위험한 브릭 제거."""
         if self.ko or self.elapsed < self.lock_until:
             return ClearResult(ok=False, combo=self.combo)
 
@@ -164,22 +239,38 @@ class Board:
 
         effects = ["clear"]
         attack = 0
+        item_gained: str | None = None
+
+        if target.is_item:
+            item_gained = self._grant_item()
+            if item_gained:
+                effects.append("item_brick")
+
         if self.combo >= 3:
             effects.append(f"combo{self.combo}")
         if self.combo % COMBO_ATTACK_EVERY == 0:
             attack += 1
             effects.append("attack")
-        if len(target.text) >= LONG_WORD_LEN:
+        if len(target.answer) >= LONG_WORD_LEN:
             attack += 1
             effects.append("long_word")
 
-        # garbage 소멸: 일반 단어 클리어 1회당 garbage 1개 제거
+        # 콤보 보상: 5콤보 단위 도달 시 아이템
+        if self.combo // COMBO_ITEM_EVERY > self._combo_item_marker:
+            self._combo_item_marker = self.combo // COMBO_ITEM_EVERY
+            combo_item = self._grant_item()
+            if combo_item:
+                item_gained = combo_item
+                effects.append("item_combo")
+
         garbage = next((b for b in self.bricks if b.is_garbage), None)
         if garbage is not None:
             self.bricks.remove(garbage)
             effects.append("garbage_cleared")
 
-        gained = int(10 * (1 + self.combo * 0.1)) + (5 if len(target.text) >= LONG_WORD_LEN else 0)
+        gained = int(10 * (1 + self.combo * 0.1)) + (
+            5 if len(target.answer) >= LONG_WORD_LEN else 0
+        )
         self.score += gained
         return ClearResult(
             ok=True,
@@ -188,19 +279,58 @@ class Board:
             attack=attack,
             effects=effects,
             score_gained=gained,
+            item_gained=item_gained,
         )
 
-    def _most_dangerous_match(self, normalized: str) -> Brick | None:
-        """일치 브릭 중 가장 위험한 것: 굳은 것 우선, 그다음 가장 낮게 내려온 것."""
-        matches = [b for b in self.bricks if not b.is_garbage and b.text.lower() == normalized]
-        if not matches:
+    def use_item(self, kind: str) -> dict | None:
+        """아이템 사용. 효과 적용 후 결과(dict) 반환, 인벤토리에 없으면 None."""
+        if kind not in self.items:
             return None
-        return max(matches, key=lambda b: (b.landed, b.y))
+        self.items.remove(kind)
+        if kind == "freeze":
+            self.frozen_until = self.elapsed + FREEZE_SECONDS
+            return {"item": "freeze"}
+        if kind == "shield":
+            self.shield_count += 1
+            return {"item": "shield"}
+        if kind == "bomb":
+            before = len(self.bricks)
+            self.bricks = [b for b in self.bricks if not b.is_garbage]
+            return {"item": "bomb", "cleared": before - len(self.bricks)}
+        if kind == "hint":
+            target = self._lowest_answerable()
+            return {"item": "hint", "hint_answer": target.answer if target else None}
+        return None
+
+    def _most_dangerous_match(self, normalized: str) -> Brick | None:
+        matches = [
+            b
+            for b in self.bricks
+            if not b.is_garbage and not b.is_item and b.answer.lower() == normalized
+        ]
+        item_matches = [b for b in self.bricks if b.is_item and b.answer.lower() == normalized]
+        candidates = matches + item_matches
+        if not candidates:
+            return None
+        return max(candidates, key=lambda b: (b.landed, b.y))
+
+    def _lowest_answerable(self) -> Brick | None:
+        playable = [b for b in self.bricks if not b.is_garbage]
+        if not playable:
+            return None
+        return max(playable, key=lambda b: (b.landed, b.y))
 
     def danger(self) -> bool:
         return self.landed_count >= BOARD_ROWS - 3
 
-    def snapshot(self) -> dict:
+    def snapshot(self, reveal_chips: bool = False) -> dict:
+        """reveal_chips 무관하게 en2ko 브릭은 한글 칩(정답)을 노출(선다형이라 안전).
+        ko2en 브릭은 영어 정답 미노출(치팅 방지)."""
+        chips_set: list[str] = []
+        for b in self.bricks:
+            if b.direction == "en2ko" and not b.is_garbage and not b.is_item:
+                if b.ko not in chips_set:
+                    chips_set.append(b.ko)
         return {
             "bricks": [
                 {
@@ -209,15 +339,41 @@ class Board:
                     "y": round(b.y, 2),
                     "landed": b.landed,
                     "garbage": b.is_garbage,
+                    "item": b.is_item,
+                    # en2ko 브릭의 정답(한글)만 chip 으로 노출
+                    "chip": b.ko if (b.direction == "en2ko" and not b.is_garbage) else None,
                 }
                 for b in self.bricks
             ],
+            "chips": build_chips(chips_set),
+            "direction": self.direction,
             "combo": self.combo,
             "score": self.score,
             "speed_level": self.speed_level,
             "danger": self.danger(),
+            "frozen": self.frozen,
+            "shield": self.shield_count,
+            "items": list(self.items),
             "ko": self.ko,
         }
+
+
+# 탭 오답 칩 후보 (초기 데이터 적을 때 폴백)
+DECOY_KO = ["회복력 있는", "효율적인", "명백한", "우연한", "지속하다", "모호한", "확장 가능한"]
+
+
+def build_chips(answers: list[str]) -> list[str]:
+    """en2ko 탭 칩: 보드의 뜻 + (부족하면) 오답 칩. 결정적(매 틱 안 흔들림)."""
+    if not answers:
+        return []
+    chips = list(dict.fromkeys(answers))
+    if len(chips) < 4:
+        for d in DECOY_KO:
+            if d not in chips:
+                chips.append(d)
+            if len(chips) >= 4:
+                break
+    return sorted(chips)
 
 
 def build_word_queue(
@@ -238,7 +394,7 @@ class Match:
     board2: Board
     elapsed: float = 0.0
     finished: bool = False
-    winner: int | None = None  # 1 | 2 | None(무승부)
+    winner: int | None = None
 
     def tick(self, dt: float) -> dict[int, list[str]]:
         if self.finished:
@@ -256,6 +412,10 @@ class Match:
             other.add_garbage(result.attack)
         self._check_end()
         return result
+
+    def use_item(self, player: int, kind: str) -> dict | None:
+        board = self.board1 if player == 1 else self.board2
+        return board.use_item(kind)
 
     def forfeit(self, player: int) -> None:
         if self.finished:

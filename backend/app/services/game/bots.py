@@ -44,7 +44,7 @@ class Bot:
             # 새 목표: 반응 지연 + 타이핑 시간 산정
             self._target_brick_id = target.brick_id
             reaction = self.rng.uniform(react_min, react_max)
-            typing_seconds = (len(target.text) / CHARS_PER_WORD) * (60.0 / wpm)
+            typing_seconds = (len(target.answer) / CHARS_PER_WORD) * (60.0 / wpm)
             self._finish_at = board.elapsed + reaction + typing_seconds
             self._typo_pending = self.rng.random() > accuracy
             return None
@@ -53,12 +53,12 @@ class Bot:
             self._target_brick_id = None
             if self._typo_pending:
                 self._typo_pending = False
-                return target.text + "x"  # 오타 — 콤보 리셋되는 사람다운 실수
-            return target.text
+                return target.answer + "x"  # 오타 — 콤보 리셋되는 사람다운 실수
+            return target.answer
         return None
 
     def _pick_target(self, board: Board):
-        candidates = [b for b in board.bricks if not b.is_garbage and b.text]
+        candidates = [b for b in board.bricks if not b.is_garbage and not b.is_item and b.answer]
         if not candidates:
             return None
         return max(candidates, key=lambda b: (b.landed, b.y))

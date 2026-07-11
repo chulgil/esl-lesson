@@ -187,7 +187,7 @@ async def test_game_pool_allows_subscribed_content(wired_db):
     # 구독자 B는 사용 가능
     wired_db.add(ContentSubscription(content_id=content.id, user_id=b.id))
     await wired_db.commit()
-    pool = await load_word_pool_from_contents(b.id, [content.id], "en")
+    pool = await load_word_pool_from_contents(b.id, [content.id])
     assert len(pool) == 12
 
     # 미구독 사용자는 거부
@@ -195,4 +195,4 @@ async def test_game_pool_allows_subscribed_content(wired_db):
     wired_db.add(c)
     await wired_db.commit()
     with pytest.raises(WordPoolError):
-        await load_word_pool_from_contents(c.id, [content.id], "en")
+        await load_word_pool_from_contents(c.id, [content.id])

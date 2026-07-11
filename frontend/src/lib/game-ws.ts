@@ -6,14 +6,21 @@ export interface BrickState {
   y: number;
   landed: boolean;
   garbage: boolean;
+  item?: boolean;
+  chip?: string | null;
 }
 
 export interface BoardState {
   bricks: BrickState[];
+  chips: string[];
+  direction: "en2ko" | "ko2en";
   combo: number;
   score: number;
   speed_level: number;
   danger: boolean;
+  frozen: boolean;
+  shield: number;
+  items: string[];
   ko: boolean;
 }
 
@@ -74,6 +81,8 @@ export type ServerMsg =
   | { t: "queue.waiting" }
   | { t: "room.created"; code: string }
   | { t: "attack.recv"; count: number }
+  | { t: "item.gained"; item: string }
+  | { t: "item.result"; ok: boolean; item?: string; hint_answer?: string | null; cleared?: number }
   | { t: "error"; code: string }
   | { t: "pong" };
 
@@ -130,6 +139,9 @@ export class GameSocket {
     this.seq += 1;
     this.send({ t: "input.submit", text, seq: this.seq });
     return this.seq;
+  }
+  useItem(item: string): void {
+    this.send({ t: "item.use", item });
   }
   close(): void {
     this.ws?.close();

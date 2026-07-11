@@ -14,11 +14,9 @@ import {
 } from "@/lib/game-ws";
 
 type Phase = "lobby" | "waiting" | "countdown" | "playing" | "ended";
-type QuizMode = "en" | "ko2en";
 
 export default function GamePage() {
   const [phase, setPhase] = useState<Phase>("lobby");
-  const [quiz, setQuiz] = useState<QuizMode>("en");
   const [botLevel, setBotLevel] = useState(3);
   const [roomCode, setRoomCode] = useState("");
   const [myContents, setMyContents] = useState<ContentSummary[]>([]);
@@ -29,6 +27,7 @@ export default function GamePage() {
   const [endResult, setEndResult] = useState<MatchEndMsg | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [hint, setHint] = useState<string | null>(null);
   const socketRef = useRef<GameSocket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -55,6 +54,12 @@ export default function GamePage() {
       case "match.end":
         setEndResult(msg);
         setPhase("ended");
+        break;
+      case "item.result":
+        if (msg.ok && msg.item === "hint" && msg.hint_answer) {
+          setHint(msg.hint_answer);
+          setTimeout(() => setHint(null), 1500);
+        }
         break;
       case "error":
         setError(
@@ -107,6 +112,14 @@ export default function GamePage() {
     setInput("");
   }
 
+  function tapChip(chip: string) {
+    socketRef.current?.submit(chip);
+  }
+
+  function useItem(item: string) {
+    socketRef.current?.useItem(item);
+  }
+
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-4 py-8 sm:px-10">
       <header className="mb-6 flex items-center gap-4">
@@ -122,8 +135,6 @@ export default function GamePage() {
 
       {phase === "lobby" && (
         <Lobby
-          quiz={quiz}
-          setQuiz={setQuiz}
           botLevel={botLevel}
           setBotLevel={setBotLevel}
           roomCode={roomCode}
@@ -133,15 +144,15 @@ export default function GamePage() {
           setSelectedContents={setSelectedContents}
           onPve={() =>
             socketRef.current?.joinPve(
-              quiz,
+              "en",
               botLevel,
               selectedContents.length ? selectedContents : undefined,
             )
           }
-          onPvp={() => socketRef.current?.joinPvp(quiz)}
+          onPvp={() => socketRef.current?.joinPvp("en")}
           onCreateRoom={() =>
             socketRef.current?.createRoom(
-              quiz,
+              "en",
               selectedContents.length ? selectedContents : undefined,
             )
           }
@@ -187,8 +198,11 @@ export default function GamePage() {
           input={input}
           inputRef={inputRef}
           disabled={phase !== "playing"}
+          hint={hint}
           onInput={setInput}
           onSubmit={submitWord}
+          onTap={tapChip}
+          onUseItem={useItem}
         />
       )}
 
@@ -204,8 +218,6 @@ export default function GamePage() {
 }
 
 function Lobby({
-  quiz,
-  setQuiz,
   botLevel,
   setBotLevel,
   roomCode,
@@ -218,8 +230,6 @@ function Lobby({
   onCreateRoom,
   onJoinRoom,
 }: {
-  quiz: QuizMode;
-  setQuiz: (q: QuizMode) => void;
   botLevel: number;
   setBotLevel: (n: number) => void;
   roomCode: string;
@@ -242,19 +252,25 @@ function Lobby({
 
   return (
     <section className="flex max-w-lg flex-col gap-6">
-      <div>
-        <p className="mb-2 text-sm font-bold">출제 모드</p>
-        <div className="flex gap-2">
-          <ModeButton active={quiz === "en"} onClick={() => setQuiz("en")}>
-            영단어 타이핑
-          </ModeButton>
-          <ModeButton
-            active={quiz === "ko2en"}
-            onClick={() => setQuiz("ko2en")}
-          >
-            뜻 보고 영단어
-          </ModeButton>
-        </div>
+      <div className="rounded-lg border-2 border-ink/10 bg-white p-4 text-sm">
+        <p className="mb-2 font-bold">게임 방식</p>
+        <ul className="flex flex-col gap-1 opacity-80">
+          <li>
+            <b className="text-brick-blue">영어 → 한글</b> 구간: 영단어가
+            떨어지면 하단 뜻 칩을 <b>탭</b>해서 제거
+          </li>
+          <li>
+            <b className="text-brick-green">한글 → 영어</b> 구간: 한글 뜻이
+            떨어지면 영어로 <b>타이핑</b>
+          </li>
+          <li className="opacity-70">
+            시간이 지날수록 방향 구간이 번갈아 바뀝니다.
+          </li>
+          <li>
+            <b>아이템</b>: 5콤보 / ★브릭으로 획득 — ❄정지 · ?힌트 · *폭탄 ·
+            ▽방어막
+          </li>
+        </ul>
       </div>
 
       {myContents.length > 0 && (

@@ -106,7 +106,7 @@ async def test_full_pvp_room_match_end_to_end(wired_db):
     # 4) P1 이 브릭 3개 타이핑 → 3콤보 공격이 P2 에 전달
     for _ in range(3):
         assert await wait_until(lambda: len(session.match.board1.bricks) > 0)
-        text = session.match.board1.bricks[0].text
+        text = session.match.board1.bricks[0].answer
         await gm.handle_input(p1.id, text, seq=1)
     assert any(m["t"] == "clear.result" and m["ok"] for m in s1.messages)
     assert await wait_until(lambda: any(m["t"] == "attack.recv" for m in s2.messages)), (
