@@ -31,7 +31,16 @@ jobs:
             cd ~/apps/eng-lesson
             git fetch origin main
             git reset --hard origin/main
+            # 구형(classic) 빌더의 스테일 캐시 버그 회피 — 2026-07-11 두 차례 실측
+            export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
             docker-compose -f docker-compose.prod.yml build
+            # 신선도 게이트: 이미지 안 소스와 체크아웃 소스 해시 비교, 다르면 무캐시 재빌드
+            IMG_HASH=$(docker run --rm --entrypoint md5sum eng-lesson_api app/main.py | cut -d' ' -f1)
+            SRC_HASH=$(md5sum backend/app/main.py | cut -d' ' -f1)
+            if [ "$IMG_HASH" != "$SRC_HASH" ]; then
+              echo "[!] stale api image detected - rebuilding with --no-cache"
+              docker-compose -f docker-compose.prod.yml build --no-cache api web
+            fi
             docker-compose -f docker-compose.prod.yml run --rm api uv run --no-dev alembic upgrade head
             docker-compose -f docker-compose.prod.yml up -d
             docker image prune -f
