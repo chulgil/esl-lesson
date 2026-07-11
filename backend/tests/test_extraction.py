@@ -38,3 +38,18 @@ def test_chunk_segments_splits_long_scripts():
     chunks = _chunk_segments(segments)
     assert len(chunks) == 3
     assert sum(len(c) for c in chunks) == 40
+
+
+def test_first_text_skips_thinking_block():
+    """claude-sonnet-5 는 thinking 블록이 선행될 수 있다 (2026-07-11 운영 실측)."""
+    from types import SimpleNamespace
+
+    from app.services.extraction import _first_text
+
+    res = SimpleNamespace(
+        content=[
+            SimpleNamespace(type="thinking", thinking="..."),
+            SimpleNamespace(type="text", text='["안녕"]'),
+        ]
+    )
+    assert _first_text(res) == '["안녕"]'

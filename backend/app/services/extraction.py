@@ -127,7 +127,7 @@ async def translate_texts(texts: list[str]) -> list[str]:
             system=TRANSLATE_SYSTEM,
             messages=[{"role": "user", "content": json.dumps(batch, ensure_ascii=False)}],
         )
-        translated = json.loads(res.content[0].text)
+        translated = json.loads(_first_text(res))
         if not isinstance(translated, list) or len(translated) != len(batch):
             raise ValueError("translation batch size mismatch")
         results.extend(str(t) for t in translated)
@@ -155,6 +155,14 @@ async def extract_items(segments: list[tuple[int, str]]) -> dict:
         for key in merged:
             merged[key].extend(data.get(key, []))
     return _filter_items(merged)
+
+
+def _first_text(res) -> str:
+    """응답에서 첫 텍스트 블록 추출 — thinking 블록이 선행될 수 있음 (claude-sonnet-5)."""
+    for block in res.content:
+        if getattr(block, "type", None) == "text":
+            return block.text
+    raise ValueError("no text block in response")
 
 
 def _chunk_segments(segments: list[tuple[int, str]]) -> list[list[tuple[int, str]]]:
