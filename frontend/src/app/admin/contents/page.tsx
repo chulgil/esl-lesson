@@ -1,12 +1,150 @@
+"use client";
+
+import Link from "next/link";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Brick } from "@/components/brick/Brick";
+import { adminApi, type ContentSummary } from "@/lib/admin-api";
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: "대기",
+  extracting: "추출 중",
+  ready: "완료",
+  failed: "실패",
+};
+
+const STATUS_STYLES: Record<string, string> = {
+  pending: "bg-ink/10",
+  extracting: "bg-brick-yellow/30",
+  ready: "bg-brick-green/20 text-brick-green",
+  failed: "bg-brick-red/15 text-brick-red",
+};
+
 export default function AdminContentsPage() {
   return (
+    <Suspense>
+      <ContentsInner />
+    </Suspense>
+  );
+}
+
+function ContentsInner() {
+  const params = useSearchParams();
+  const statusFilter = params.get("status") ?? undefined;
+  const [contents, setContents] = useState<ContentSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    adminApi
+      .listContents(statusFilter)
+      .then((res) => setContents(res.items))
+      .catch((e) => setError(e.message));
+  }, [statusFilter]);
+
+  useEffect(() => {
+    load();
+    // 파이프라인 진행 중 콘텐츠가 있으면 5초 폴링 (docs/specs/backoffice.md)
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  return (
     <section>
-      <h1 className="font-hand text-3xl font-bold">
-        <span className="hl">콘텐츠</span>
-      </h1>
-      <p className="mt-4 text-sm opacity-70">
-        유튜브 URL / 수기 등록 폼은 1b 단계에서 연결됩니다.
-      </p>
+      <div className="flex items-center justify-between">
+        <h1 className="font-hand text-3xl font-bold">
+          <span className="hl">콘텐츠</span>
+        </h1>
+        <Brick color="red" href="/admin/contents/new">
+          + 콘텐츠 등록
+        </Brick>
+      </div>
+
+      <div className="mt-4 flex gap-2 text-sm">
+        <FilterLink
+          label="전체"
+          active={!statusFilter}
+          href="/admin/contents"
+        />
+        {Object.entries(STATUS_LABELS).map(([key, label]) => (
+          <FilterLink
+            key={key}
+            label={label}
+            active={statusFilter === key}
+            href={`/admin/contents?status=${key}`}
+          />
+        ))}
+      </div>
+
+      {error && <p className="mt-4 text-sm text-brick-red">{error}</p>}
+
+      <table className="mt-4 w-full border-collapse bg-white text-sm">
+        <thead>
+          <tr className="border-b-2 border-ink/20 text-left">
+            <th className="p-2">제목</th>
+            <th className="p-2 w-20">소스</th>
+            <th className="p-2 w-24">상태</th>
+            <th className="p-2 w-40">등록일</th>
+          </tr>
+        </thead>
+        <tbody>
+          {contents.map((c) => (
+            <tr key={c.id} className="border-b border-ink/10 hover:bg-paper">
+              <td className="p-2">
+                <Link
+                  href={`/admin/contents/${c.id}`}
+                  className="hover:underline"
+                >
+                  {c.title}
+                </Link>
+                {c.error_message && (
+                  <p className="mt-0.5 text-xs text-brick-red">
+                    {c.error_message}
+                  </p>
+                )}
+              </td>
+              <td className="p-2">
+                {c.source === "youtube" ? "유튜브" : "수기"}
+              </td>
+              <td className="p-2">
+                <span
+                  className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLES[c.status]}`}
+                >
+                  {STATUS_LABELS[c.status]}
+                </span>
+              </td>
+              <td className="p-2 text-xs opacity-60">
+                {new Date(c.created_at).toLocaleString("ko-KR")}
+              </td>
+            </tr>
+          ))}
+          {contents.length === 0 && (
+            <tr>
+              <td colSpan={4} className="p-6 text-center text-sm opacity-50">
+                콘텐츠가 없습니다. 첫 콘텐츠를 등록해보세요.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </section>
+  );
+}
+
+function FilterLink({
+  label,
+  active,
+  href,
+}: {
+  label: string;
+  active: boolean;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`rounded px-2 py-1 ${active ? "bg-ink text-white" : "bg-white hover:bg-ink/5"}`}
+    >
+      {label}
+    </Link>
   );
 }

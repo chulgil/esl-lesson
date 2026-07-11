@@ -5,6 +5,7 @@ import os
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("COOKIE_SECURE", "false")
 os.environ.setdefault("ADMIN_EMAILS", "boss@example.com")
+os.environ.setdefault("ENABLE_WORKERS", "false")
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -32,6 +33,26 @@ async def db_session():
     async with factory() as session:
         yield session
     await engine.dispose()
+
+
+@pytest.fixture
+async def admin_client(client, db_session):
+    """admin 세션 쿠키가 설정된 클라이언트."""
+    from app.api.auth import upsert_google_user
+    from app.core.security import SESSION_COOKIE, create_session_token
+
+    admin = await upsert_google_user(
+        db_session,
+        {
+            "sub": "g-admin",
+            "email": "boss@example.com",
+            "email_verified": True,
+            "name": "Boss",
+        },
+        get_settings(),
+    )
+    client.cookies.set(SESSION_COOKIE, create_session_token(admin))
+    return client
 
 
 @pytest.fixture

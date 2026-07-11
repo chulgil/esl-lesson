@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     public_service_url: str = "https://esl.lessonaza.com"
     public_admin_url: str = "https://esladmin.lessonaza.com"
 
+    # 추출 워커 (테스트에서는 비활성)
+    enable_workers: bool = True
+
     @property
     def admin_email_set(self) -> frozenset[str]:
         return frozenset(e.strip().lower() for e in self.admin_emails.split(",") if e.strip())
