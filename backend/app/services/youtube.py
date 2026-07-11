@@ -21,6 +21,10 @@ class TranscriptNotFoundError(Exception):
     """영어 자막이 없는 영상 — 수기 입력 경로로 안내."""
 
 
+class TranscriptBlockedError(TranscriptNotFoundError):
+    """유튜브가 서버 IP를 차단 — 로컬 수집기/프록시로 처리 가능."""
+
+
 def parse_video_id(url: str) -> str | None:
     for pattern in VIDEO_ID_PATTERNS:
         match = pattern.search(url)
@@ -96,7 +100,7 @@ def fetch_transcript(video_id: str, languages: tuple[str, ...] = ("en",)) -> Tra
         transcript_list = api.list(video_id)
     except Exception as exc:
         if _is_blocked(exc):
-            raise TranscriptNotFoundError(BLOCKED_MESSAGE) from exc
+            raise TranscriptBlockedError(BLOCKED_MESSAGE) from exc
         raise TranscriptNotFoundError(f"자막 조회 실패: {type(exc).__name__}") from exc
 
     transcript = None
@@ -113,7 +117,7 @@ def fetch_transcript(video_id: str, languages: tuple[str, ...] = ("en",)) -> Tra
         fetched = transcript.fetch()
     except Exception as exc:
         if _is_blocked(exc):
-            raise TranscriptNotFoundError(BLOCKED_MESSAGE) from exc
+            raise TranscriptBlockedError(BLOCKED_MESSAGE) from exc
         raise
     snippets = [
         Snippet(

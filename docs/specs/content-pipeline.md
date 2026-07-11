@@ -138,7 +138,6 @@ ko 자막 있으면 함께 추출 (수동 > 자동 우선)
 ## 비용/한도 추정
 
 - 20분 영상 ≈ 3,000단어 ≈ 입력 4K 토큰 x (번역 1회 + 추출 1회) + 출력 ~3K 토큰 → Sonnet 기준 콘텐츠당 수십 원 수준.
-- 유튜브 자막 API는 비공식 — **클라우드 서버 IP는 실제로 차단됨** (2026-07-11 실측: youtube-transcript-api RequestBlocked + yt-dlp bot check). 대응:
-  - 프록시 경유 필수: `WEBSHARE_PROXY_USERNAME/PASSWORD` (residential, 라이브러리 공식 지원) 또는 `YT_PROXY_URL` (일반 HTTP 프록시)
-  - 차단 시 오류 메시지를 간결한 한국어로 변환해 표면화 + 수기 입력 안내
-  - 실패 콘텐츠는 프록시 설정 후 "재시도" 버튼으로 복구
+- 유튜브 자막 API는 비공식 — **클라우드 서버 IP는 실제로 차단됨** (2026-07-11 실측: youtube-transcript-api RequestBlocked + yt-dlp bot check). 대응 2단:
+  - **로컬 자막 수집기 (기본, 무비용)**: 차단 시 콘텐츠는 실패가 아닌 "자막 준비 중" 상태로 대기. 집 IP를 가진 로컬 머신에서 `scripts/transcript_agent.py` 가 `/api/agent/pending-transcripts` 를 폴링해 자막을 대신 수집·제출(`X-Agent-Token` 인증)하면 서버가 번역/추출을 이어서 진행. 사용자는 "대기 → 완료" 자동 전환을 본다 (5초 폴링 UI)
+  - **프록시 (규모 확장 시)**: `WEBSHARE_PROXY_USERNAME/PASSWORD` (residential) 또는 `YT_PROXY_URL` 설정 시 서버가 직접 수집 — 수집기 없이 동작

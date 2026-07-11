@@ -16,8 +16,11 @@ from app.core.db import get_session_factory
 from app.models import Content, ExtractionJob, ItemOccurrence, LearningItem, TranscriptSegment
 from app.models.item import normalize_key
 from app.services import extraction, youtube
+from app.services.youtube import TranscriptBlockedError
 
 logger = logging.getLogger(__name__)
+
+WAITING_FOR_AGENT_MESSAGE = "자막 준비 중 — 수집기가 처리하면 자동으로 진행됩니다"
 
 MAX_ATTEMPTS = 3
 BACKOFF_BASE_SECONDS = 5  # 5s -> 25s -> 125s (테스트에서 패치)
@@ -41,6 +44,12 @@ async def run_pipeline(content_id: int) -> None:
                 await _run_step(db, content, "transcript", _step_transcript)
             await _run_step(db, content, "translate", _step_translate)
             await _run_step(db, content, "extract", _step_extract)
+        except TranscriptBlockedError:
+            # 서버 IP 차단 — 실패가 아니라 "자막 대기" (로컬 수집기가 채우면 자동 재개)
+            content.status = "pending"
+            content.error_message = WAITING_FOR_AGENT_MESSAGE
+            await db.commit()
+            return
         except Exception as exc:
             logger.exception("pipeline failed content=%s", content_id)
             content.status = "failed"

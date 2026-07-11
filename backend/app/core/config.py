@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     webshare_proxy_password: str = ""
     yt_proxy_url: str = ""  # 일반 HTTP(S) 프록시 URL (webshare 미사용 시)
 
+    # 로컬 자막 수집기 인증 토큰 (빈 값이면 에이전트 API 비활성)
+    agent_token: str = ""
+
     # 추출 워커 (테스트에서는 비활성)
     enable_workers: bool = True
 

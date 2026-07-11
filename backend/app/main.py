@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin_contents import router as admin_contents_router
 from app.api.admin_users import router as admin_users_router
+from app.api.agent import router as agent_router
 from app.api.auth import me_router
 from app.api.auth import router as auth_router
 from app.api.contents import router as contents_router
@@ -41,6 +42,7 @@ app.include_router(admin_contents_router, prefix="/api")
 app.include_router(admin_users_router, prefix="/api")
 app.include_router(contents_router, prefix="/api")
 app.include_router(my_contents_router, prefix="/api")
+app.include_router(agent_router, prefix="/api")
 app.include_router(study_router, prefix="/api")
 app.include_router(cards_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
