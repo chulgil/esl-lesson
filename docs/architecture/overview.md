@@ -9,7 +9,7 @@ eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 
 ```
                         [사용자 브라우저]
                               |
-                    https (esl / esladmin.lessonaza.com)
+                    https (esl / esladmin.lessonaza.app)
                               |
                     +---------v----------+
                     |   Traefik 1.7      |  (기존 컨테이너, 80/443, traefiknet)
@@ -46,12 +46,12 @@ eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 
 
 | 요청 | 라우팅 대상 |
 |------|-------------|
-| `esl.lessonaza.com/*` (아래 제외) | frontend — 학습자 서비스 |
-| `esladmin.lessonaza.com/*` (아래 제외) | frontend — 백오피스 (호스트 기반 분기) |
-| `*.lessonaza.com/api/*` | backend REST API |
-| `*.lessonaza.com/ws/*` | backend WebSocket (페이즈 2 게임) |
+| `esl.lessonaza.app/*` (아래 제외) | frontend — 학습자 서비스 |
+| `esladmin.lessonaza.app/*` (아래 제외) | frontend — 백오피스 (호스트 기반 분기) |
+| `*.lessonaza.app/api/*` | backend REST API |
+| `*.lessonaza.app/ws/*` | backend WebSocket (페이즈 2 게임) |
 
-설계 의도: `/api`를 두 도메인 모두에서 backend로 보내 **프론트가 항상 same-origin으로 API 호출** → CORS 설정과 서드파티 쿠키 이슈를 원천 제거한다. 세션 쿠키는 `Domain=.lessonaza.com`으로 발급해 두 도메인에서 공유한다.
+설계 의도: `/api`를 두 도메인 모두에서 backend로 보내 **프론트가 항상 same-origin으로 API 호출** → CORS 설정과 서드파티 쿠키 이슈를 원천 제거한다. 세션 쿠키는 `Domain=.lessonaza.app`으로 발급해 두 도메인에서 공유한다.
 
 ## 주요 데이터 흐름
 

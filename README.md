@@ -2,8 +2,8 @@
 
 유튜브 스크립트 기반 영어 학습 웹 서비스. 유튜브 영상의 영어/한글 스크립트에서 단어·숙어·패턴·문장을 AI로 추출하고, 망각곡선(FSRS) 기반 복습 스케줄로 학습한다. 듀오링고처럼 가볍게, 안키처럼 과학적으로.
 
-- 서비스(학습자): `https://esl.lessonaza.com`
-- 백엔드 API + 백오피스(관리자): `https://esladmin.lessonaza.com`
+- 서비스(학습자): `https://esl.lessonaza.app`
+- 백엔드 API + 백오피스(관리자): `https://esladmin.lessonaza.app`
 - 배포: git push → GitHub Actions → codenavi 서버 (Docker + Traefik)
 
 ---
@@ -127,7 +127,7 @@ eng-lesson/
 
 | 도메인 | 역할 |
 |--------|------|
-| `esl.lessonaza.com` | 학습자 서비스 페이지 |
-| `esladmin.lessonaza.com` | 백오피스(관리자 화면) + 백엔드 API (`/api`, `/ws`) |
+| `esl.lessonaza.app` | 학습자 서비스 페이지 |
+| `esladmin.lessonaza.app` | 백오피스(관리자 화면) + 백엔드 API (`/api`, `/ws`) |
 
 두 도메인 모두 `/api` 경로는 백엔드 컨테이너로 라우팅되어 프론트는 항상 same-origin으로 API를 호출한다 (CORS 불필요). 상세: [docs/architecture/deployment.md](docs/architecture/deployment.md)

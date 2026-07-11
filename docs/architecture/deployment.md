@@ -21,8 +21,8 @@ git push(main) → GitHub Actions → SSH → codenavi 서버에서 pull + docke
 
 | 도메인 | 대상 | 용도 |
 |--------|------|------|
-| `esl.lessonaza.com` | A 레코드 → 108.61.162.25 | 학습자 서비스 |
-| `esladmin.lessonaza.com` | A 레코드 → 108.61.162.25 | 백오피스 + API |
+| `esl.lessonaza.app` | A 레코드 → 108.61.162.25 | 학습자 서비스 |
+| `esladmin.lessonaza.app` | A 레코드 → 108.61.162.25 | 백오피스 + API |
 
 TLS는 기존 Traefik의 Let's Encrypt(ACME) 설정에 편승 — DNS 레코드 생성 후 첫 요청 시 자동 발급. (배포 전 traefik.toml의 ACME 설정 확인 필요)
 
@@ -48,7 +48,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: "traefiknet"
-      traefik.frontend.rule: "Host:esl.lessonaza.com,esladmin.lessonaza.com"
+      traefik.frontend.rule: "Host:esl.lessonaza.app,esladmin.lessonaza.app"
       traefik.frontend.priority: "10"
       traefik.port: "3000"
 
@@ -57,24 +57,24 @@ services:
     container_name: englesson-api
     restart: unless-stopped
     env_file: .env.api
-    networks: [traefiknet, dbnet]
+    networks: [traefiknet, postgresql_internal]
     labels:
       traefik.enable: "true"
       traefik.docker.network: "traefiknet"
-      traefik.frontend.rule: "Host:esl.lessonaza.com,esladmin.lessonaza.com;PathPrefix:/api,/ws"
+      traefik.frontend.rule: "Host:esl.lessonaza.app,esladmin.lessonaza.app;PathPrefix:/api,/ws"
       traefik.frontend.priority: "100"
       traefik.port: "8000"
 
 networks:
   traefiknet:
     external: true
-  dbnet:
-    external: true   # postgres 컨테이너가 속한 네트워크명으로 배포 시 확정
+  postgresql_internal:
+    external: true   # 기존 postgres 컨테이너 네트워크 (서버 확인 완료)
 ```
 
 라우팅 원리: PathPrefix 규칙(priority 100)이 Host 규칙(priority 10)보다 먼저 평가되어 `/api`, `/ws`는 api 컨테이너로, 나머지는 web 컨테이너로 간다. 두 도메인 모두에서 same-origin API 호출이 가능해 CORS가 필요 없다.
 
-주의: `postgres` 컨테이너가 속한 실제 네트워크명은 배포 시 `docker inspect postgres`로 확인해 `dbnet`을 치환한다. postgres가 호스트 포트 5432를 공개 중이므로 최악의 경우 호스트 게이트웨이 경유도 가능하지만, 컨테이너 네트워크 직결을 우선한다.
+postgres 컨테이너 네트워크는 `postgresql_internal`로 확인 완료 (2026-07-11, `docker inspect postgres`). api 컨테이너는 이 네트워크에 조인해 컨테이너명 `postgres`로 직결한다.
 
 ## 환경변수 (.env.api — 서버에만 존재, git 미포함)
 
@@ -86,7 +86,7 @@ networks:
 | ANTHROPIC_API_KEY | AI 추출 |
 | ANTHROPIC_MODEL | 기본 `claude-sonnet-5` |
 | ADMIN_EMAILS | 최초 관리자 이메일 (콤마 구분) |
-| COOKIE_DOMAIN | `.lessonaza.com` |
+| COOKIE_DOMAIN | `.lessonaza.app` |
 | PUBLIC_SERVICE_URL / PUBLIC_ADMIN_URL | OAuth redirect 구성 |
 
 `.env.web`: `NEXT_PUBLIC_*` 최소한만 (API는 same-origin이므로 베이스 URL 불필요).
@@ -114,7 +114,7 @@ jobs:
         docker-compose -f docker-compose.prod.yml run --rm api alembic upgrade head
         docker-compose -f docker-compose.prod.yml up -d
         docker image prune -f
-    - 헬스체크: curl -sf https://esladmin.lessonaza.com/api/health
+    - 헬스체크: curl -sf https://esladmin.lessonaza.app/api/health
 ```
 
 GitHub Secrets 등록 목록: `DEPLOY_HOST`(108.61.162.25), `DEPLOY_USER`(admin), `DEPLOY_SSH_KEY`(배포 전용 키 신규 발급 권장).
@@ -126,7 +126,7 @@ GitHub Secrets 등록 목록: `DEPLOY_HOST`(108.61.162.25), `DEPLOY_USER`(admin)
 3. 서버: postgres에 롤/DB 생성 ([database.md](database.md) 초기화 SQL)
 4. 서버: `.env.api`, `.env.web` 작성
 5. Google Cloud Console: OAuth 클라이언트 생성, redirect URI 등록
-   (`https://esl.lessonaza.com/api/auth/callback`, `https://esladmin.lessonaza.com/api/auth/callback`)
+   (`https://esl.lessonaza.app/api/auth/callback`, `https://esladmin.lessonaza.app/api/auth/callback`)
 6. GitHub Secrets 등록 → main push로 첫 배포
 
 ## 헬스체크/롤백

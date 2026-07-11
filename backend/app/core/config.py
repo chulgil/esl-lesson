@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     jwt_secret: str = "dev-only-secret-change-me"
     jwt_expires_hours: int = 24
-    cookie_domain: str = ""  # 운영: .lessonaza.com / 로컬: 빈 값(호스트 쿠키)
+    cookie_domain: str = ""  # 운영: .lessonaza.app / 로컬: 빈 값(호스트 쿠키)
     cookie_secure: bool = True
     admin_emails: str = ""  # 콤마 구분 — 첫 로그인 시 admin 승격
 
@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5"
 
     # 서비스 URL (OAuth redirect 검증용)
-    public_service_url: str = "https://esl.lessonaza.com"
-    public_admin_url: str = "https://esladmin.lessonaza.com"
+    public_service_url: str = "https://esl.lessonaza.app"
+    public_admin_url: str = "https://esladmin.lessonaza.app"
 
     # 추출 워커 (테스트에서는 비활성)
     enable_workers: bool = True

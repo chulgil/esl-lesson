@@ -37,7 +37,7 @@ Google OAuth 2.0 Authorization Code 흐름을 백엔드(FastAPI)가 직접 처�
 | 항목 | 값 |
 |------|-----|
 | 저장 | httpOnly + Secure + SameSite=Lax 쿠키 `els_session` |
-| Domain | `.lessonaza.com` (두 서브도메인 공유) |
+| Domain | `.lessonaza.app` (두 서브도메인 공유) |
 | 서명 | HS256, `JWT_SECRET` |
 | 수명 | access 24h. 만료 시 재로그인 (개인 서비스 규모 — refresh 토큰 생략) |
 | 클레임 | `sub`(user id), `email`, `role`, `exp`, `iat` |

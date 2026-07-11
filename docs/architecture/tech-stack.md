@@ -48,7 +48,7 @@
 
 ### 인증: Google OAuth 2.0 + 자체 JWT (httpOnly 쿠키)
 
-- 채택 이유: 백엔드(FastAPI)가 Authorization Code 흐름을 직접 처리하고 자체 JWT를 `Domain=.lessonaza.com` httpOnly 쿠키로 발급 → 서비스/백오피스 두 도메인에서 세션 공유, 프론트/백 모두 같은 토큰 검증.
+- 채택 이유: 백엔드(FastAPI)가 Authorization Code 흐름을 직접 처리하고 자체 JWT를 `Domain=.lessonaza.app` httpOnly 쿠키로 발급 → 서비스/백오피스 두 도메인에서 세션 공유, 프론트/백 모두 같은 토큰 검증.
 - 기각: **Auth.js(next-auth)** — 프론트 편의는 높으나 세션 소유권이 Next.js에 생겨 FastAPI가 매 요청 이중 검증 구조가 됨. 게임 WebSocket 인증(백엔드 직결)까지 고려하면 백엔드 소유 세션이 단순. **Firebase Auth** — 외부 종속 추가, 자체 서버 인프라 방침과 불일치.
 
 ### AI: Claude API
