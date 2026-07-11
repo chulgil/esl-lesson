@@ -14,6 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, CreatedAtMixin, PkMixin
+from app.models.types import JsonDict
 
 CARD_STATES = ("new", "learning", "review", "relearning")
 
@@ -43,6 +44,8 @@ class ReviewCard(Base, PkMixin, CreatedAtMixin):
     lapses: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     suspended: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     last_review_at: Mapped[datetime | None]
+    # py-fsrs Card 직렬화 원본 + fast_streak (docs/specs/learning.md)
+    fsrs_json: Mapped[dict | None] = mapped_column(JsonDict, nullable=True)
 
     logs: Mapped[list["ReviewLog"]] = relationship(
         back_populates="card", cascade="all, delete-orphan"
