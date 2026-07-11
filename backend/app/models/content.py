@@ -10,7 +10,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, PkMixin, TimestampMixin
+from app.models.base import Base, CreatedAtMixin, PkMixin, TimestampMixin
 from app.models.types import JsonDict
 
 CONTENT_STATUSES = ("pending", "extracting", "ready", "failed")
@@ -49,6 +49,20 @@ class Content(Base, PkMixin, TimestampMixin):
     jobs: Mapped[list["ExtractionJob"]] = relationship(
         back_populates="content", cascade="all, delete-orphan"
     )
+
+
+class ContentSubscription(Base, PkMixin, CreatedAtMixin):
+    """콘텐츠 구독 — 같은 영상을 여러 사용자가 공유 (중복 등록 없이 즉시 재사용)."""
+
+    __tablename__ = "content_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("content_id", "user_id", name="uq_subscriptions_content_user"),
+    )
+
+    content_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("contents.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
 
 
 class TranscriptSegment(Base, PkMixin):

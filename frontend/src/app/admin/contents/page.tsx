@@ -77,6 +77,8 @@ function ContentsInner() {
 
       {error && <p className="mt-4 text-sm text-brick-red">{error}</p>}
 
+      <div className="overflow-x-auto">
+
       <table className="mt-4 w-full border-collapse bg-white text-sm">
         <thead>
           <tr className="border-b-2 border-ink/20 text-left">
@@ -126,6 +128,7 @@ function ContentsInner() {
           )}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }

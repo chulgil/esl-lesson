@@ -175,7 +175,7 @@ export default function GamePage() {
 
       {(phase === "playing" || phase === "ended") && (
         <section className="flex flex-col gap-4 lg:flex-row">
-          <div className="flex flex-col gap-2">
+          <div className="flex w-full max-w-[340px] flex-col gap-2">
             <Hud
               label="나"
               board={gameState?.me ?? null}
@@ -201,7 +201,7 @@ export default function GamePage() {
               className="rounded-md border-2 border-ink/30 bg-white px-4 py-3 text-lg font-bold focus:border-brick-blue focus:outline-none"
             />
           </div>
-          <div className="flex flex-col gap-2 opacity-90">
+          <div className="flex w-full max-w-[240px] flex-col gap-2 opacity-90">
             <Hud
               label={matchInfo?.opponent ?? "상대"}
               board={gameState?.op ?? null}

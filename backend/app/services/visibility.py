@@ -6,7 +6,7 @@
 
 from sqlalchemy import and_, or_, select
 
-from app.models import Content, ItemOccurrence, LearningItem
+from app.models import Content, ContentSubscription, ItemOccurrence, LearningItem
 
 
 def public_item_ids():
@@ -17,11 +17,19 @@ def public_item_ids():
     )
 
 
+def subscribed_content_ids(user_id: int):
+    return select(ContentSubscription.content_id).where(ContentSubscription.user_id == user_id)
+
+
 def my_private_item_ids(user_id: int):
+    """내가 구독한 개인 콘텐츠의 항목 (같은 영상을 여러 사용자가 공유)."""
     return (
         select(ItemOccurrence.item_id)
         .join(Content, Content.id == ItemOccurrence.content_id)
-        .where(Content.visibility == "private", Content.created_by == user_id)
+        .where(
+            Content.visibility == "private",
+            Content.id.in_(subscribed_content_ids(user_id)),
+        )
     )
 
 

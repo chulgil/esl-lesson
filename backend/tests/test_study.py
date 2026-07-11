@@ -24,7 +24,7 @@ async def seed_items(
     db, count=5, item_type="word", status="approved", visibility="public", owner=None
 ):
     """가시성 규칙 대응: 항목은 콘텐츠 출처(occurrence)가 있어야 노출된다."""
-    from app.models import Content, ItemOccurrence
+    from app.models import Content, ContentSubscription, ItemOccurrence
 
     global _seed_counter
     _seed_counter += 1
@@ -39,6 +39,8 @@ async def seed_items(
     )
     db.add(content)
     await db.flush()
+    if visibility == "private" and owner is not None:
+        db.add(ContentSubscription(content_id=content.id, user_id=owner))
     items = []
     for i in range(count):
         item = LearningItem(

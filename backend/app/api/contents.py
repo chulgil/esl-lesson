@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import Content, ItemOccurrence, TranscriptSegment, User
+from app.services.visibility import subscribed_content_ids
 
 router = APIRouter(prefix="/contents", tags=["contents"])
 
@@ -19,7 +20,10 @@ router = APIRouter(prefix="/contents", tags=["contents"])
 def visible_content_clause(user_id: int):
     return or_(
         Content.visibility == "public",
-        and_(Content.visibility == "private", Content.created_by == user_id),
+        and_(
+            Content.visibility == "private",
+            Content.id.in_(subscribed_content_ids(user_id)),
+        ),
     )
 
 
@@ -81,7 +85,20 @@ async def get_ready_content(
     if (
         content is None
         or content.status != "ready"
-        or (content.visibility == "private" and content.created_by != user.id)
+        or (
+            content.visibility == "private"
+            and (
+                await db.execute(
+                    select(func.count())
+                    .select_from(Content)
+                    .where(
+                        Content.id == content_id,
+                        Content.id.in_(subscribed_content_ids(user.id)),
+                    )
+                )
+            ).scalar_one()
+            == 0
+        )
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
     segments = (

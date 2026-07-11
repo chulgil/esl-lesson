@@ -47,7 +47,7 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen">
-      <header className="flex items-center gap-6 border-b-2 border-ink/10 bg-paper px-6 py-3">
+      <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b-2 border-ink/10 bg-paper px-4 py-3 sm:px-6">
         <span className="font-hand text-xl font-bold">ESL 백오피스</span>
         <nav className="flex gap-4 text-sm">
           {NAV.map((item) => (

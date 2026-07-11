@@ -181,6 +181,7 @@ function TabButton({
 
 function ScriptTable({ detail }: { detail: ContentDetail }) {
   return (
+    <div className="overflow-x-auto">
     <table className="mt-2 w-full border-collapse bg-white text-sm">
       <tbody>
         {detail.segments.map((s) => (
@@ -194,6 +195,7 @@ function ScriptTable({ detail }: { detail: ContentDetail }) {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 
@@ -221,6 +223,7 @@ function ItemTable({
   }
 
   return (
+    <div className="overflow-x-auto">
     <table className="mt-2 w-full border-collapse bg-white text-sm">
       <thead>
         <tr className="border-b-2 border-ink/20 text-left text-xs">
@@ -250,6 +253,7 @@ function ItemTable({
         )}
       </tbody>
     </table>
+    </div>
   );
 }
 

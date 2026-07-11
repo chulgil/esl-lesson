@@ -15,7 +15,14 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from app.core.db import get_session_factory
-from app.models import Content, GameMatch, ItemOccurrence, LearningItem, ReviewCard
+from app.models import (
+    Content,
+    ContentSubscription,
+    GameMatch,
+    ItemOccurrence,
+    LearningItem,
+    ReviewCard,
+)
 from app.services.game.bots import Bot
 from app.services.game.engine import Board, Match, build_word_queue
 
@@ -465,8 +472,19 @@ async def load_word_pool_from_contents(
         )
         if len(contents) != len(set(content_ids)):
             raise WordPoolError("content_not_found")
-        for content in contents:
-            if content.visibility == "private" and content.created_by != user_id:
+        private_ids = [c.id for c in contents if c.visibility == "private"]
+        if private_ids:
+            subscribed = set(
+                (
+                    await db.execute(
+                        select(ContentSubscription.content_id).where(
+                            ContentSubscription.content_id.in_(private_ids),
+                            ContentSubscription.user_id == user_id,
+                        )
+                    )
+                ).scalars()
+            )
+            if set(private_ids) - subscribed:
                 raise WordPoolError("content_not_yours")
         items = (
             (

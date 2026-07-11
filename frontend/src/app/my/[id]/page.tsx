@@ -47,7 +47,7 @@ export default function MyContentDetailPage() {
   }
 
   async function remove() {
-    if (!confirm("이 콘텐츠와 학습 항목 연결을 삭제할까요?")) return;
+    if (!confirm("내 목록에서 삭제할까요? (다른 구독자가 있으면 콘텐츠는 유지됩니다)")) return;
     await myApi.remove(contentId).catch((e) => setError(e.message));
     router.push("/my");
   }
@@ -104,6 +104,7 @@ export default function MyContentDetailPage() {
               필요 없는 항목은 &quot;학습 제외&quot;를 누르세요
             </span>
           </h2>
+          <div className="overflow-x-auto">
           <table className="w-full border-collapse bg-white text-sm">
             <thead>
               <tr className="border-b-2 border-ink/20 text-left text-xs">
@@ -124,12 +125,14 @@ export default function MyContentDetailPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </section>
       )}
 
       {detail.segments.length > 0 && (
         <section>
           <h2 className="mb-2 font-bold">스크립트</h2>
+          <div className="overflow-x-auto">
           <table className="w-full border-collapse bg-white text-sm">
             <tbody>
               {detail.segments.map((s) => (
@@ -140,6 +143,7 @@ export default function MyContentDetailPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </section>
       )}
     </main>

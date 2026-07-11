@@ -19,6 +19,7 @@ from app.services.content_service import (
     delete_content_row,
     retry_content_row,
 )
+from app.services.youtube import parse_video_id
 from app.workers.queue import enqueue
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -37,6 +38,17 @@ async def create_public_content(
     db: Annotated[AsyncSession, Depends(get_db)],
     admin: Annotated[User, Depends(require_admin)],
 ) -> dict:
+    # 이미 개인이 등록한 영상이면 공용으로 승격 (재추출 없음)
+    if body.source == "youtube":
+        video_id = parse_video_id(body.url or "")
+        if video_id:
+            existing = (
+                await db.execute(select(Content).where(Content.youtube_video_id == video_id))
+            ).scalar_one_or_none()
+            if existing is not None and existing.visibility == "private":
+                existing.visibility = "public"
+                await db.commit()
+                return {"id": existing.id, "status": existing.status, "promoted": True}
     content = await create_content(db, body, admin.id, visibility="public")
     enqueue(content.id)
     return {"id": content.id, "status": content.status}
