@@ -105,8 +105,14 @@ export class GameSocket {
     }
   }
 
-  joinPve(quiz: string, botLevel: number): void {
-    this.send({ t: "queue.join", mode: "pve", quiz, bot_level: botLevel });
+  joinPve(quiz: string, botLevel: number, contentIds?: number[]): void {
+    this.send({
+      t: "queue.join",
+      mode: "pve",
+      quiz,
+      bot_level: botLevel,
+      content_ids: contentIds,
+    });
   }
   joinPvp(quiz: string): void {
     this.send({ t: "queue.join", mode: "pvp", quiz });
@@ -114,8 +120,8 @@ export class GameSocket {
   leaveQueue(): void {
     this.send({ t: "queue.leave" });
   }
-  createRoom(quiz: string): void {
-    this.send({ t: "room.create", quiz });
+  createRoom(quiz: string, contentIds?: number[]): void {
+    this.send({ t: "room.create", quiz, content_ids: contentIds });
   }
   joinRoom(code: string): void {
     this.send({ t: "room.join", code });

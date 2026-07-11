@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ContentSummary } from "@/lib/admin-api";
 import { Brick } from "@/components/brick/Brick";
+import { myApi } from "@/lib/my-api";
 import { BoardCanvas } from "@/components/game/BoardCanvas";
 import {
   GameSocket,
@@ -20,6 +22,8 @@ export default function GamePage() {
   const [quiz, setQuiz] = useState<QuizMode>("en");
   const [botLevel, setBotLevel] = useState(3);
   const [roomCode, setRoomCode] = useState("");
+  const [myContents, setMyContents] = useState<ContentSummary[]>([]);
+  const [selectedContents, setSelectedContents] = useState<number[]>([]);
   const [myRoomCode, setMyRoomCode] = useState<string | null>(null);
   const [matchInfo, setMatchInfo] = useState<MatchFoundMsg | null>(null);
   const [gameState, setGameState] = useState<StateMsg | null>(null);
@@ -55,7 +59,13 @@ export default function GamePage() {
         break;
       case "error":
         setError(
-          msg.code === "room_not_found" ? "방을 찾을 수 없어요." : msg.code,
+          {
+            room_not_found: "방을 찾을 수 없어요.",
+            words_insufficient:
+              "선택한 콘텐츠의 단어가 부족해요 (최소 10개). 다른 콘텐츠를 골라주세요.",
+            content_not_yours: "내 콘텐츠만 소재로 쓸 수 있어요.",
+            content_not_found: "콘텐츠를 찾을 수 없어요.",
+          }[msg.code] ?? msg.code,
         );
         break;
     }
@@ -73,6 +83,15 @@ export default function GamePage() {
   useEffect(() => {
     if (phase === "playing") inputRef.current?.focus();
   }, [phase]);
+
+  useEffect(() => {
+    myApi
+      .list()
+      .then((res) =>
+        setMyContents(res.items.filter((c) => c.status === "ready")),
+      )
+      .catch(() => undefined);
+  }, []);
 
   function submitWord() {
     if (!input.trim()) return;
@@ -104,9 +123,23 @@ export default function GamePage() {
           setBotLevel={setBotLevel}
           roomCode={roomCode}
           setRoomCode={setRoomCode}
-          onPve={() => socketRef.current?.joinPve(quiz, botLevel)}
+          myContents={myContents}
+          selectedContents={selectedContents}
+          setSelectedContents={setSelectedContents}
+          onPve={() =>
+            socketRef.current?.joinPve(
+              quiz,
+              botLevel,
+              selectedContents.length ? selectedContents : undefined,
+            )
+          }
           onPvp={() => socketRef.current?.joinPvp(quiz)}
-          onCreateRoom={() => socketRef.current?.createRoom(quiz)}
+          onCreateRoom={() =>
+            socketRef.current?.createRoom(
+              quiz,
+              selectedContents.length ? selectedContents : undefined,
+            )
+          }
           onJoinRoom={() =>
             roomCode.trim() && socketRef.current?.joinRoom(roomCode.trim())
           }
@@ -201,6 +234,9 @@ function Lobby({
   setBotLevel,
   roomCode,
   setRoomCode,
+  myContents,
+  selectedContents,
+  setSelectedContents,
   onPve,
   onPvp,
   onCreateRoom,
@@ -212,11 +248,22 @@ function Lobby({
   setBotLevel: (n: number) => void;
   roomCode: string;
   setRoomCode: (s: string) => void;
+  myContents: ContentSummary[];
+  selectedContents: number[];
+  setSelectedContents: (ids: number[]) => void;
   onPve: () => void;
   onPvp: () => void;
   onCreateRoom: () => void;
   onJoinRoom: () => void;
 }) {
+  function toggleContent(id: number) {
+    setSelectedContents(
+      selectedContents.includes(id)
+        ? selectedContents.filter((v) => v !== id)
+        : [...selectedContents, id],
+    );
+  }
+
   return (
     <section className="flex max-w-lg flex-col gap-6">
       <div>
@@ -233,6 +280,45 @@ function Lobby({
           </ModeButton>
         </div>
       </div>
+
+      {myContents.length > 0 && (
+        <div>
+          <p className="mb-2 text-sm font-bold">
+            대전 소재
+            <span className="ml-2 text-xs font-normal opacity-60">
+              내 콘텐츠를 고르면 그 단어로 대전 (AI 대전 · 방 만들기, 미선택 시
+              공용)
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedContents([])}
+              className={`rounded px-3 py-1.5 text-sm font-bold ${
+                selectedContents.length === 0
+                  ? "bg-ink text-white"
+                  : "bg-ink/5 hover:bg-ink/10"
+              }`}
+            >
+              공용 전체
+            </button>
+            {myContents.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => toggleContent(c.id)}
+                className={`max-w-56 truncate rounded px-3 py-1.5 text-sm ${
+                  selectedContents.includes(c.id)
+                    ? "bg-brick-yellow font-bold"
+                    : "bg-ink/5 hover:bg-ink/10"
+                }`}
+              >
+                {c.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg border-2 border-ink/10 bg-white p-4">
         <p className="mb-2 text-sm font-bold">AI 대전</p>

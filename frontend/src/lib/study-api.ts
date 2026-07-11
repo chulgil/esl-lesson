@@ -45,6 +45,7 @@ export interface LibraryContent {
   title: string;
   source: string;
   url: string | null;
+  mine: boolean;
   item_count: number;
 }
 

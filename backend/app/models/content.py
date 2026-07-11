@@ -26,9 +26,13 @@ class Content(Base, PkMixin, TimestampMixin):
             "status IN ('pending','extracting','ready','failed')",
             name="ck_contents_status",
         ),
+        CheckConstraint("visibility IN ('public','private')", name="ck_contents_visibility"),
     )
 
     source: Mapped[str] = mapped_column(Text)
+    # public=백오피스 공용(검수 후 전체), private=개인 등록(본인 전용)
+    # 규칙: docs/specs/content-pipeline.md 콘텐츠 가시성
+    visibility: Mapped[str] = mapped_column(Text, default="public", server_default="public")
     youtube_video_id: Mapped[str | None] = mapped_column(Text, unique=True)
     url: Mapped[str | None] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)

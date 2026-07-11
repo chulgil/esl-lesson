@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from app.core.db import get_session_factory
-from app.models import GameMatch, LearningItem, ReviewCard
+from app.models import Content, GameMatch, ItemOccurrence, LearningItem, ReviewCard
 from app.services.game.bots import Bot
 from app.services.game.engine import Board, Match, build_word_queue
 
@@ -47,6 +47,7 @@ class MatchSession:
     players: dict[int, PlayerSlot]  # 1, 2 (pve 는 2 없음)
     bot: Bot | None = None
     room_code: str | None = None
+    content_ids: list[int] | None = None  # 방장이 선택한 소재 콘텐츠 (None=공용/기본)
     started: bool = False
     task: asyncio.Task | None = None
     input_seq: dict[int, int] = field(default_factory=dict)
@@ -62,9 +63,15 @@ class GameManager:
     # --- 진입점 ---
 
     async def join_pve(
-        self, user_id: int, name: str, quiz: str, bot_level: int, send: Sender
+        self,
+        user_id: int,
+        name: str,
+        quiz: str,
+        bot_level: int,
+        send: Sender,
+        content_ids: list[int] | None = None,
     ) -> MatchSession:
-        words = await load_word_pool(user_id, quiz)
+        words = await select_word_pool(user_id, quiz, content_ids)
         seed = secrets.randbits(32)
         session = MatchSession(
             match_id=await self._create_match_row("pve", user_id, None, bot_level),
@@ -90,7 +97,16 @@ class GameManager:
         self.pvp_queue.remove(waiting)
         await self._start_pvp(waiting[0], waiting[1], waiting[3], user_id, name, send, quiz)
 
-    async def create_room(self, user_id: int, name: str, quiz: str, send: Sender) -> str:
+    async def create_room(
+        self,
+        user_id: int,
+        name: str,
+        quiz: str,
+        send: Sender,
+        content_ids: list[int] | None = None,
+    ) -> str:
+        # 소재 유효성(소유/공용, 최소 단어 수)은 방 생성 시점에 검증
+        await select_word_pool(user_id, quiz, content_ids)
         code = secrets.token_hex(3).upper()
         match_id = await self._create_match_row("pvp", user_id, None, None, room_code=code)
         session = MatchSession(
@@ -100,6 +116,7 @@ class GameManager:
             match=Match(board1=Board(word_queue=[]), board2=Board(word_queue=[])),
             players={1: PlayerSlot(user_id=user_id, name=name, send=send)},
             room_code=code,
+            content_ids=content_ids,
         )
         self._register(session)
         self.rooms[code] = match_id
@@ -112,7 +129,9 @@ class GameManager:
         if session is None or session.started or 2 in session.players:
             await send({"t": "error", "code": "room_not_found"})
             return
-        words = await load_word_pool(session.players[1].user_id, session.quiz)
+        words = await select_word_pool(
+            session.players[1].user_id, session.quiz, session.content_ids
+        )
         seed = secrets.randbits(32)
         session.match.board1.word_queue = build_word_queue(words, seed)
         session.match.board2.word_queue = build_word_queue(words, seed)
@@ -125,7 +144,7 @@ class GameManager:
     async def _start_pvp(
         self, uid1: int, name1: str, send1: Sender, uid2: int, name2: str, send2: Sender, quiz: str
     ) -> None:
-        words = await load_word_pool(uid1, quiz)
+        words = await load_public_word_pool(quiz)
         seed = secrets.randbits(32)
         session = MatchSession(
             match_id=await self._create_match_row("pvp", uid1, uid2, None),
@@ -413,9 +432,90 @@ def _board_stats(board) -> dict:
     }
 
 
-async def load_word_pool(user_id: int, quiz: str) -> list[tuple[int, str, str]]:
-    """단어 소스: 내가 학습한 word 우선, 부족하면 전역 approved 로 보충."""
+class WordPoolError(Exception):
+    """소재 콘텐츠가 유효하지 않거나 단어가 부족할 때."""
+
+
+def _playable(item: LearningItem) -> bool:
     lo, hi = WORD_LEN_RANGE
+    return lo <= len(item.en_text) <= hi and " " not in item.en_text
+
+
+CONTENT_POOL_MIN = 10  # 콘텐츠 선택 대전의 최소 단어 수
+
+
+async def select_word_pool(
+    user_id: int, quiz: str, content_ids: list[int] | None
+) -> list[tuple[int, str, str]]:
+    """소재 선택: content_ids 지정 시 해당 콘텐츠 단어, 아니면 기본 풀 (word-tetris.md)."""
+    if content_ids:
+        return await load_word_pool_from_contents(user_id, content_ids, quiz)
+    return await load_word_pool(user_id, quiz)
+
+
+async def load_word_pool_from_contents(
+    user_id: int, content_ids: list[int], quiz: str
+) -> list[tuple[int, str, str]]:
+    """선택한 콘텐츠(공용 또는 내 개인)의 word 항목만으로 풀 구성."""
+    async with get_session_factory()() as db:
+        contents = (
+            (await db.execute(select(Content).where(Content.id.in_(content_ids))))
+            .scalars()
+            .all()
+        )
+        if len(contents) != len(set(content_ids)):
+            raise WordPoolError("content_not_found")
+        for content in contents:
+            if content.visibility == "private" and content.created_by != user_id:
+                raise WordPoolError("content_not_yours")
+        items = (
+            (
+                await db.execute(
+                    select(LearningItem)
+                    .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+                    .where(
+                        ItemOccurrence.content_id.in_(content_ids),
+                        LearningItem.item_type == "word",
+                        LearningItem.review_status != "rejected",
+                    )
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
+    pool = [i for i in items if _playable(i)]
+    if len(pool) < CONTENT_POOL_MIN:
+        raise WordPoolError("words_insufficient")
+    return _to_pool(pool, quiz)
+
+
+async def load_public_word_pool(quiz: str) -> list[tuple[int, str, str]]:
+    """빠른 대전용 공용 풀 — 공용 콘텐츠 출처가 있는 approved word."""
+    async with get_session_factory()() as db:
+        items = (
+            (
+                await db.execute(
+                    select(LearningItem)
+                    .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+                    .join(Content, Content.id == ItemOccurrence.content_id)
+                    .where(
+                        Content.visibility == "public",
+                        LearningItem.item_type == "word",
+                        LearningItem.review_status == "approved",
+                    )
+                    .distinct()
+                    .limit(300)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return _to_pool([i for i in items if _playable(i)], quiz)
+
+
+async def load_word_pool(user_id: int, quiz: str) -> list[tuple[int, str, str]]:
+    """기본 풀: 내가 학습한 word 우선, 부족하면 공용 approved 로 보충."""
     async with get_session_factory()() as db:
         learned = (
             (
@@ -425,23 +525,27 @@ async def load_word_pool(user_id: int, quiz: str) -> list[tuple[int, str, str]]:
                     .where(
                         ReviewCard.user_id == user_id,
                         LearningItem.item_type == "word",
-                        LearningItem.review_status == "approved",
+                        LearningItem.review_status != "rejected",
                     )
                 )
             )
             .scalars()
             .all()
         )
-        pool = [i for i in learned if lo <= len(i.en_text) <= hi and " " not in i.en_text]
+        pool = [i for i in learned if _playable(i)]
         if len(pool) < WORD_POOL_MIN:
             extra = (
                 (
                     await db.execute(
                         select(LearningItem)
+                        .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+                        .join(Content, Content.id == ItemOccurrence.content_id)
                         .where(
+                            Content.visibility == "public",
                             LearningItem.item_type == "word",
                             LearningItem.review_status == "approved",
                         )
+                        .distinct()
                         .limit(300)
                     )
                 )
@@ -449,14 +553,14 @@ async def load_word_pool(user_id: int, quiz: str) -> list[tuple[int, str, str]]:
                 .all()
             )
             seen = {i.id for i in pool}
-            pool += [
-                i
-                for i in extra
-                if i.id not in seen and lo <= len(i.en_text) <= hi and " " not in i.en_text
-            ]
+            pool += [i for i in extra if i.id not in seen and _playable(i)]
+    return _to_pool(pool, quiz)
+
+
+def _to_pool(items: list[LearningItem], quiz: str) -> list[tuple[int, str, str]]:
     if quiz == "ko2en":
-        return [(i.id, i.en_text, i.ko_text) for i in pool]
-    return [(i.id, i.en_text, i.en_text) for i in pool]
+        return [(i.id, i.en_text, i.ko_text) for i in items]
+    return [(i.id, i.en_text, i.en_text) for i in items]
 
 
 manager = GameManager()

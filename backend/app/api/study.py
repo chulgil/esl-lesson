@@ -14,6 +14,7 @@ from app.core.security import get_current_user
 from app.models import LearningItem, ReviewCard, ReviewLog, User, UserSettings
 from app.models.item import ITEM_TYPE_LEVEL
 from app.services import fsrs_service, quiz
+from app.services.visibility import visible_item_clause
 
 router = APIRouter(prefix="/study", tags=["study"])
 cards_router = APIRouter(prefix="/cards", tags=["study"])
@@ -73,7 +74,7 @@ async def get_queue(
                     ReviewCard.user_id == user.id,
                     ReviewCard.due_at <= now,
                     ReviewCard.suspended.is_(False),
-                    LearningItem.review_status == "approved",
+                    visible_item_clause(user.id),
                     LearningItem.item_type.in_(types),
                 )
                 .order_by(ReviewCard.due_at)
@@ -98,7 +99,7 @@ async def get_queue(
                 await db.execute(
                     select(LearningItem)
                     .where(
-                        LearningItem.review_status == "approved",
+                        visible_item_clause(user.id),
                         LearningItem.item_type.in_(types),
                         LearningItem.id.not_in(existing),
                     )
@@ -118,7 +119,7 @@ async def get_queue(
 
     ordered = due_cards + new_cards
     page = ordered[:QUEUE_PAGE_SIZE]
-    questions = await _build_questions(db, page)
+    questions = await _build_questions(db, page, user.id)
     await db.commit()
     return {
         "total_due": len(due_cards),
@@ -127,7 +128,7 @@ async def get_queue(
     }
 
 
-async def _build_questions(db: AsyncSession, cards: list[ReviewCard]) -> list[dict]:
+async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: int) -> list[dict]:
     if not cards:
         return []
     items = (
@@ -151,7 +152,7 @@ async def _build_questions(db: AsyncSession, cards: list[ReviewCard]) -> list[di
                     select(LearningItem)
                     .where(
                         LearningItem.item_type == item_type,
-                        LearningItem.review_status == "approved",
+                        visible_item_clause(user_id),
                     )
                     .limit(DISTRACTOR_POOL_SIZE)
                 )
@@ -303,7 +304,7 @@ async def get_stats(
                 ReviewCard.user_id == user.id,
                 ReviewCard.due_at <= now,
                 ReviewCard.suspended.is_(False),
-                LearningItem.review_status == "approved",
+                visible_item_clause(user.id),
             )
         )
     ).scalar_one()

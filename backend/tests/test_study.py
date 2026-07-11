@@ -17,18 +17,41 @@ def test_compute_rating_mapping():
     assert compute_rating(True, 40_001, "compose", 0) == (2, 0)  # 입력형 기준 적용
 
 
-async def seed_items(db, count=5, item_type="word", status="approved"):
+_seed_counter = 0
+
+
+async def seed_items(
+    db, count=5, item_type="word", status="approved", visibility="public", owner=None
+):
+    """가시성 규칙 대응: 항목은 콘텐츠 출처(occurrence)가 있어야 노출된다."""
+    from app.models import Content, ItemOccurrence
+
+    global _seed_counter
+    _seed_counter += 1
+    batch = _seed_counter
+
+    content = Content(
+        source="manual",
+        title=f"seed-{visibility}",
+        status="ready",
+        visibility=visibility,
+        created_by=owner,
+    )
+    db.add(content)
+    await db.flush()
     items = []
     for i in range(count):
         item = LearningItem(
             item_type=item_type,
-            en_text=f"unique{i}",
-            ko_text=f"뜻{i}",
-            normalized_key=f"unique{i}",
+            en_text=f"unique{visibility}{batch}n{i}",
+            ko_text=f"뜻{batch}n{i}",
+            normalized_key=f"unique{visibility}{batch}n{i}",
             review_status=status,
             hint_thinking="힌트" if item_type == "sentence" else None,
         )
         db.add(item)
+        await db.flush()
+        db.add(ItemOccurrence(item_id=item.id, content_id=content.id))
         items.append(item)
     await db.commit()
     return items

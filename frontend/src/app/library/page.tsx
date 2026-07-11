@@ -37,8 +37,15 @@ export default function LibraryPage() {
               i % 2 ? "rotate-[0.4deg]" : "-rotate-[0.4deg]"
             }`}
           >
-            <p className="text-xs opacity-50">
-              {c.source === "youtube" ? "유튜브" : "수기"}
+            <p className="flex items-center gap-2 text-xs">
+              <span className="opacity-50">
+                {c.source === "youtube" ? "유튜브" : "수기"}
+              </span>
+              {c.mine && (
+                <span className="rounded bg-brick-yellow/40 px-1.5 py-0.5 font-bold">
+                  내 것
+                </span>
+              )}
             </p>
             <p className="mt-1 font-bold">{c.title}</p>
             <p className="mt-2 text-xs opacity-60">

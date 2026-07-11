@@ -34,7 +34,8 @@
 
 ### 카드 생성
 
-- `learning_items.review_status=approved` 항목만 대상.
+- 대상 항목(가시성 규칙, 2026-07-11 개정): **(a)** 공용 콘텐츠 출처가 있고 `approved` 인 항목, **또는 (b)** 내 개인 콘텐츠 출처가 있는 항목(`rejected` 제외 — 개인 등록분은 자동 편입).
+- 오답 보기(distractor) 풀도 같은 가시성 규칙 적용 — 다른 사용자의 개인 항목이 보기에 노출되지 않는다.
 - 사용자가 학습 시작 시점에 lazy 생성: 일일 신규 한도만큼 `review_cards(state=new)` 생성.
 - 신규 도입 순서: 콘텐츠 최신순 + 레벨 낮은 타입 우선 (word → idiom → pattern → sentence). 사용자가 `levels_enabled`로 레벨을 끄면 해당 타입 제외.
 
