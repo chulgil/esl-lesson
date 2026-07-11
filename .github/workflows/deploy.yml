@@ -25,6 +25,8 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
+          # VPS 사양상 Next.js 빌드가 10분(기본값)을 초과할 수 있음
+          command_timeout: 30m
           script: |
             cd ~/apps/eng-lesson
             git fetch origin main
