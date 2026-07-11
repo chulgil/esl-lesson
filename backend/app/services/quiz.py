@@ -136,6 +136,7 @@ def _word_question(item: LearningItem, pool: list[LearningItem], context: str | 
     return {
         "quiz_mode": mode,
         "level": 1,
+        "hint_answer": getattr(item, answer_field),
         "prompt": prompt,
         "choices": choices,
         "context": _mask_context(context, item.en_text),
@@ -150,6 +151,7 @@ def _idiom_question(item: LearningItem, pool: list[LearningItem], context: str |
         return {
             "quiz_mode": "cloze",
             "level": 2,
+            "hint_answer": item.en_text,
             "prompt": masked,
             "prompt_ko": item.ko_text,
             "choices": choices,
@@ -161,6 +163,7 @@ def _idiom_question(item: LearningItem, pool: list[LearningItem], context: str |
     return {
         "quiz_mode": "choice_en2ko",
         "level": 2,
+        "hint_answer": item.ko_text,
         "prompt": item.en_text,
         "choices": choices,
         "context": None,
@@ -176,6 +179,7 @@ def _pattern_question(item: LearningItem, context: str | None, context_ko: str |
     return {
         "quiz_mode": "pattern",
         "level": 3,
+        "hint_answer": sentence,
         "prompt_ko": context_ko or item.ko_text,
         "template": item.pattern_template or item.en_text,
         "chips": chips,
@@ -187,6 +191,7 @@ def _sentence_question(item: LearningItem) -> dict:
     return {
         "quiz_mode": "compose",
         "level": 4,
+        "hint_answer": item.en_text,
         "prompt_ko": item.ko_text,
         "hint_thinking": item.hint_thinking,
         "context": None,

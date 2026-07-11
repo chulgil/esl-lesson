@@ -201,8 +201,76 @@ async def test_rate_overrides_last_review(client, db_session):
 async def test_settings_roundtrip_and_level_filter(client, db_session):
     await login(client, db_session)
     await seed_items(db_session, count=2, item_type="word")
-    res = await client.patch("/api/settings", json={"levels_enabled": [4]})
+    res = await client.patch(
+        "/api/settings", json={"levels_enabled": [4], "hint_delay_seconds": 15}
+    )
     assert res.json()["levels_enabled"] == [4]
+    assert res.json()["hint_delay_seconds"] == 15
 
     queue = (await client.get("/api/study/queue")).json()
     assert queue["questions"] == []  # word(레벨1) 비활성화됨
+
+
+async def test_question_includes_youtube_media_segment(client, db_session):
+    """출처가 유튜브 세그먼트인 항목은 문항에 구간 재생 정보 포함 (구간 듣기)."""
+    from app.models import Content, ContentSubscription, ItemOccurrence, TranscriptSegment
+
+    user = await login(client, db_session)
+    content = Content(
+        source="youtube",
+        youtube_video_id="dQw4w9WgXcQ",
+        title="영상",
+        status="ready",
+        visibility="private",
+        created_by=user.id,
+    )
+    db_session.add(content)
+    await db_session.flush()
+    db_session.add(ContentSubscription(content_id=content.id, user_id=user.id))
+    segment = TranscriptSegment(
+        content_id=content.id, seq=0, start_ms=12000, end_ms=15500, en_text="Hello there."
+    )
+    db_session.add(segment)
+    await db_session.flush()
+    item = LearningItem(
+        item_type="word",
+        en_text="mediaword",
+        ko_text="뜻",
+        normalized_key="mediaword",
+        review_status="pending",
+    )
+    db_session.add(item)
+    await db_session.flush()
+    db_session.add(
+        ItemOccurrence(item_id=item.id, content_id=content.id, segment_id=segment.id)
+    )
+    await db_session.commit()
+
+    queue = (await client.get("/api/study/queue")).json()
+    assert queue["hint_delay_seconds"] == 10  # 기본값
+    q = queue["questions"][0]
+    assert q["media"] == {"video_id": "dQw4w9WgXcQ", "start_ms": 12000, "end_ms": 15500}
+    assert q["hint_answer"]  # 힌트 타이머용 정답 정보 포함
+
+
+async def test_answer_returns_anki_style_interval_previews(client, db_session):
+    """등급별 예상 간격 미리보기 — 다시<어려움<=알맞음<=쉬움 (docs/specs/learning.md)."""
+    await login(client, db_session)
+    await seed_items(db_session, count=1)
+    queue = (await client.get("/api/study/queue")).json()
+    q = queue["questions"][0]
+    item = await db_session.get(LearningItem, q["item_id"])
+
+    res = await client.post(
+        "/api/study/answer",
+        json={
+            "card_id": q["card_id"],
+            "quiz_mode": "choice_ko2en",
+            "answer": item.en_text,
+            "duration_ms": 6000,
+        },
+    )
+    previews = res.json()["interval_previews"]
+    assert set(previews.keys()) == {"1", "2", "3", "4"}
+    assert previews["1"] <= previews["2"] <= previews["3"] <= previews["4"]
+    assert previews["4"] > 60  # 쉬움은 하루 이상 단위로 벌어진다

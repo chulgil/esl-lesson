@@ -1,24 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import { BackLink } from "@/components/nav/BackLink";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { studyApi, type LibraryDetail } from "@/lib/study-api";
-
-/** YouTube IFrame Player 최소 타입 */
-interface YTPlayer {
-  seekTo(seconds: number, allowSeekAhead: boolean): void;
-  playVideo(): void;
-  pauseVideo(): void;
-  getCurrentTime(): number;
-}
-
-declare global {
-  interface Window {
-    YT?: { Player: new (el: string, opts: object) => YTPlayer };
-    onYouTubeIframeAPIReady?: () => void;
-  }
-}
 
 export default function LibraryDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -124,9 +109,7 @@ export default function LibraryDetailPage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
       <header className="mb-6 flex flex-wrap items-center gap-4">
-        <Link href="/library" className="text-sm opacity-60 hover:underline">
-          &lt; 라이브러리
-        </Link>
+        <BackLink href="/library" label="라이브러리" />
         <h1 className="font-hand text-2xl font-bold">
           <span className="hl">{detail.title}</span>
         </h1>

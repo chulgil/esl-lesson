@@ -13,11 +13,14 @@ export interface Question {
   template?: string;
   hint_thinking?: string | null;
   context?: string | null;
+  media?: { video_id: string; start_ms: number; end_ms: number } | null;
+  hint_answer?: string;
 }
 
 export interface AnswerResult {
   correct: boolean;
   rating_applied: number;
+  interval_previews: Record<string, number>;
   correct_answer: string;
   explanation: {
     ko: string;
@@ -81,8 +84,14 @@ export const studyApi = {
     request<{
       total_due: number;
       introduced_today: number;
+      hint_delay_seconds: number;
       questions: Question[];
     }>("/api/study/queue"),
+  patchSettings: (body: { hint_delay_seconds?: number }) =>
+    request<{ hint_delay_seconds: number }>("/api/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   answer: (body: {
     card_id: number;
     quiz_mode: string;

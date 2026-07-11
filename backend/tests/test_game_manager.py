@@ -151,3 +151,19 @@ async def test_pvp_queue_matches_two_players(wired_db):
 
     matches = (await wired_db.execute(select(GameMatch))).scalars().all()
     assert any(m.mode == "pvp" and m.player2_id == p2.id for m in matches)
+
+
+async def test_pve_rejects_when_no_words_visible(wired_db):
+    """가시 단어가 부족하면 크래시 대신 시작 전 안내 (words_insufficient)."""
+    import pytest
+
+    from app.models import User
+    from app.services.game.manager import GameManager, WordPoolError
+
+    user = User(google_sub="g-empty", email="empty@example.com", name="E")
+    wired_db.add(user)
+    await wired_db.commit()
+
+    gm = GameManager()
+    with pytest.raises(WordPoolError):
+        await gm.join_pve(user.id, user.name, "en", bot_level=1, send=Collector())

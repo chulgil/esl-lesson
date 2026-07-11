@@ -18,9 +18,6 @@ export default function LibraryPage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-12 sm:px-16">
       <header className="mb-8 flex items-center gap-4">
-        <Link href="/" className="text-sm opacity-60 hover:underline">
-          &lt; 홈
-        </Link>
         <h1 className="font-hand text-4xl font-bold">
           <span className="hl">콘텐츠 라이브러리</span>
         </h1>

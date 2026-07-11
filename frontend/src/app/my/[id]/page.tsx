@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
+import { BackLink } from "@/components/nav/BackLink";
 import { myApi, type MyContentDetail, type MyItem } from "@/lib/my-api";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -55,13 +56,7 @@ export default function MyContentDetailPage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
       <header className="mb-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => router.push("/my")}
-          className="text-sm opacity-60 hover:underline"
-        >
-          &lt; 내 콘텐츠
-        </button>
+        <BackLink href="/my" label="내 콘텐츠" />
         <h1 className="font-hand text-2xl font-bold">
           <span className="hl">{detail.title}</span>
         </h1>

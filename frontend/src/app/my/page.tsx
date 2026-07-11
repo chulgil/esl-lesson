@@ -36,9 +36,6 @@ export default function MyContentsPage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
       <header className="mb-6 flex flex-wrap items-center gap-4">
-        <Link href="/" className="text-sm opacity-60 hover:underline">
-          &lt; 홈
-        </Link>
         <h1 className="font-hand text-3xl font-bold">
           <span className="hl">내 콘텐츠</span>
         </h1>

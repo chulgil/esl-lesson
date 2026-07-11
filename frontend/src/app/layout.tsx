@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Gaegu, IBM_Plex_Sans_KR } from "next/font/google";
 import "./globals.css";
+import { AppNav } from "@/components/nav/AppNav";
 
 const gaegu = Gaegu({
   variable: "--font-gaegu",
@@ -28,6 +29,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={`${gaegu.variable} ${body.variable} antialiased`}>
+        <AppNav />
         {children}
       </body>
     </html>

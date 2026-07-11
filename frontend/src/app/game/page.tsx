@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContentSummary } from "@/lib/admin-api";
 import { Brick } from "@/components/brick/Brick";
@@ -62,7 +61,7 @@ export default function GamePage() {
           {
             room_not_found: "방을 찾을 수 없어요.",
             words_insufficient:
-              "선택한 콘텐츠의 단어가 부족해요 (최소 10개). 다른 콘텐츠를 골라주세요.",
+              "게임에 쓸 단어가 부족해요 (최소 10개). 내 콘텐츠를 등록하거나 다른 소재를 선택해주세요.",
             content_not_yours: "내 콘텐츠만 소재로 쓸 수 있어요.",
             content_not_found: "콘텐츠를 찾을 수 없어요.",
           }[msg.code] ?? msg.code,
@@ -102,9 +101,6 @@ export default function GamePage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-4 py-8 sm:px-10">
       <header className="mb-6 flex items-center gap-4">
-        <Link href="/" className="text-sm opacity-60 hover:underline">
-          &lt; 홈
-        </Link>
         <h1 className="font-hand text-3xl font-bold">
           <span className="hl">워드 테트리스</span>
         </h1>

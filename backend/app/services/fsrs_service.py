@@ -97,6 +97,21 @@ def apply_review(
     }
 
 
+def preview_intervals(
+    card_row: ReviewCard, desired_retention: float, now: datetime | None = None
+) -> dict[int, float]:
+    """등급별 예상 다음 간격(분) — 안키식 버튼 라벨용 (docs/specs/learning.md)."""
+    now = now or datetime.now(UTC)
+    stored = card_row.fsrs_json or {}
+    previews: dict[int, float] = {}
+    for rating in (1, 2, 3, 4):
+        card = Card.from_dict(stored["card"]) if stored.get("card") else Card(due=now)
+        scheduler = Scheduler(desired_retention=desired_retention)
+        next_card, _ = scheduler.review_card(card, Rating(rating), review_datetime=now)
+        previews[rating] = max(0.0, (next_card.due - now).total_seconds() / 60)
+    return previews
+
+
 def get_fast_streak(card_row: ReviewCard) -> int:
     return int((card_row.fsrs_json or {}).get("fast_streak", 0))
 

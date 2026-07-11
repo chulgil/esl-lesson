@@ -144,3 +144,12 @@ def test_bot_eventually_clears_bricks():
                 cleared += 1
     assert cleared >= 5
     assert not board.ko  # 레벨 3 봇은 초반 2분을 버틴다
+
+
+def test_spawn_skips_when_word_queue_empty():
+    """단어 풀이 비어도 크래시하지 않는다 (2026-07-11 운영 크래시 회귀)."""
+    board = Board(word_queue=[])
+    for _ in range(200):
+        board.tick(0.1)
+    assert board.bricks == []
+    assert not board.ko

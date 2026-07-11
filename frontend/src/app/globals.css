@@ -59,6 +59,13 @@ body {
   box-shadow: 18px 0 0 currentColor;
 }
 
+/* 모바일 하단 탭바가 본문을 가리지 않도록 (AppNav 가 body 에 토글) */
+@media (max-width: 639px) {
+  body.with-bottom-nav {
+    padding-bottom: 4.5rem;
+  }
+}
+
 /* 랜딩 타이포 배경 — 잉크가 종이 위에서 숨쉬는 느낌 */
 @keyframes typo-float {
   0%,

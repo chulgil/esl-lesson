@@ -11,7 +11,16 @@ from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.models import LearningItem, ReviewCard, ReviewLog, User, UserSettings
+from app.models import (
+    Content,
+    ItemOccurrence,
+    LearningItem,
+    ReviewCard,
+    ReviewLog,
+    TranscriptSegment,
+    User,
+    UserSettings,
+)
 from app.models.item import ITEM_TYPE_LEVEL
 from app.services import fsrs_service, quiz
 from app.services.visibility import visible_item_clause
@@ -124,6 +133,7 @@ async def get_queue(
     return {
         "total_due": len(due_cards),
         "introduced_today": introduced_today + len(new_cards),
+        "hint_delay_seconds": settings.hint_delay_seconds,
         "questions": questions,
     }
 
@@ -159,14 +169,56 @@ async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: i
             ).scalars()
         )
 
+    media_by_item = await _media_for_items(db, list(items_by_id.keys()))
+
     questions = []
     for card in cards:
         item = items_by_id.get(card.item_id)
         if item is None:
             continue
         question = quiz.build_question(item, pools[item.item_type])
-        questions.append({"card_id": card.id, "item_id": item.id, "state": card.state, **question})
+        questions.append(
+            {
+                "card_id": card.id,
+                "item_id": item.id,
+                "state": card.state,
+                "media": media_by_item.get(item.id),
+                **question,
+            }
+        )
     return questions
+
+
+async def _media_for_items(db: AsyncSession, item_ids: list[int]) -> dict[int, dict]:
+    """항목별 출처 유튜브 구간 (학습 중 '구간 듣기' — docs/specs/learning.md)."""
+    if not item_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(
+                ItemOccurrence.item_id,
+                Content.youtube_video_id,
+                TranscriptSegment.start_ms,
+                TranscriptSegment.end_ms,
+            )
+            .join(Content, Content.id == ItemOccurrence.content_id)
+            .join(TranscriptSegment, TranscriptSegment.id == ItemOccurrence.segment_id)
+            .where(
+                ItemOccurrence.item_id.in_(item_ids),
+                Content.youtube_video_id.is_not(None),
+                TranscriptSegment.start_ms.is_not(None),
+            )
+        )
+    ).all()
+    media: dict[int, dict] = {}
+    for item_id, video_id, start_ms, end_ms in rows:
+        if item_id not in media:  # 첫 출처 사용
+            media[item_id] = {
+                "video_id": video_id,
+                "start_ms": start_ms,
+                "end_ms": end_ms or start_ms + 5000,
+            }
+    return media
 
 
 class AnswerBody(BaseModel):
@@ -202,6 +254,7 @@ async def submit_answer(
         correct, body.duration_ms, body.quiz_mode, fast_streak
     )
     now = datetime.now(UTC)
+    previews = fsrs_service.preview_intervals(card, settings.desired_retention, now)
     meta = fsrs_service.apply_review(card, rating, settings.desired_retention, now)
     fsrs_service.set_fast_streak(card, new_streak)
 
@@ -225,6 +278,7 @@ async def submit_answer(
     return {
         "correct": correct,
         "rating_applied": rating,
+        "interval_previews": {str(k): round(v, 1) for k, v in previews.items()},
         "correct_answer": _correct_answer(item, body.quiz_mode),
         "explanation": {
             "ko": item.ko_text,
@@ -400,6 +454,7 @@ class SettingsPatch(BaseModel):
     daily_new_limit: int | None = Field(default=None, ge=0, le=200)
     daily_review_limit: int | None = Field(default=None, ge=0, le=1000)
     desired_retention: float | None = Field(default=None, ge=0.7, le=0.97)
+    hint_delay_seconds: int | None = Field(default=None, ge=0, le=120)
     levels_enabled: list[int] | None = None
 
 
@@ -425,7 +480,8 @@ async def update_settings(
         if invalid:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"invalid levels {invalid}")
         settings.levels_enabled = sorted(set(body.levels_enabled))
-    for field in ("daily_new_limit", "daily_review_limit", "desired_retention"):
+    fields = ("daily_new_limit", "daily_review_limit", "desired_retention", "hint_delay_seconds")
+    for field in fields:
         value = getattr(body, field)
         if value is not None:
             setattr(settings, field, value)
@@ -438,5 +494,6 @@ def _settings_dict(settings: UserSettings) -> dict:
         "daily_new_limit": settings.daily_new_limit,
         "daily_review_limit": settings.daily_review_limit,
         "desired_retention": settings.desired_retention,
+        "hint_delay_seconds": settings.hint_delay_seconds,
         "levels_enabled": settings.levels_enabled,
     }

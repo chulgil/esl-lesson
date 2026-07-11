@@ -31,6 +31,8 @@ class UserSettings(Base):
     daily_new_limit: Mapped[int] = mapped_column(Integer, default=20, server_default="20")
     daily_review_limit: Mapped[int] = mapped_column(Integer, default=200, server_default="200")
     desired_retention: Mapped[float] = mapped_column(default=0.9, server_default="0.9")
+    # 힌트까지 대기 시간(초), 0=끄기 (docs/specs/learning.md 힌트 타이머)
+    hint_delay_seconds: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
     levels_enabled: Mapped[list[int]] = mapped_column(
         IntList, default=lambda: [1, 2, 3, 4]
     )

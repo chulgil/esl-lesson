@@ -25,6 +25,7 @@ from app.models import (
 )
 from app.services.game.bots import Bot
 from app.services.game.engine import Board, Match, build_word_queue
+from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
 
@@ -457,7 +458,11 @@ async def select_word_pool(
     """소재 선택: content_ids 지정 시 해당 콘텐츠 단어, 아니면 기본 풀 (word-tetris.md)."""
     if content_ids:
         return await load_word_pool_from_contents(user_id, content_ids, quiz)
-    return await load_word_pool(user_id, quiz)
+    pool = await load_word_pool(user_id, quiz)
+    if len(pool) < CONTENT_POOL_MIN:
+        # 빈 보드로 시작하는 크래시 방지 (2026-07-11 운영 실측) — 시작 전에 안내
+        raise WordPoolError("words_insufficient")
+    return pool
 
 
 async def load_word_pool_from_contents(
@@ -552,16 +557,14 @@ async def load_word_pool(user_id: int, quiz: str) -> list[tuple[int, str, str]]:
         )
         pool = [i for i in learned if _playable(i)]
         if len(pool) < WORD_POOL_MIN:
+            # 내게 보이는 단어 전체로 보충 (공용 승인 + 내 개인 콘텐츠 — visibility 규칙)
             extra = (
                 (
                     await db.execute(
                         select(LearningItem)
-                        .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
-                        .join(Content, Content.id == ItemOccurrence.content_id)
                         .where(
-                            Content.visibility == "public",
                             LearningItem.item_type == "word",
-                            LearningItem.review_status == "approved",
+                            visible_item_clause(user_id),
                         )
                         .distinct()
                         .limit(300)

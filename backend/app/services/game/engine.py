@@ -117,6 +117,8 @@ class Board:
         return events
 
     def _spawn_brick(self) -> bool:
+        if not self.word_queue:
+            return False  # 단어 풀 없음 — 크래시 대신 스폰 스킵
         if self._next_word_idx >= len(self.word_queue):
             self._next_word_idx = 0  # 큐 소진 시 순환
         word_id, text, display = self.word_queue[self._next_word_idx]
