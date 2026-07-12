@@ -455,6 +455,7 @@ class SettingsPatch(BaseModel):
     daily_review_limit: int | None = Field(default=None, ge=0, le=1000)
     desired_retention: float | None = Field(default=None, ge=0.7, le=0.97)
     hint_delay_seconds: int | None = Field(default=None, ge=0, le=120)
+    study_level: int | None = Field(default=None, ge=1, le=4)
     levels_enabled: list[int] | None = None
 
 
@@ -475,7 +476,11 @@ async def update_settings(
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     settings = await get_user_settings(db, user)
-    if body.levels_enabled is not None:
+    if body.study_level is not None:
+        # 학습 난이도 → 활성 레벨 파생 (1..study_level). 저레벨은 문장(4=타이핑) 제외
+        settings.study_level = body.study_level
+        settings.levels_enabled = list(range(1, body.study_level + 1))
+    elif body.levels_enabled is not None:
         invalid = set(body.levels_enabled) - set(LEVEL_TYPES)
         if invalid:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"invalid levels {invalid}")
@@ -495,5 +500,6 @@ def _settings_dict(settings: UserSettings) -> dict:
         "daily_review_limit": settings.daily_review_limit,
         "desired_retention": settings.desired_retention,
         "hint_delay_seconds": settings.hint_delay_seconds,
+        "study_level": settings.study_level,
         "levels_enabled": settings.levels_enabled,
     }

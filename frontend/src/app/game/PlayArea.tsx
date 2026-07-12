@@ -54,12 +54,13 @@ export function PlayArea({
   const isDesktop = useIsDesktop();
   const timeLeft = Math.max(0, 180 - Math.floor(elapsed));
 
-  // 방향: 현재 내 보드에 있는 브릭들로 판단 (구간 전환 시 두 방식 공존 가능)
+  // 입력 방식: 칩 있는 브릭(tap) / 칩 없는 일반 브릭(type). 구간 전환 시 공존 가능.
   const hasTapBricks = (me?.bricks ?? []).some((b) => !b.garbage && b.chip);
   const hasTypeBricks = (me?.bricks ?? []).some(
     (b) => !b.garbage && !b.item && !b.chip,
   );
   const direction = me?.direction ?? "en2ko";
+  const inputMode = me?.input_mode ?? "tap";
 
   const itemBar = (
     <ItemBar
@@ -109,16 +110,17 @@ export function PlayArea({
     </div>
   );
 
-  // 입력 영역: 탭 브릭 있으면 칩, 타이핑 브릭 있으면 입력. 둘 다면 둘 다.
+  // 입력 영역: 칩(tap) 브릭 있으면 칩, 타이핑(type) 브릭 있으면 입력. 공존 시 둘 다.
   const interact = (
     <div className="flex flex-col gap-2">
-      {hint && direction === "ko2en" && (
+      {hint && (
         <p className="text-center text-sm font-bold text-brick-yellow">
           힌트: {hint}
         </p>
       )}
-      {(hasTapBricks || (!hasTypeBricks && direction === "en2ko")) && tapRow}
-      {(hasTypeBricks || (!hasTapBricks && direction === "ko2en")) && typeBox}
+      {hasTapBricks && tapRow}
+      {hasTypeBricks && typeBox}
+      {!hasTapBricks && !hasTypeBricks && inputMode === "type" && typeBox}
     </div>
   );
 
@@ -127,7 +129,7 @@ export function PlayArea({
       <section className="flex items-start justify-center gap-8">
         <div className="flex flex-col items-center gap-3">
           <ScoreHud label="나" board={me} timeLeft={timeLeft} big />
-          <DirectionBadge direction={direction} />
+          <DirectionBadge direction={direction} inputMode={inputMode} />
           <BoardCanvas state={me} width={420} height={600} />
           {itemBar}
           <div className="w-[440px]">{interact}</div>
@@ -166,7 +168,7 @@ export function PlayArea({
       <div className="flex items-center justify-between">
         <ScoreHud label="나" board={me} timeLeft={timeLeft} hideTime />
       </div>
-      <DirectionBadge direction={direction} />
+      <DirectionBadge direction={direction} inputMode={inputMode} />
       <div className="flex justify-center">
         <BoardCanvas state={me} width={340} height={486} />
       </div>
@@ -179,17 +181,31 @@ export function PlayArea({
   );
 }
 
-function DirectionBadge({ direction }: { direction: "en2ko" | "ko2en" }) {
+function DirectionBadge({
+  direction,
+  inputMode,
+}: {
+  direction: "en2ko" | "ko2en";
+  inputMode: "tap" | "type";
+}) {
   const en2ko = direction === "en2ko";
+  const label =
+    inputMode === "type"
+      ? "한글 → 영어 (타이핑, 고급)"
+      : en2ko
+        ? "영어 → 한글 (뜻 탭)"
+        : "한글 → 영어 (단어 탭)";
   return (
     <div
       className={`rounded-full px-4 py-1 text-sm font-bold ${
-        en2ko
-          ? "bg-brick-blue/15 text-brick-blue"
-          : "bg-brick-green/15 text-brick-green"
+        inputMode === "type"
+          ? "bg-brick-red/15 text-brick-red"
+          : en2ko
+            ? "bg-brick-blue/15 text-brick-blue"
+            : "bg-brick-green/15 text-brick-green"
       }`}
     >
-      {en2ko ? "영어 → 한글 (뜻 탭)" : "한글 → 영어 (타이핑)"}
+      {label}
     </div>
   );
 }

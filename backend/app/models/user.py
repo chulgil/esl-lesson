@@ -33,6 +33,9 @@ class UserSettings(Base):
     desired_retention: Mapped[float] = mapped_column(default=0.9, server_default="0.9")
     # 힌트까지 대기 시간(초), 0=끄기 (docs/specs/learning.md 힌트 타이머)
     hint_delay_seconds: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
+    # 학습 난이도: 1 입문(단어) 2 초급(+숙어) 3 중급(+패턴) 4 고급(+문장 타이핑)
+    # (docs/specs/learning.md 레벨별 학습 설계 — 저레벨은 선택식, 문장은 고급)
+    study_level: Mapped[int] = mapped_column(Integer, default=2, server_default="2")
     levels_enabled: Mapped[list[int]] = mapped_column(
-        IntList, default=lambda: [1, 2, 3, 4]
+        IntList, default=lambda: [1, 2]
     )

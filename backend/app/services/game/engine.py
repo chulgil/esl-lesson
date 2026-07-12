@@ -35,10 +35,40 @@ FREEZE_SECONDS = 3.0
 TAP_DECOY_CHIPS = 3  # en2ko 탭 오답 칩 수
 
 
+TYPE_LEVEL = 5  # 이 레벨 이상은 타이핑(영어 생산) 구간, 그 아래는 칩 탭
+
+
 def direction_for_level(level: int) -> str:
-    """레벨 구간별 출제 방향 (섞지 않음): 0-1 en2ko, 2-3 ko2en, 4-5 en2ko, 6+ ko2en."""
+    """레벨 구간별 방향 (섞지 않음). 타이핑 구간(5+)은 항상 ko2en(영어 생산, IME 불필요)."""
+    if level >= TYPE_LEVEL:
+        return "ko2en"
     band = level // 2
     return "en2ko" if band % 2 == 0 else "ko2en"
+
+
+def input_mode_for_level(level: int) -> str:
+    """레벨 5+ 는 타이핑, 그 아래는 칩 탭 (2026-07-11 사용자 기획)."""
+    return "type" if level >= TYPE_LEVEL else "tap"
+
+
+def _levenshtein(a: str, b: str) -> int:
+    if len(a) < len(b):
+        a, b = b, a
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _fuzzy_equal(a: str, b: str) -> bool:
+    """타이핑 근사 정답 — 짧은 단어 1글자, 그 외 2글자 오차 허용 (비슷하면 정답)."""
+    if a == b:
+        return True
+    threshold = 1 if max(len(a), len(b)) <= 6 else 2
+    return _levenshtein(a, b) <= threshold
 
 
 @dataclass
@@ -47,6 +77,7 @@ class Brick:
     en: str
     ko: str
     direction: str = "en2ko"  # 스폰 시 고정
+    mode: str = "tap"  # tap(칩 선택) | type(타이핑) — 스폰 시 고정
     y: float = 0.0
     landed: bool = False
     is_garbage: bool = False
@@ -110,6 +141,10 @@ class Board:
     @property
     def direction(self) -> str:
         return direction_for_level(self.speed_level)
+
+    @property
+    def input_mode(self) -> str:
+        return input_mode_for_level(self.speed_level)
 
     @property
     def frozen(self) -> bool:
@@ -185,6 +220,7 @@ class Board:
                 en=en,
                 ko=ko,
                 direction=self.direction,
+                mode=self.input_mode,
                 is_item=is_item,
             )
         )
@@ -302,13 +338,20 @@ class Board:
             return {"item": "hint", "hint_answer": target.answer if target else None}
         return None
 
+    def _match(self, brick: Brick, normalized: str) -> bool:
+        """정답 판정. type 브릭(타이핑)은 유사하면 정답(비슷하면 정답 — 사용자 기획)."""
+        answer = brick.answer.lower()
+        if answer == normalized:
+            return True
+        return brick.mode == "type" and _fuzzy_equal(answer, normalized)
+
     def _most_dangerous_match(self, normalized: str) -> Brick | None:
         matches = [
             b
             for b in self.bricks
-            if not b.is_garbage and not b.is_item and b.answer.lower() == normalized
+            if not b.is_garbage and not b.is_item and self._match(b, normalized)
         ]
-        item_matches = [b for b in self.bricks if b.is_item and b.answer.lower() == normalized]
+        item_matches = [b for b in self.bricks if b.is_item and self._match(b, normalized)]
         candidates = matches + item_matches
         if not candidates:
             return None
@@ -323,14 +366,17 @@ class Board:
     def danger(self) -> bool:
         return self.landed_count >= BOARD_ROWS - 3
 
-    def snapshot(self, reveal_chips: bool = False) -> dict:
-        """reveal_chips 무관하게 en2ko 브릭은 한글 칩(정답)을 노출(선다형이라 안전).
-        ko2en 브릭은 영어 정답 미노출(치팅 방지)."""
-        chips_set: list[str] = []
+    def snapshot(self) -> dict:
+        """tap 브릭은 정답 칩을 노출(선다형이라 안전, 양방향). type 브릭은 정답 미노출."""
+        ko_answers: list[str] = []
+        en_answers: list[str] = []
         for b in self.bricks:
-            if b.direction == "en2ko" and not b.is_garbage and not b.is_item:
-                if b.ko not in chips_set:
-                    chips_set.append(b.ko)
+            if b.is_garbage or b.is_item or b.mode != "tap":
+                continue
+            if b.direction == "en2ko" and b.ko not in ko_answers:
+                ko_answers.append(b.ko)
+            elif b.direction == "ko2en" and b.en not in en_answers:
+                en_answers.append(b.en)
         return {
             "bricks": [
                 {
@@ -340,13 +386,14 @@ class Board:
                     "landed": b.landed,
                     "garbage": b.is_garbage,
                     "item": b.is_item,
-                    # en2ko 브릭의 정답(한글)만 chip 으로 노출
-                    "chip": b.ko if (b.direction == "en2ko" and not b.is_garbage) else None,
+                    # tap 브릭만 정답을 chip 으로 노출 (type=타이핑은 숨김)
+                    "chip": b.answer if (b.mode == "tap" and not b.is_garbage) else None,
                 }
                 for b in self.bricks
             ],
-            "chips": build_chips(chips_set),
+            "chips": build_chips(ko_answers, en_answers),
             "direction": self.direction,
+            "input_mode": self.input_mode,
             "combo": self.combo,
             "score": self.score,
             "speed_level": self.speed_level,
@@ -360,15 +407,17 @@ class Board:
 
 # 탭 오답 칩 후보 (초기 데이터 적을 때 폴백)
 DECOY_KO = ["회복력 있는", "효율적인", "명백한", "우연한", "지속하다", "모호한", "확장 가능한"]
+DECOY_EN = ["resilient", "efficient", "evident", "accidental", "obscure", "sustain"]
 
 
-def build_chips(answers: list[str]) -> list[str]:
-    """en2ko 탭 칩: 보드의 뜻 + (부족하면) 오답 칩. 결정적(매 틱 안 흔들림)."""
-    if not answers:
+def build_chips(ko_answers: list[str], en_answers: list[str]) -> list[str]:
+    """탭 칩: 보드의 정답(한/영) + (부족하면) 오답 칩. 결정적(매 틱 안 흔들림)."""
+    chips = list(dict.fromkeys([*ko_answers, *en_answers]))
+    if not chips:
         return []
-    chips = list(dict.fromkeys(answers))
+    decoys = DECOY_KO if ko_answers and not en_answers else DECOY_EN if en_answers else DECOY_KO
     if len(chips) < 4:
-        for d in DECOY_KO:
+        for d in decoys:
             if d not in chips:
                 chips.append(d)
             if len(chips) >= 4:

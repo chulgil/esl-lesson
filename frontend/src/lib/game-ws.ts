@@ -14,6 +14,7 @@ export interface BoardState {
   bricks: BrickState[];
   chips: string[];
   direction: "en2ko" | "ko2en";
+  input_mode: "tap" | "type";
   combo: number;
   score: number;
   speed_level: number;

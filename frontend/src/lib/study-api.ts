@@ -87,11 +87,17 @@ export const studyApi = {
       hint_delay_seconds: number;
       questions: Question[];
     }>("/api/study/queue"),
-  patchSettings: (body: { hint_delay_seconds?: number }) =>
-    request<{ hint_delay_seconds: number }>("/api/settings", {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    }),
+  getSettings: () =>
+    request<{
+      hint_delay_seconds: number;
+      study_level: number;
+      levels_enabled: number[];
+    }>("/api/settings"),
+  patchSettings: (body: { hint_delay_seconds?: number; study_level?: number }) =>
+    request<{ hint_delay_seconds: number; study_level: number; levels_enabled: number[] }>(
+      "/api/settings",
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
   answer: (body: {
     card_id: number;
     quiz_mode: string;

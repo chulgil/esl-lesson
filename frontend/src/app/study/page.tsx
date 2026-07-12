@@ -8,6 +8,13 @@ import { studyApi, type AnswerResult, type Question } from "@/lib/study-api";
 
 type Phase = "loading" | "empty" | "question" | "feedback" | "done";
 
+const STUDY_LEVELS = [
+  { level: 1, name: "입문", desc: "단어" },
+  { level: 2, name: "초급", desc: "단어+숙어" },
+  { level: 3, name: "중급", desc: "+패턴" },
+  { level: 4, name: "고급", desc: "+문장(타이핑)" },
+];
+
 export default function StudyPage() {
   const [queue, setQueue] = useState<Question[]>([]);
   const [idx, setIdx] = useState(0);
@@ -17,6 +24,7 @@ export default function StudyPage() {
   const [answeredCount, setAnsweredCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [hintDelay, setHintDelay] = useState(0);
+  const [studyLevel, setStudyLevel] = useState(2);
   const [showSettings, setShowSettings] = useState(false);
   const startedAt = useRef(Date.now());
 
@@ -30,6 +38,10 @@ export default function StudyPage() {
         startedAt.current = Date.now();
       })
       .catch((e) => setError(e.message));
+    studyApi
+      .getSettings()
+      .then((s) => setStudyLevel(s.study_level))
+      .catch(() => undefined);
   }, []);
 
   const question = queue[idx];
@@ -123,7 +135,33 @@ export default function StudyPage() {
       </header>
 
       {showSettings && (
-        <div className="mb-6 flex max-w-xl items-center gap-3 rounded-lg border-2 border-ink/15 bg-white p-4 text-sm">
+        <div className="mb-6 flex max-w-xl flex-col gap-4 rounded-lg border-2 border-ink/15 bg-white p-4 text-sm">
+          <div>
+            <p className="mb-2 font-bold">학습 난이도</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {STUDY_LEVELS.map((lv) => (
+                <button
+                  key={lv.level}
+                  type="button"
+                  onClick={() => setStudyLevel(lv.level)}
+                  className={`flex flex-col items-start rounded-md border-2 px-3 py-2 text-left transition ${
+                    studyLevel === lv.level
+                      ? "border-brick-green bg-brick-green/10 font-bold"
+                      : "border-ink/15 hover:border-ink/30"
+                  }`}
+                >
+                  <span>{lv.name}</span>
+                  <span className="text-xs font-normal opacity-60">
+                    {lv.desc}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs opacity-60">
+              낮을수록 단어·숙어 위주의 보기 선택 문제로 시작해요. 문장 직접
+              입력(타이핑)은 고급부터.
+            </p>
+          </div>
           <label className="flex items-center gap-2 font-bold">
             힌트까지 대기(초)
             <input
@@ -131,20 +169,30 @@ export default function StudyPage() {
               min={0}
               max={120}
               value={hintDelay}
-              onChange={(e) => setHintDelay(Math.max(0, Number(e.target.value)))}
+              onChange={(e) =>
+                setHintDelay(Math.max(0, Number(e.target.value)))
+              }
               className="w-20 rounded border-2 border-ink/20 px-2 py-1.5"
             />
+            <span className="text-xs font-normal opacity-60">
+              무응답이 이 시간을 넘으면 다음 한 단어를 힌트로 보여줘요 (0=끄기)
+            </span>
           </label>
-          <span className="opacity-60">0 = 힌트 끄기. 시간이 지나면 정답 단어가 순차적으로 표시됩니다.</span>
           <button
             type="button"
             onClick={() => {
-              studyApi.patchSettings({ hint_delay_seconds: hintDelay }).catch(() => undefined);
+              studyApi
+                .patchSettings({
+                  hint_delay_seconds: hintDelay,
+                  study_level: studyLevel,
+                })
+                .catch(() => undefined);
               setShowSettings(false);
+              window.location.reload();
             }}
-            className="ml-auto rounded-md bg-brick-green px-4 py-2 font-bold text-white"
+            className="self-start rounded-md bg-brick-green px-4 py-2 font-bold text-white"
           >
-            저장
+            저장하고 새 난이도로 학습
           </button>
         </div>
       )}
@@ -234,22 +282,19 @@ function QuestionCard({
   hintDelay: number;
   onSubmit: (answer: string) => void;
 }) {
-  // 힌트 타이머: hintDelay 초마다 정답 단어를 순차 공개 (docs/specs/learning.md)
-  const [hintStep, setHintStep] = useState(0);
+  // 힌트: hintDelay 초 동안 무응답이면 힌트를 켠다. 켜진 뒤에는 시간이 아니라
+  // "입력 진행"에 따라 다음 한 단어만 노출한다 (2026-07-11 사용자 피드백).
+  const [hintOn, setHintOn] = useState(false);
   useEffect(() => {
+    setHintOn(false);
     if (!hintDelay || disabled || !question.hint_answer) return;
-    const timer = setInterval(
-      () => setHintStep((s) => Math.min(s + 1, 30)),
-      hintDelay * 1000,
-    );
-    return () => clearInterval(timer);
-  }, [hintDelay, disabled, question.hint_answer]);
+    const timer = setTimeout(() => setHintOn(true), hintDelay * 1000);
+    return () => clearTimeout(timer);
+  }, [hintDelay, disabled, question.hint_answer, question.card_id]);
 
-  const highlightAnswer =
-    hintStep >= 1 && question.hint_answer ? question.hint_answer : null;
-  const hintWords = question.hint_answer
-    ? question.hint_answer.split(/\s+/).slice(0, hintStep)
-    : [];
+  // 선다는 정답 보기 하나만 강조(순서 개념 없음)
+  const choiceHighlight =
+    hintOn && question.hint_answer ? question.hint_answer : null;
 
   return (
     <div className="max-w-xl -rotate-[0.4deg] rounded-lg border-2 border-ink/10 bg-white p-6 shadow-md">
@@ -259,10 +304,14 @@ function QuestionCard({
         question.quiz_mode === "cloze") && (
         <ChoiceQuiz
           prompt={question.prompt!}
-          sub={question.quiz_mode === "cloze" ? (question.prompt_ko ?? undefined) : undefined}
+          sub={
+            question.quiz_mode === "cloze"
+              ? (question.prompt_ko ?? undefined)
+              : undefined
+          }
           question={question}
           disabled={disabled}
-          highlight={highlightAnswer}
+          highlight={choiceHighlight}
           onSubmit={onSubmit}
         />
       )}
@@ -270,7 +319,7 @@ function QuestionCard({
         <PatternQuiz
           question={question}
           disabled={disabled}
-          hintWords={hintWords}
+          hintOn={hintOn}
           onSubmit={onSubmit}
         />
       )}
@@ -278,7 +327,7 @@ function QuestionCard({
         <ComposeQuiz
           question={question}
           disabled={disabled}
-          hintWords={hintWords}
+          hintOn={hintOn}
           onSubmit={onSubmit}
         />
       )}
@@ -340,17 +389,20 @@ function ChoiceQuiz({
 function PatternQuiz({
   question,
   disabled,
-  hintWords,
+  hintOn,
   onSubmit,
 }: {
   question: Question;
   disabled: boolean;
-  hintWords: string[];
+  hintOn: boolean;
   onSubmit: (answer: string) => void;
 }) {
   const [picked, setPicked] = useState<number[]>([]);
   const chips = question.chips ?? [];
-  const hintSet = new Set(hintWords);
+
+  // 진행형 힌트: 지금까지 고른 칩 다음에 올 "한 단어"만 강조 (2026-07-11 피드백)
+  const expected = (question.hint_answer ?? "").split(/\s+/).filter(Boolean);
+  const nextWord = hintOn ? expected[picked.length] : undefined;
 
   return (
     <div>
@@ -378,7 +430,7 @@ function PatternQuiz({
               disabled={disabled}
               onClick={() => setPicked((p) => [...p, chipIdx])}
               className={`rounded border-2 px-2 py-1 text-sm hover:border-brick-blue ${
-                hintSet.has(chip)
+                nextWord && chip === nextWord
                   ? "border-brick-yellow bg-highlight/60 font-bold"
                   : "border-ink/15 bg-white"
               }`}
@@ -415,15 +467,30 @@ function PatternQuiz({
 function ComposeQuiz({
   question,
   disabled,
-  hintWords,
+  hintOn,
   onSubmit,
 }: {
   question: Question;
   disabled: boolean;
-  hintWords: string[];
+  hintOn: boolean;
   onSubmit: (answer: string) => void;
 }) {
   const [text, setText] = useState("");
+
+  // 진행형 힌트: 내가 지금까지 맞게 친 단어 다음의 "한 단어"만 노출 (2026-07-11 피드백)
+  const expected = (question.hint_answer ?? "").split(/\s+/).filter(Boolean);
+  const typed = text.trim().split(/\s+/).filter(Boolean);
+  let correctCount = 0;
+  while (
+    correctCount < typed.length &&
+    correctCount < expected.length &&
+    typed[correctCount].toLowerCase().replace(/[^a-z']/g, "") ===
+      expected[correctCount].toLowerCase().replace(/[^a-z']/g, "")
+  ) {
+    correctCount += 1;
+  }
+  const nextWord = hintOn ? expected[correctCount] : undefined;
+
   return (
     <div>
       <p className="text-lg font-bold">{question.prompt_ko}</p>
@@ -432,10 +499,9 @@ function ComposeQuiz({
           ({question.hint_thinking})
         </p>
       )}
-      {hintWords.length > 0 && (
+      {nextWord && (
         <p className="mt-2 text-sm">
-          힌트: <span className="hl font-bold">{hintWords.join(" ")}</span>
-          <span className="opacity-40"> ...</span>
+          다음 단어 힌트: <span className="hl font-bold">{nextWord}</span>
         </p>
       )}
       <textarea
@@ -472,18 +538,13 @@ function ComposeQuiz({
   );
 }
 
+// 정답일 때만 노출하는 3등급 (안키 Hard/Good/Easy). 오답은 자동 Again → 단일 버튼.
 const RATING_BUTTONS: {
   rating: number;
   label: string;
   active: string;
   idle: string;
 }[] = [
-  {
-    rating: 1,
-    label: "다시",
-    active: "border-brick-red bg-brick-red text-white",
-    idle: "border-brick-red/40 text-brick-red",
-  },
   {
     rating: 2,
     label: "어려움",
@@ -505,9 +566,9 @@ const RATING_BUTTONS: {
 ];
 
 function formatInterval(minutes: number): string {
-  if (minutes < 60) return `${Math.max(1, Math.round(minutes))}분`;
-  if (minutes < 2880) return `${Math.round(minutes / 60)}시간`;
-  return `${Math.round(minutes / 1440)}일`;
+  if (minutes < 60) return `${Math.max(1, Math.round(minutes))}분 뒤`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)}시간 뒤`;
+  return `${Math.round(minutes / 1440)}일 뒤`;
 }
 
 function Feedback({
@@ -531,6 +592,8 @@ function Feedback({
     onNext();
   }
 
+  const againMin = result.interval_previews?.["1"];
+
   return (
     <div
       className={`mt-4 max-w-xl rounded-lg border-2 p-4 ${
@@ -540,7 +603,7 @@ function Feedback({
       }`}
     >
       <p className="font-bold">
-        {result.correct ? "[O] 정답!" : "[X] 오답 — 세션 끝에 다시 나와요"}
+        {result.correct ? "[O] 정답!" : "[X] 오답 — 곧 다시 나와요"}
       </p>
       <p className="mt-2 text-lg">{result.correct_answer}</p>
       <p className="text-sm opacity-70">{result.explanation.ko}</p>
@@ -555,33 +618,57 @@ function Feedback({
         </p>
       )}
 
-      <p className="mt-4 text-xs opacity-60">
-        기억 상태를 선택하면 다음 복습이 그 간격으로 예약됩니다 (안키 방식)
-      </p>
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {RATING_BUTTONS.map((btn) => {
-          const isAuto = btn.rating === result.rating_applied;
-          const minutes = result.interval_previews?.[String(btn.rating)];
-          return (
-            <button
-              key={btn.rating}
-              type="button"
-              disabled={submitting}
-              onClick={() => pick(btn.rating)}
-              className={`flex min-h-14 flex-col items-center justify-center rounded-md border-2 bg-white font-bold transition hover:-translate-y-0.5 disabled:opacity-50 ${
-                isAuto ? btn.active : btn.idle
-              }`}
-            >
-              <span>{btn.label}</span>
-              {minutes != null && (
-                <span className={`text-xs font-normal ${isAuto ? "" : "opacity-60"}`}>
-                  {formatInterval(minutes)}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {result.correct ? (
+        <>
+          <p className="mt-4 text-xs opacity-60">
+            얼마나 쉬웠나요? 선택하면 그 시점에 다시 복습해요 (새 단어는 짧게
+            반복하며 익혀요)
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {RATING_BUTTONS.map((btn) => {
+              const isAuto = btn.rating === result.rating_applied;
+              const minutes = result.interval_previews?.[String(btn.rating)];
+              return (
+                <button
+                  key={btn.rating}
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => pick(btn.rating)}
+                  className={`flex min-h-16 flex-col items-center justify-center rounded-md border-2 bg-white font-bold transition hover:-translate-y-0.5 disabled:opacity-50 ${
+                    isAuto ? btn.active : btn.idle
+                  }`}
+                >
+                  <span>{btn.label}</span>
+                  {minutes != null && (
+                    <span
+                      className={`text-xs font-normal ${isAuto ? "" : "opacity-60"}`}
+                    >
+                      {formatInterval(minutes)}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        // 오답: 등급 선택 없이 "다시"만 (안키 — 틀리면 Again)
+        <div className="mt-4">
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => pick(1)}
+            className="flex min-h-14 w-full flex-col items-center justify-center rounded-md border-2 border-brick-red bg-brick-red font-bold text-white transition hover:-translate-y-0.5 disabled:opacity-50"
+          >
+            <span>다시 학습</span>
+            {againMin != null && (
+              <span className="text-xs font-normal opacity-90">
+                {formatInterval(againMin)}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

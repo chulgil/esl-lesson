@@ -186,24 +186,45 @@ def test_brick_direction_fixed_at_spawn_and_answer():
     assert board.submit(brick.ko).ok
 
 
-def test_ko2en_segment_requires_english_and_hides_chip():
+def test_ko2en_tap_segment_shows_english_chip():
     board = bilingual_board()
-    board.elapsed = 65.0  # 레벨 2 → ko2en
+    board.elapsed = 65.0  # 레벨 2 → ko2en, tap 구간
     tick_until_spawn(board)
     brick = board.bricks[0]
-    assert brick.direction == "ko2en"
+    assert brick.direction == "ko2en" and brick.mode == "tap"
     assert brick.display == brick.ko  # 한글 표시
     assert brick.answer == brick.en  # 영어 정답
     snap = board.snapshot()
+    assert snap["input_mode"] == "tap"
     b = snap["bricks"][0]
-    assert b["chip"] is None  # ko2en 은 정답 미노출(치팅 방지)
+    assert b["chip"] == brick.en  # tap 구간은 영어 칩(정답) 노출 — 양방향 동일
+    assert brick.en in snap["chips"]
 
 
-def test_en2ko_snapshot_reveals_chips():
+def test_level5_is_type_mode_with_fuzzy_grading():
+    from app.services.game.engine import input_mode_for_level
+
+    assert input_mode_for_level(4) == "tap"
+    assert input_mode_for_level(5) == "type"
+    board = bilingual_board()
+    board.elapsed = 160.0  # 레벨 5 → type 구간
+    tick_until_spawn(board)
+    brick = board.bricks[0]
+    assert brick.mode == "type" and brick.direction == "ko2en"
+    snap = board.snapshot()
+    assert snap["input_mode"] == "type"
+    assert snap["bricks"][0]["chip"] is None  # type 은 정답 미노출
+    # 유사 입력도 정답 (1글자 오차)
+    ans = brick.en
+    typo = ans[:-1] + "x" if len(ans) > 3 else ans
+    assert board.submit(typo).ok
+
+
+def test_en2ko_snapshot_reveals_ko_chips():
     board = bilingual_board()
     tick_until_spawn(board)
     snap = board.snapshot()
-    assert snap["direction"] == "en2ko"
+    assert snap["direction"] == "en2ko" and snap["input_mode"] == "tap"
     assert len(snap["chips"]) >= 4  # 정답 뜻 + 오답 칩
     assert board.bricks[0].ko in snap["chips"]
 

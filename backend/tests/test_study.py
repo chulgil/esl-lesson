@@ -172,6 +172,7 @@ async def test_answer_wrong_lapses_and_stats(client, db_session):
 
 async def test_rate_overrides_last_review(client, db_session):
     await login(client, db_session)
+    await client.patch("/api/settings", json={"study_level": 4})
     await seed_items(db_session, count=1, item_type="sentence")
     queue = (await client.get("/api/study/queue")).json()
     q = queue["questions"][0]
@@ -274,3 +275,26 @@ async def test_answer_returns_anki_style_interval_previews(client, db_session):
     assert set(previews.keys()) == {"1", "2", "3", "4"}
     assert previews["1"] <= previews["2"] <= previews["3"] <= previews["4"]
     assert previews["4"] > 60  # 쉬움은 하루 이상 단위로 벌어진다
+
+
+async def test_study_level_derives_enabled_levels(client, db_session):
+    """학습 난이도가 활성 레벨을 파생 — 저레벨은 문장(타이핑) 제외 (docs/specs/learning.md)."""
+    await login(client, db_session)
+    # 입문(1) = 단어만
+    res = await client.patch("/api/settings", json={"study_level": 1})
+    assert res.json()["study_level"] == 1
+    assert res.json()["levels_enabled"] == [1]
+    # 중급(3) = 단어+숙어+패턴 (문장 없음 → 타이핑 없음)
+    res = await client.patch("/api/settings", json={"study_level": 3})
+    assert res.json()["levels_enabled"] == [1, 2, 3]
+    # 고급(4) = 문장 포함
+    res = await client.patch("/api/settings", json={"study_level": 4})
+    assert res.json()["levels_enabled"] == [1, 2, 3, 4]
+
+
+async def test_default_new_user_is_beginner(client, db_session):
+    """신규 사용자 기본은 초급(2) — 문장 타이핑 없이 시작."""
+    await login(client, db_session, email="fresh@example.com")
+    settings = (await client.get("/api/settings")).json()
+    assert settings["study_level"] == 2
+    assert settings["levels_enabled"] == [1, 2]

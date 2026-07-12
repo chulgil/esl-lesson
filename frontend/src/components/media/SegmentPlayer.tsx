@@ -27,7 +27,9 @@ export function SegmentPlayer({
   loopRef.current = loop;
 
   const start = media.start_ms / 1000;
-  const end = media.end_ms / 1000;
+  // 자동 자막의 end_ms 가 문장 범위를 넘길 수 있어 상한(8초)으로 제한 (2026-07-11 피드백)
+  const rawEnd = media.end_ms / 1000;
+  const end = Math.min(rawEnd, start + 8);
 
   useEffect(() => {
     if (!open || !holderRef.current) return;
