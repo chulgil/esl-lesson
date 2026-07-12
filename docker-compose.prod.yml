@@ -4,7 +4,10 @@ version: "3.7"
 
 services:
   web:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
     container_name: englesson-web
     restart: unless-stopped
     env_file: .env.web

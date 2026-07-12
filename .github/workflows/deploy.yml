@@ -47,8 +47,14 @@ jobs:
               fi
             }
             build_fresh api eng-lesson_api
-            docker-compose -f docker-compose.prod.yml build web || \
+            # web 신선도: 이미지에 새긴 BUILD_SHA 와 현재 커밋 비교, 다르면 무캐시 재빌드
+            export GIT_SHA=$(git rev-parse HEAD)
+            docker-compose -f docker-compose.prod.yml build web
+            IMG_SHA=$(docker run --rm --entrypoint cat eng-lesson_web /app/BUILD_SHA 2>/dev/null || echo none)
+            if [ "$IMG_SHA" != "$GIT_SHA" ]; then
+              echo "[!] stale web image ($IMG_SHA != $GIT_SHA) - rebuilding --no-cache"
               docker-compose -f docker-compose.prod.yml build --no-cache web
+            fi
             docker-compose -f docker-compose.prod.yml run --rm api uv run --no-dev alembic upgrade head
             # up -d 가 이미지 갱신에도 재생성 안 하는 v1 버그 → 항상 force-recreate
             docker-compose -f docker-compose.prod.yml up -d --force-recreate
