@@ -28,25 +28,33 @@ jobs:
           # VPS 사양상 Next.js 빌드가 10분(기본값)을 초과할 수 있음
           command_timeout: 30m
           script: |
+            set -e
             cd ~/apps/eng-lesson
             git fetch origin main
             git reset --hard origin/main
-            # 구형(classic) 빌더의 스테일 캐시 버그 회피 — 2026-07-11 두 차례 실측
             export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
-            docker-compose -f docker-compose.prod.yml build
-            # 신선도 게이트: 백엔드 전체 파이썬 소스 해시 비교(단일 파일 아님 — 2026-07-11 재발).
-            # 이미지 안 소스와 체크아웃 소스가 다르면 무캐시 재빌드.
-            IMG_HASH=$(docker run --rm --entrypoint sh eng-lesson_api -c "find app -name '*.py' | sort | xargs cat | md5sum" | cut -d' ' -f1)
-            SRC_HASH=$(cd backend && find app -name '*.py' | sort | xargs cat | md5sum | cut -d' ' -f1)
-            if [ "$IMG_HASH" != "$SRC_HASH" ]; then
-              echo "[!] stale api image detected - rebuilding with --no-cache"
-              docker-compose -f docker-compose.prod.yml build --no-cache api web
-            fi
+            # 서버 RAM 이 2GB 로 빠듯해 api+web 동시 빌드가 OOM 으로 실패 → 스테일 이미지
+            # 원인(2026-07-12 실측). 서비스를 하나씩 순차 빌드하고, 이미지 소스 해시로
+            # 신선도를 확인해 불일치 시 무캐시 재빌드한다.
+            build_fresh() {
+              svc="$1"; img="$2"
+              docker-compose -f docker-compose.prod.yml build "$svc"
+              IMG=$(docker run --rm --entrypoint sh "$img" -c "find app -name '*.py' 2>/dev/null | sort | xargs cat 2>/dev/null | md5sum" | cut -d' ' -f1)
+              SRC=$(cd backend && find app -name '*.py' | sort | xargs cat | md5sum | cut -d' ' -f1)
+              if [ "$svc" = "api" ] && [ "$IMG" != "$SRC" ]; then
+                echo "[!] stale $svc image - rebuilding --no-cache"
+                docker-compose -f docker-compose.prod.yml build --no-cache "$svc"
+              fi
+            }
+            build_fresh api eng-lesson_api
+            docker-compose -f docker-compose.prod.yml build web || \
+              docker-compose -f docker-compose.prod.yml build --no-cache web
             docker-compose -f docker-compose.prod.yml run --rm api uv run --no-dev alembic upgrade head
-            docker-compose -f docker-compose.prod.yml up -d
+            # up -d 가 이미지 갱신에도 재생성 안 하는 v1 버그 → 항상 force-recreate
+            docker-compose -f docker-compose.prod.yml up -d --force-recreate
             docker image prune -f
 
       - name: Health check
         run: |
           sleep 15
-          curl -sf https://esladmin.lessonaza.app/api/health
+          curl -sf https://esl.lessonaza.app/api/health

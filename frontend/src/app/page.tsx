@@ -87,11 +87,6 @@ function Dashboard({ me }: { me: Me }) {
         <Brick color="red" href="/game">
           워드 테트리스
         </Brick>
-        {me.role === "admin" && (
-          <Brick color="yellow" href="/admin">
-            백오피스
-          </Brick>
-        )}
       </div>
 
       {stats && (
