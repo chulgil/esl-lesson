@@ -21,8 +21,10 @@ git push(main) → GitHub Actions → SSH → codenavi 서버에서 pull + docke
 
 | 도메인 | 대상 | 용도 |
 |--------|------|------|
-| `esl.lessonaza.app` | A 레코드 → 108.61.162.25 | 학습자 서비스 |
-| `esladmin.lessonaza.app` | A 레코드 → 108.61.162.25 | 백오피스 + API |
+| `esl.lessonaza.app` | A 레코드 → 108.61.162.25 | 서비스 + 백오피스(`/admin`, 관리자만) + API |
+| `esladmin.lessonaza.app` | (하위호환) | `/` → `/admin` 유도만. 신규 설계는 단일 도메인 (2026-07-12) |
+
+단일 도메인 통합(2026-07-12): 백오피스는 `esl.lessonaza.app/admin` 경로 하나로 접근하고, 역할 검증(AdminLayout + 백엔드 admin 가드)으로 관리자만 사용한다. 별도 admin 도메인은 불필요.
 
 TLS는 기존 Traefik의 Let's Encrypt(ACME) 설정에 편승 — DNS 레코드 생성 후 첫 요청 시 자동 발급. (배포 전 traefik.toml의 ACME 설정 확인 필요)
 
@@ -118,6 +120,8 @@ jobs:
 ```
 
 GitHub Secrets 등록 목록: `DEPLOY_HOST`(108.61.162.25), `DEPLOY_USER`(admin), `DEPLOY_SSH_KEY`(배포 전용 키 신규 발급 권장).
+
+**서버 RAM 2GB 제약(2026-07-12)**: api+web 동시 빌드가 OOM 으로 실패해 스테일 이미지가 남을 수 있다. 배포 스크립트는 서비스를 **순차 빌드**하고 `up -d --force-recreate` 로 항상 재생성한다. 여유가 되면 스왑 2GB 추가 권장.
 
 ## 배포 순서 (최초 1회 수동 준비)
 
