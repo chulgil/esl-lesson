@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     anthropic_translate_model: str = "claude-haiku-4-5-20251001"
     # 단어 인사이트 카드 생성 (항목당 1회, lazy — docs/proposal/word-insight.md)
     anthropic_insight_model: str = "claude-haiku-4-5-20251001"
+    # 단어 임베딩 (유사단어/오답 선지 — P2). 미설정 시 임베딩 기능 전체 스킵
+    voyage_embedding_secret: str = ""
+    voyage_embedding_model: str = "voyage-3.5-lite"
 
     # 서비스 URL (OAuth redirect 검증용)
     public_service_url: str = "https://esl.lessonaza.app"

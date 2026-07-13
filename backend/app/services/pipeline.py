@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_session_factory
 from app.models import Content, ExtractionJob, ItemOccurrence, LearningItem, TranscriptSegment
 from app.models.item import normalize_key
-from app.services import extraction, youtube
+from app.services import embeddings, extraction, youtube
 from app.services.youtube import TranscriptBlockedError
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ WAITING_FOR_AGENT_MESSAGE = "자막 준비 중 — 수집기가 처리하면 자
 MAX_ATTEMPTS = 3
 BACKOFF_BASE_SECONDS = 5  # 5s -> 25s -> 125s (테스트에서 패치)
 
-STEPS = ("metadata", "transcript", "translate", "extract")
+STEPS = ("metadata", "transcript", "translate", "extract", "embed")
 
 
 async def run_pipeline(content_id: int) -> None:
@@ -44,6 +44,7 @@ async def run_pipeline(content_id: int) -> None:
                 await _run_step(db, content, "transcript", _step_transcript)
             await _run_step(db, content, "translate", _step_translate)
             await _run_step(db, content, "extract", _step_extract)
+            await _run_step(db, content, "embed", _step_embed)
         except TranscriptBlockedError:
             # 서버 IP 차단 — 실패가 아니라 "자막 대기" (로컬 수집기가 채우면 자동 재개)
             content.status = "pending"
@@ -207,6 +208,34 @@ async def _step_extract(db: AsyncSession, content: Content) -> dict:
             await _upsert_item(db, content, kind, raw, seg_by_seq, counts)
     await db.flush()
     return counts
+
+
+async def _step_embed(db: AsyncSession, content: Content) -> dict:
+    """콘텐츠의 word/idiom 항목 임베딩 (P2 유사단어/선지 개선).
+
+    키 미설정·비 postgres 환경은 스킵(멱등) — 기능 없이도 파이프라인은 정상 완료.
+    """
+    if not embeddings.enabled(db):
+        return {"skipped": True}
+    rows = (
+        (
+            await db.execute(
+                select(LearningItem)
+                .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+                .where(
+                    ItemOccurrence.content_id == content.id,
+                    LearningItem.item_type.in_(("word", "idiom")),
+                )
+                .distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    missing = set(await embeddings.missing_item_ids(db, [i.id for i in rows]))
+    embedded = await embeddings.embed_items(db, [i for i in rows if i.id in missing])
+    await db.flush()
+    return {"embedded": embedded, "total": len(rows)}
 
 
 async def _upsert_item(

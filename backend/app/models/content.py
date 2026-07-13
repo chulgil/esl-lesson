@@ -85,7 +85,7 @@ class ExtractionJob(Base, PkMixin):
     __tablename__ = "extraction_jobs"
     __table_args__ = (
         CheckConstraint(
-            "step IN ('metadata','transcript','translate','extract')",
+            "step IN ('metadata','transcript','translate','extract','embed')",
             name="ck_jobs_step",
         ),
         CheckConstraint("status IN ('pending','running','done','failed')", name="ck_jobs_status"),

@@ -23,7 +23,7 @@ from app.models import (
     UserSettings,
 )
 from app.models.item import ITEM_TYPE_LEVEL
-from app.services import fsrs_service, insights, quiz
+from app.services import embeddings, fsrs_service, insights, quiz
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -174,12 +174,26 @@ async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: i
 
     media_by_item = await _media_for_items(db, list(items_by_id.keys()))
 
+    # P2: 임베딩 최근접 유사단어를 오답 선지에 우선 배치 (실패 시 랜덤 폴백)
+    similar_by_item: dict[int, list[dict]] = {}
+    if embeddings.enabled(db):
+        for item_id, it in items_by_id.items():
+            if it.item_type not in ("word", "idiom"):
+                continue
+            try:
+                similar_by_item[item_id] = await embeddings.similar_items(db, item_id, k=5)
+            except Exception:
+                logger.exception("similar_items failed item=%s", item_id)
+                break
+
     questions = []
     for card in cards:
         item = items_by_id.get(card.item_id)
         if item is None:
             continue
-        question = quiz.build_question(item, pools[item.item_type])
+        question = quiz.build_question(
+            item, pools[item.item_type], similar_by_item.get(card.item_id)
+        )
         questions.append(
             {
                 "card_id": card.id,

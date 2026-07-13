@@ -86,27 +86,49 @@ def _pattern_answer(item: LearningItem) -> str:
     return item.en_text
 
 
-def build_question(item: LearningItem, pool: list[LearningItem]) -> dict:
-    """카드 1장 -> 퀴즈 문항. pool 은 같은 타입 approved 항목 (오답 보기 샘플링용)."""
+def build_question(
+    item: LearningItem, pool: list[LearningItem], similar: list[dict] | None = None
+) -> dict:
+    """카드 1장 -> 퀴즈 문항. pool 은 같은 타입 approved 항목 (오답 보기 샘플링용).
+
+    similar: 임베딩 최근접 이웃 (P2 — 있으면 오답 선지에 우선 배치해 변별 학습).
+    """
     context = next((o.context_en for o in item.occurrences if o.context_en), None)
     context_ko = next((o.context_ko for o in item.occurrences if o.context_ko), None)
 
     if item.item_type == "word":
-        return _word_question(item, pool, context)
+        return _word_question(item, pool, context, similar)
     if item.item_type == "idiom":
-        return _idiom_question(item, pool, context)
+        return _idiom_question(item, pool, context, similar)
     if item.item_type == "pattern":
         return _pattern_question(item, context, context_ko)
     return _sentence_question(item)
 
 
-def _distractors(item: LearningItem, pool: list[LearningItem], field: str) -> list[str]:
+def _distractors(
+    item: LearningItem,
+    pool: list[LearningItem],
+    field: str,
+    preferred: list[dict] | None = None,
+) -> list[str]:
     answer = getattr(item, field)
+    picked: list[str] = []
+    # 임베딩 유사단어를 최대 2개 우선 배치 — 3개 전부 유사면 난이도 급상승이라 2+1 배합 (P2)
+    for cand in preferred or []:
+        value = cand.get(field)
+        if value and value != answer and value not in picked:
+            picked.append(value)
+        if len(picked) >= 2:
+            break
     candidates = list(
-        {getattr(p, field) for p in pool if p.id != item.id and getattr(p, field) != answer}
+        {
+            getattr(p, field)
+            for p in pool
+            if p.id != item.id and getattr(p, field) != answer and getattr(p, field) not in picked
+        }
     )
     random.shuffle(candidates)
-    picked = candidates[:3]
+    picked.extend(candidates[: 3 - len(picked)])
     fallback = FALLBACK_KO if field == "ko_text" else FALLBACK_EN
     for value in fallback:
         if len(picked) >= 3:
@@ -125,13 +147,18 @@ def _mask_context(context: str | None, target: str) -> str | None:
     return pattern.sub("___", context)
 
 
-def _word_question(item: LearningItem, pool: list[LearningItem], context: str | None) -> dict:
+def _word_question(
+    item: LearningItem,
+    pool: list[LearningItem],
+    context: str | None,
+    similar: list[dict] | None = None,
+) -> dict:
     mode = random.choice(["choice_en2ko", "choice_ko2en"])
     if mode == "choice_en2ko":
         prompt, answer_field = item.en_text, "ko_text"
     else:
         prompt, answer_field = item.ko_text, "en_text"
-    choices = [getattr(item, answer_field), *_distractors(item, pool, answer_field)]
+    choices = [getattr(item, answer_field), *_distractors(item, pool, answer_field, similar)]
     random.shuffle(choices)
     return {
         "quiz_mode": mode,
@@ -143,10 +170,15 @@ def _word_question(item: LearningItem, pool: list[LearningItem], context: str | 
     }
 
 
-def _idiom_question(item: LearningItem, pool: list[LearningItem], context: str | None) -> dict:
+def _idiom_question(
+    item: LearningItem,
+    pool: list[LearningItem],
+    context: str | None,
+    similar: list[dict] | None = None,
+) -> dict:
     masked = _mask_context(context, item.en_text)
     if masked and "___" in masked:
-        choices = [item.en_text, *_distractors(item, pool, "en_text")]
+        choices = [item.en_text, *_distractors(item, pool, "en_text", similar)]
         random.shuffle(choices)
         return {
             "quiz_mode": "cloze",
@@ -158,7 +190,7 @@ def _idiom_question(item: LearningItem, pool: list[LearningItem], context: str |
             "context": None,
         }
     # 문맥이 없으면 뜻 매칭 선다로 폴백
-    choices = [item.ko_text, *_distractors(item, pool, "ko_text")]
+    choices = [item.ko_text, *_distractors(item, pool, "ko_text", similar)]
     random.shuffle(choices)
     return {
         "quiz_mode": "choice_en2ko",
