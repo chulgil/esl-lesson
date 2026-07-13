@@ -26,6 +26,48 @@ body {
   font-family: var(--font-sans);
 }
 
+/* 전역 테마: 캔디 — 파스텔 사탕 톤으로 토큰 전환 (설정 > 테마) */
+html[data-theme="candy"] {
+  --color-paper: #fff4fa;
+  --color-paper-line: #f7cfe3;
+  --color-margin-red: #f7b8d4;
+  --color-ink: #4a2d4f;
+  --color-brick-red: #f7679c;
+  --color-brick-red-shadow: #d84f85;
+  --color-brick-yellow: #ffc94d;
+  --color-brick-yellow-shadow: #d9a636;
+  --color-brick-blue: #58a8e3;
+  --color-brick-blue-shadow: #4488c0;
+  --color-brick-green: #52bd8b;
+  --color-brick-green-shadow: #3e9c70;
+  --color-highlight: #ffd6ea;
+}
+
+/* 캔디: 줄노트 대신 버블 도트 배경 */
+html[data-theme="candy"] .notebook-lines {
+  background-image: radial-gradient(
+    rgba(255, 143, 171, 0.16) 3px,
+    transparent 3.5px
+  );
+  background-size: 34px 34px;
+}
+
+/* 전역 테마: 레고 — 밝은 베이스플레이트 + 클래식 브릭 원색 유지 */
+html[data-theme="lego"] {
+  --color-paper: #eef5ff;
+  --color-paper-line: #c5d9f2;
+  --color-highlight: #ffe066;
+}
+
+/* 레고: 줄노트 대신 스터드 도트 격자 */
+html[data-theme="lego"] .notebook-lines {
+  background-image: radial-gradient(
+    rgba(120, 160, 220, 0.18) 4px,
+    transparent 4.5px
+  );
+  background-size: 28px 28px;
+}
+
 /* 줄노트 배경 (이미지 에셋 없이 CSS만) */
 .notebook-lines {
   background-image: repeating-linear-gradient(

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContentSummary } from "@/lib/admin-api";
-import { BOARD_THEMES, type BoardTheme } from "@/components/game/BoardCanvas";
+import { useAppTheme } from "@/lib/theme";
 import { Brick } from "@/components/brick/Brick";
 import { myApi } from "@/lib/my-api";
 import { PlayArea } from "@/app/game/PlayArea";
@@ -32,7 +32,7 @@ export default function GamePage() {
   const [missSignal, setMissSignal] = useState(0);
   const [itemToast, setItemToast] = useState<string | null>(null);
   const [garbageTip, setGarbageTip] = useState(false);
-  const [boardTheme, setBoardTheme] = useState<BoardTheme>("candy");
+  const boardTheme = useAppTheme(); // 전역 테마(설정)를 게임 보드가 따름
   const socketRef = useRef<GameSocket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const garbageTipShown = useRef(false);
@@ -125,19 +125,6 @@ export default function GamePage() {
       .catch(() => undefined);
   }, []);
 
-  // 보드 테마 — localStorage 에서 복원, 선택 시 저장
-  useEffect(() => {
-    const saved = localStorage.getItem("game.boardTheme");
-    if (BOARD_THEMES.some((t) => t.key === saved)) {
-      setBoardTheme(saved as BoardTheme);
-    }
-  }, []);
-
-  function pickTheme(t: BoardTheme) {
-    setBoardTheme(t);
-    localStorage.setItem("game.boardTheme", t);
-  }
-
   // 첫 garbage(회색 젤리) 수신 시 1회 설명 토스트 — 정체불명 혼란 방지
   useEffect(() => {
     const count = gameState?.me?.bricks.filter((b) => b.garbage).length ?? 0;
@@ -185,8 +172,6 @@ export default function GamePage() {
           myContents={myContents}
           selectedContents={selectedContents}
           setSelectedContents={setSelectedContents}
-          boardTheme={boardTheme}
-          onTheme={pickTheme}
           onPve={() =>
             socketRef.current?.joinPve(
               "en",
@@ -274,8 +259,6 @@ function Lobby({
   myContents,
   selectedContents,
   setSelectedContents,
-  boardTheme,
-  onTheme,
   onPve,
   onPvp,
   onCreateRoom,
@@ -288,8 +271,6 @@ function Lobby({
   myContents: ContentSummary[];
   selectedContents: number[];
   setSelectedContents: (ids: number[]) => void;
-  boardTheme: BoardTheme;
-  onTheme: (t: BoardTheme) => void;
   onPve: () => void;
   onPvp: () => void;
   onCreateRoom: () => void;
@@ -331,35 +312,6 @@ function Lobby({
             제거 · ▽공격 방어
           </li>
         </ul>
-      </div>
-
-      <div>
-        <p className="mb-2 text-sm font-bold">
-          보드 테마
-          <span className="ml-2 text-xs font-normal opacity-60">
-            대전 보드의 배경을 고르세요
-          </span>
-        </p>
-        <div className="flex gap-2">
-          {BOARD_THEMES.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => onTheme(t.key)}
-              className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-full border-2 px-4 py-1.5 text-sm font-bold transition ${
-                boardTheme === t.key
-                  ? "border-ink bg-white shadow-sm"
-                  : "border-ink/15 bg-ink/5 hover:bg-ink/10"
-              }`}
-            >
-              <span
-                className="inline-block h-4 w-4 rounded-full border border-ink/20"
-                style={{ backgroundColor: t.swatch }}
-              />
-              {t.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       {myContents.length > 0 && (

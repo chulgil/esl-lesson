@@ -5,18 +5,8 @@ import type { BoardState } from "@/lib/game-ws";
 
 const ROWS = 12;
 
-/** 보드 배경 테마 — 로비에서 선택 (localStorage 유지) */
+/** 보드 배경 테마 — 전역 앱 테마(설정 > 테마)를 따른다 */
 export type BoardTheme = "candy" | "note" | "lego";
-
-export const BOARD_THEMES: {
-  key: BoardTheme;
-  label: string;
-  swatch: string;
-}[] = [
-  { key: "candy", label: "캔디", swatch: "#FFD7E8" },
-  { key: "note", label: "노트", swatch: "#FFF3C4" },
-  { key: "lego", label: "레고", swatch: "#CBDFF8" },
-];
 
 const THEME_BORDER: Record<BoardTheme, string> = {
   candy: "border-[#F0C4E0]",
