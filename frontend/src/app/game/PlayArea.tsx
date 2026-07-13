@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BoardCanvas } from "@/components/game/BoardCanvas";
+import {
+  BoardCanvas,
+  type BoardTheme,
+} from "@/components/game/BoardCanvas";
 import type { BoardState } from "@/lib/game-ws";
 
 function useIsDesktop(): boolean {
@@ -32,8 +35,8 @@ const ITEM_META: Record<string, { icon: string; label: string; desc: string }> =
     },
     bomb: {
       icon: "*",
-      label: "### 제거",
-      desc: "상대가 보낸 회색 브릭 전부 제거",
+      label: "젤리 제거",
+      desc: "상대가 보낸 회색 젤리 전부 제거",
     },
     shield: { icon: "▽", label: "공격 방어", desc: "다음 공격 1회 무효화" },
   };
@@ -50,6 +53,7 @@ export function PlayArea({
   missSignal,
   itemToast,
   garbageTip,
+  boardTheme,
   onInput,
   onSubmit,
   onTap,
@@ -66,6 +70,7 @@ export function PlayArea({
   missSignal: number;
   itemToast: string | null;
   garbageTip: boolean;
+  boardTheme: BoardTheme;
   onInput: (v: string) => void;
   onSubmit: () => void;
   onTap: (chip: string) => void;
@@ -127,7 +132,7 @@ export function PlayArea({
           type="button"
           disabled={disabled}
           onClick={() => onTap(chip)}
-          className={`min-h-11 rounded-lg border-2 px-4 py-2 font-bold shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50 ${
+          className={`min-h-11 rounded-full border-2 px-4 py-2 font-bold shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50 ${
             hint === chip
               ? "border-brick-yellow bg-highlight/60"
               : "border-brick-blue/40 bg-white hover:border-brick-blue"
@@ -156,7 +161,7 @@ export function PlayArea({
       )}
       {garbageTip && (
         <p className="rounded-md bg-brick-red/10 px-3 py-2 text-center text-sm font-bold text-brick-red">
-          회색 ### = 상대의 공격! 아무 단어나 클리어하면 1개씩 사라져요
+          회색 ×_× 젤리 = 상대의 공격! 아무 단어나 클리어하면 1개씩 사라져요
         </p>
       )}
       {hint && (
@@ -177,7 +182,7 @@ export function PlayArea({
         <div className="flex flex-col items-center gap-3">
           <ScoreHud label="나" board={me} timeLeft={timeLeft} big />
           <DirectionBadge direction={direction} inputMode={inputMode} />
-          <BoardCanvas state={me} width={420} height={600} />
+          <BoardCanvas state={me} width={420} height={600} theme={boardTheme} />
           {itemBar}
           <div className="w-[440px]">{interact}</div>
         </div>
@@ -186,7 +191,7 @@ export function PlayArea({
             <p className="mb-1 text-sm font-bold opacity-70">
               vs {opponentName}
             </p>
-            <BoardCanvas state={op} width={256} height={366} mirror />
+            <BoardCanvas state={op} width={256} height={366} mirror theme={boardTheme} />
           </div>
           <ScoreHud label={opponentName} board={op} />
           <ComboMeter combo={me?.combo ?? 0} />
@@ -198,7 +203,7 @@ export function PlayArea({
   return (
     <section className="flex flex-col gap-3 pb-40">
       <div className="sticky top-14 z-20 flex items-center gap-3 rounded-lg border-2 border-ink/10 bg-paper/95 p-2 backdrop-blur">
-        <BoardCanvas state={op} width={90} height={128} mirror />
+        <BoardCanvas state={op} width={90} height={128} mirror theme={boardTheme} />
         <div className="flex-1">
           <p className="text-xs font-bold opacity-70">vs {opponentName}</p>
           <p className="text-sm">점수 {op?.score ?? 0}</p>
@@ -217,7 +222,7 @@ export function PlayArea({
       </div>
       <DirectionBadge direction={direction} inputMode={inputMode} />
       <div className="flex justify-center">
-        <BoardCanvas state={me} width={340} height={486} />
+        <BoardCanvas state={me} width={340} height={486} theme={boardTheme} />
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t-2 border-ink/15 bg-white/95 p-3 backdrop-blur">
