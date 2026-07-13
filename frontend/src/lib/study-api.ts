@@ -22,6 +22,8 @@ export interface AnswerResult {
   rating_applied: number;
   interval_previews: Record<string, number>;
   correct_answer: string;
+  /** 오답이 유사단어였을 때 — "아깝다" 비교 카드 (P2) */
+  close_match: { en_text: string; ko_text: string } | null;
   explanation: {
     ko: string;
     thinking_ko: string | null;

@@ -32,10 +32,15 @@
 |---|---|
 | GET `/api/study/items/{item_id}/insight` | 캐시 반환 또는 생성. 404 항목 없음, 502 생성 실패(재시도 유도) |
 
-## P2 (미구현 — 방향 확정)
+## P2 (구현 완료 — 2026-07-13)
 
-- 유사단어 후보·"아깝다" 오답 판정·선다 오답 선지 개선을 **pgvector** 로:
-  `item_embeddings(item_id, embedding halfvec(1024))` + HNSW
-  `halfvec_cosine_ops` (프로드 postgres 에 vector 0.8.2 가용 실측)
-- 임베딩 제공자 결정 필요: Voyage voyage-3.5-lite(권장) vs OpenAI
+- **임베딩**: Voyage `voyage-3.5-lite` (1024d) → `item_embeddings(halfvec(1024))`
+  + HNSW `halfvec_cosine_ops`. 파이프라인 `embed` 단계(신규 콘텐츠 자동) +
+  `scripts/backfill_embeddings.py`(기존 항목, PYTHONPATH=/app 로 실행). 키
+  미설정/비 postgres 는 전 기능 안전 스킵(랜덤 폴백)
+- **오답 선지 개선**: 선다 오답 = 유사단어 2개 우선 + 랜덤 1개 배합
+- **"아깝다" 판정**: 오답 텍스트가 정답의 임베딩 top-5 유사단어와 일치하면
+  `/study/answer` 응답에 `close_match{en,ko}` → 피드백 화면에 비교 카드
+  (내가 고른 답 vs 정답 나란히 + 단어 정보 진입)
+- P3 후보: 유사단어 원탭 학습 추가, 어휘망 뷰
 - 상세 근거: [proposal/word-insight.md](../proposal/word-insight.md)

@@ -67,6 +67,57 @@ def test_distractors_prefer_similar_words():
     assert "비슷3" not in picked and "뜻0" not in picked
 
 
+async def test_wrong_answer_reports_close_match(client, db_session):
+    """오답이 임베딩 유사단어면 close_match(아깝다) 반환, 무관 오답은 null."""
+    from tests.test_study import login, seed_items
+
+    await login(client, db_session)
+    await seed_items(db_session, count=1)
+    res = await client.get("/api/study/queue")
+    q = res.json()["questions"][0]
+    field = "ko_text" if q["quiz_mode"] == "choice_en2ko" else "en_text"
+    fake = [{"en_text": "villain", "ko_text": "악당", "distance": 0.1}]
+
+    with (
+        patch.object(embeddings, "enabled", return_value=True),
+        patch.object(embeddings, "similar_items", new=AsyncMock(return_value=fake)),
+    ):
+        wrong_similar = await client.post(
+            "/api/study/answer",
+            json={
+                "card_id": q["card_id"],
+                "quiz_mode": q["quiz_mode"],
+                "answer": fake[0][field],
+                "duration_ms": 1000,
+            },
+        )
+    body = wrong_similar.json()
+    assert body["correct"] is False
+    assert body["close_match"] == {"en_text": "villain", "ko_text": "악당"}
+
+    # 무관 오답 → close_match 없음 (두 번째 문항이 없으므로 같은 카드 재채점은 하지 않고
+    # 새 카드로 확인)
+    await seed_items(db_session, count=1)
+    res2 = await client.get("/api/study/queue")
+    q2 = res2.json()["questions"][0]
+    with (
+        patch.object(embeddings, "enabled", return_value=True),
+        patch.object(embeddings, "similar_items", new=AsyncMock(return_value=fake)),
+    ):
+        wrong_random = await client.post(
+            "/api/study/answer",
+            json={
+                "card_id": q2["card_id"],
+                "quiz_mode": q2["quiz_mode"],
+                "answer": "totally-unrelated",
+                "duration_ms": 1000,
+            },
+        )
+    body2 = wrong_random.json()
+    assert body2["correct"] is False
+    assert body2["close_match"] is None
+
+
 def test_build_question_uses_similar_choices():
     pool = [_item(i, f"w{i}", f"뜻{i}") for i in range(8)]
     similar = [

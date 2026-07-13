@@ -638,6 +638,34 @@ function Feedback({
         </p>
       )}
 
+      {!result.correct && result.close_match && (
+        // "아깝다" — 유사단어와 헷갈린 오답은 좌절 대신 비교 학습 기회로
+        <div className="mt-3 rounded-md border-2 border-brick-yellow bg-highlight/30 p-3">
+          <p className="text-sm font-bold">아깝다! 비슷한 단어와 헷갈렸어요</p>
+          <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-xs opacity-50">내가 고른 답</p>
+              <p className="font-bold">{result.close_match.en_text}</p>
+              <p className="opacity-70">{result.close_match.ko_text}</p>
+            </div>
+            <div>
+              <p className="text-xs opacity-50">정답 단어</p>
+              <p className="font-bold">{enWord}</p>
+              <p className="opacity-70">{result.explanation.ko}</p>
+            </div>
+          </div>
+          {question.level <= 2 && (
+            <button
+              type="button"
+              onClick={() => setShowInsight(true)}
+              className="mt-2 min-h-8 cursor-pointer rounded-full border-2 border-brick-yellow bg-white px-3 py-1 text-xs font-bold transition hover:-translate-y-0.5"
+            >
+              두 단어 차이 자세히 보기
+            </button>
+          )}
+        </div>
+      )}
+
       {result.correct ? (
         <>
           <p className="mt-4 text-xs opacity-60">

@@ -309,11 +309,29 @@ async def submit_answer(
     )
     await db.commit()
 
+    # P2: 오답이 임베딩 유사단어였는지 판정 — "아깝다" 비교 카드 (word-insight.md)
+    close_match = None
+    if (
+        not correct
+        and body.quiz_mode in ("choice_en2ko", "choice_ko2en", "cloze")
+        and embeddings.enabled(db)
+    ):
+        field = "ko_text" if body.quiz_mode == "choice_en2ko" else "en_text"
+        normalized = body.answer.strip().lower()
+        try:
+            for s in await embeddings.similar_items(db, item.id, k=5):
+                if s[field].strip().lower() == normalized:
+                    close_match = {"en_text": s["en_text"], "ko_text": s["ko_text"]}
+                    break
+        except Exception:  # 판정 실패는 기능 저하일 뿐 — 채점 응답은 정상 진행
+            logger.exception("close-match check failed item=%s", item.id)
+
     return {
         "correct": correct,
         "rating_applied": rating,
         "interval_previews": {str(k): round(v, 1) for k, v in previews.items()},
         "correct_answer": _correct_answer(item, body.quiz_mode),
+        "close_match": close_match,
         "explanation": {
             "ko": item.ko_text,
             "thinking_ko": item.hint_thinking,
