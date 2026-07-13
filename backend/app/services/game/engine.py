@@ -248,6 +248,16 @@ class Board:
             self.ko = True
         return actual
 
+    def _compact_stack(self) -> None:
+        """클리어로 스택에 빈 칸이 생기면 위 브릭을 아래로 내려 붙인다 (중력).
+
+        floor_y 가 개수 기반이라 재정렬 없이는 남은 브릭이 공중에 뜨고
+        다음 착지 브릭과 같은 칸에 겹친다.
+        """
+        landed = sorted((b for b in self.bricks if b.landed), key=lambda b: b.y, reverse=True)
+        for i, brick in enumerate(landed):
+            brick.y = float(BOARD_ROWS - i)
+
     def _grant_item(self) -> str | None:
         if len(self.items) >= MAX_ITEMS:
             return None
@@ -303,6 +313,7 @@ class Board:
         if garbage is not None:
             self.bricks.remove(garbage)
             effects.append("garbage_cleared")
+        self._compact_stack()
 
         gained = int(10 * (1 + self.combo * 0.1)) + (
             5 if len(target.answer) >= LONG_WORD_LEN else 0
@@ -332,6 +343,7 @@ class Board:
         if kind == "bomb":
             before = len(self.bricks)
             self.bricks = [b for b in self.bricks if not b.is_garbage]
+            self._compact_stack()
             return {"item": "bomb", "cleared": before - len(self.bricks)}
         if kind == "hint":
             target = self._lowest_answerable()

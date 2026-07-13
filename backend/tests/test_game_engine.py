@@ -5,6 +5,7 @@ from app.services.game.engine import (
     BOARD_ROWS,
     MATCH_SECONDS,
     Board,
+    Brick,
     Match,
     build_word_queue,
 )
@@ -90,6 +91,32 @@ def test_ko_when_stack_reaches_top():
     board = make_board()
     board.add_garbage(BOARD_ROWS)
     assert board.ko
+
+
+def test_clear_compacts_stack_no_gap_or_overlap():
+    """스택 중간/바닥 클리어 시 위 브릭이 내려앉아야 함 — 공중부양/겹침 금지."""
+    board = make_board()
+    for i, (_, en, ko) in enumerate(WORDS[:3]):
+        board.bricks.append(
+            Brick(brick_id=100 + i, en=en, ko=ko, y=float(BOARD_ROWS - i), landed=True)
+        )
+    # 바닥(y=12) apple 클리어 → banana/cherry 가 12, 11 로 내려앉아야 함
+    result = board.submit("apple")
+    assert result.ok
+    ys = sorted(b.y for b in board.bricks if b.landed)
+    assert ys == [float(BOARD_ROWS - 1), float(BOARD_ROWS)]
+    # 다음 착지선(개수 기반)과 기존 브릭 y 가 겹치지 않음
+    assert board.floor_y() not in ys
+
+
+def test_bomb_compacts_stack():
+    """폭탄으로 garbage 일괄 제거 시 남은 브릭이 바닥까지 내려앉아야 함."""
+    board = make_board()
+    board.add_garbage(2)  # y=12, 11
+    board.bricks.append(Brick(brick_id=200, en="kiwi", ko="kiwi", y=10.0, landed=True))
+    board.items.append("bomb")
+    board.use_item("bomb")
+    assert [b.y for b in board.bricks if b.landed] == [float(BOARD_ROWS)]
 
 
 def test_speed_increases_over_time():
