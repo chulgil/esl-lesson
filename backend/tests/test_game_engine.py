@@ -119,6 +119,16 @@ def test_bomb_compacts_stack():
     assert [b.y for b in board.bricks if b.landed] == [float(BOARD_ROWS)]
 
 
+def test_match_tick_clamps_dt_spike():
+    """서버 스톨 후 큰 dt 가 와도 한 틱에 왕창 진행(브릭 순간이동) 금지."""
+    from app.services.game.engine import MAX_TICK_SECONDS
+
+    m = Match(board1=make_board(), board2=make_board())
+    m.tick(5.0)
+    assert m.elapsed <= MAX_TICK_SECONDS + 1e-9
+    assert m.board1.elapsed <= MAX_TICK_SECONDS + 1e-9
+
+
 def test_item_brick_shows_question_and_chip():
     """★ 브릭도 문제 텍스트를 표시하고 정답 칩이 내려와야 탭 구간에서 클리어 가능."""
     board = make_board()
@@ -155,7 +165,10 @@ def test_match_timeout_score_decides():
     match = Match(board1=make_board(), board2=make_board())
     match.board1.score = 50
     match.board2.score = 30
-    match.tick(MATCH_SECONDS + 1)
+    # 한 방 큰 dt 는 MAX_TICK_SECONDS 로 잘리므로 (순간이동 방지),
+    # 제한시간 도달 상태를 직접 만들고 다음 틱에서 판정을 확인한다
+    match.elapsed = MATCH_SECONDS
+    match.tick(0.1)
     assert match.finished and match.winner == 1
 
 

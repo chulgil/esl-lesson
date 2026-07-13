@@ -12,6 +12,9 @@ from dataclasses import dataclass, field
 
 BOARD_ROWS = 12
 MATCH_SECONDS = 180.0
+# 서버 스톨(스왑/CPU 경합) 후 벽시계 dt 가 커져도 한 틱 진행 상한 — 브릭 순간이동 방지.
+# 두 보드가 같은 루프에서 같이 느려지므로 공정성은 유지된다.
+MAX_TICK_SECONDS = 0.3
 
 # 낙하 가속 곡선: 30초당 1단계, 10단계 상한 (테트리스 레벨업)
 SPEED_STEP_SECONDS = 30.0
@@ -463,6 +466,8 @@ class Match:
     def tick(self, dt: float) -> dict[int, list[str]]:
         if self.finished:
             return {1: [], 2: []}
+        # 스톨 후 큰 dt 는 상한으로 자름 — 순간이동 대신 잠깐 느려졌다 회복
+        dt = min(dt, MAX_TICK_SECONDS)
         self.elapsed += dt
         events = {1: self.board1.tick(dt), 2: self.board2.tick(dt)}
         self._check_end()
