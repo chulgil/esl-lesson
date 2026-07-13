@@ -549,19 +549,19 @@ const RATING_BUTTONS: {
     rating: 2,
     label: "어려움",
     active: "border-brick-yellow bg-brick-yellow text-ink",
-    idle: "border-brick-yellow/60 text-ink",
+    idle: "border-brick-yellow/60 bg-white text-ink",
   },
   {
     rating: 3,
     label: "알맞음",
     active: "border-brick-green bg-brick-green text-white",
-    idle: "border-brick-green/40 text-brick-green",
+    idle: "border-brick-green/40 bg-white text-brick-green",
   },
   {
     rating: 4,
     label: "쉬움",
     active: "border-brick-blue bg-brick-blue text-white",
-    idle: "border-brick-blue/40 text-brick-blue",
+    idle: "border-brick-blue/40 bg-white text-brick-blue",
   },
 ];
 
@@ -634,7 +634,9 @@ function Feedback({
                   type="button"
                   disabled={submitting}
                   onClick={() => pick(btn.rating)}
-                  className={`flex min-h-16 flex-col items-center justify-center rounded-md border-2 bg-white font-bold transition hover:-translate-y-0.5 disabled:opacity-50 ${
+                  // bg-white 를 베이스에 두면 active 의 bg-brick-* 와 충돌해
+                  // (생성 CSS 순서상 bg-white 승리) 흰 바탕+흰 글씨가 됨 → idle 에만 둔다
+                  className={`flex min-h-16 flex-col items-center justify-center rounded-md border-2 font-bold transition hover:-translate-y-0.5 disabled:opacity-50 ${
                     isAuto ? btn.active : btn.idle
                   }`}
                 >
