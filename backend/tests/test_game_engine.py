@@ -119,6 +119,15 @@ def test_bomb_compacts_stack():
     assert [b.y for b in board.bricks if b.landed] == [float(BOARD_ROWS)]
 
 
+def test_item_brick_shows_question_and_chip():
+    """★ 브릭도 문제 텍스트를 표시하고 정답 칩이 내려와야 탭 구간에서 클리어 가능."""
+    board = make_board()
+    board.bricks.append(Brick(brick_id=300, en="apple", ko="사과", is_item=True))
+    assert board.bricks[0].display == "apple"  # en2ko: ★만이 아니라 영단어 표시
+    snap = board.snapshot()
+    assert "사과" in snap["chips"]  # 정답 칩 포함 → 탭으로 클리어 가능
+
+
 def test_speed_increases_over_time():
     board = make_board()
     level0_interval = board.spawn_interval
@@ -277,7 +286,8 @@ def test_item_brick_grants_item_on_clear():
         item_brick = next((b for b in board.bricks if b.is_item), None)
         if item_brick:
             break
-    assert item_brick is not None and item_brick.display == "★"
+    # 2026-07-13 개정: ★ 브릭도 문제 텍스트 표시 (★만 표시하면 클리어 수단 없음)
+    assert item_brick is not None and item_brick.display == item_brick.en
     before = len(board.items)
     board.submit(item_brick.answer)
     assert len(board.items) == before + 1

@@ -90,9 +90,11 @@ class Brick:
 
     @property
     def display(self) -> str:
-        """브릭에 표시 — en2ko 는 영단어, ko2en 은 한글 뜻."""
-        if self.is_item:
-            return "★"
+        """브릭에 표시 — en2ko 는 영단어, ko2en 은 한글 뜻.
+
+        ★(아이템) 브릭도 문제 텍스트를 그대로 표시한다 — ★만 표시하면
+        무엇을 탭/타이핑해야 할지 알 수 없어 클리어 불가 (별 장식은 프론트 캔버스 담당).
+        """
         return self.en if self.direction == "en2ko" else self.ko
 
 
@@ -382,8 +384,9 @@ class Board:
         """tap 브릭은 정답 칩을 노출(선다형이라 안전, 양방향). type 브릭은 정답 미노출."""
         ko_answers: list[str] = []
         en_answers: list[str] = []
+        # 아이템(★) 브릭도 포함 — 칩이 없으면 탭 구간에서 클리어 수단이 없음
         for b in self.bricks:
-            if b.is_garbage or b.is_item or b.mode != "tap":
+            if b.is_garbage or b.mode != "tap":
                 continue
             if b.direction == "en2ko" and b.ko not in ko_answers:
                 ko_answers.append(b.ko)
