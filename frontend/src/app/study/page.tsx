@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
+import { InsightSheet } from "@/components/study/InsightSheet";
 import { SegmentPlayer } from "@/components/media/SegmentPlayer";
 import { studyApi, type AnswerResult, type Question } from "@/lib/study-api";
 
@@ -581,6 +582,13 @@ function Feedback({
   onNext: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [showInsight, setShowInsight] = useState(false);
+
+  // 인사이트는 항목의 영어 표현 기준 (en2ko 는 문제가 영어, 그 외는 정답이 영어)
+  const enWord =
+    question.quiz_mode === "choice_en2ko"
+      ? (question.prompt ?? result.correct_answer)
+      : result.correct_answer;
 
   // 안키식: 등급 버튼이 곧 "다음" — 자동 산출 등급과 다르면 재평가 후 진행
   async function pick(rating: number) {
@@ -605,7 +613,19 @@ function Feedback({
       <p className="font-bold">
         {result.correct ? "[O] 정답!" : "[X] 오답 — 곧 다시 나와요"}
       </p>
-      <p className="mt-2 text-lg">{result.correct_answer}</p>
+      <div className="mt-2 flex items-center gap-3">
+        <p className="text-lg">{result.correct_answer}</p>
+        {question.level <= 2 && (
+          // 단어/숙어만 인사이트 제공 (패턴/문장은 문장 단위라 제외 — P1)
+          <button
+            type="button"
+            onClick={() => setShowInsight(true)}
+            className="min-h-8 cursor-pointer rounded-full border-2 border-brick-blue/40 bg-white px-3 py-1 text-xs font-bold text-brick-blue transition hover:border-brick-blue"
+          >
+            단어 정보
+          </button>
+        )}
+      </div>
       <p className="text-sm opacity-70">{result.explanation.ko}</p>
       {result.explanation.thinking_ko && (
         <p className="text-sm text-brick-blue">
@@ -670,6 +690,14 @@ function Feedback({
             )}
           </button>
         </div>
+      )}
+
+      {showInsight && (
+        <InsightSheet
+          itemId={question.item_id}
+          word={enWord}
+          onClose={() => setShowInsight(false)}
+        />
       )}
     </div>
   );

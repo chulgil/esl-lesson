@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # 번역은 빠르고 저렴한 모델로 분리
     # (sonnet-5 thinking 은 대량 배치에서 타임아웃 — 2026-07-11 실측)
     anthropic_translate_model: str = "claude-haiku-4-5-20251001"
+    # 단어 인사이트 카드 생성 (항목당 1회, lazy — docs/proposal/word-insight.md)
+    anthropic_insight_model: str = "claude-haiku-4-5-20251001"
 
     # 서비스 URL (OAuth redirect 검증용)
     public_service_url: str = "https://esl.lessonaza.app"

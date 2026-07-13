@@ -1,5 +1,6 @@
 """학습 API — FSRS 큐/채점/통계 (docs/specs/learning.md)."""
 
+import logging
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Annotated
 
@@ -22,8 +23,10 @@ from app.models import (
     UserSettings,
 )
 from app.models.item import ITEM_TYPE_LEVEL
-from app.services import fsrs_service, quiz
+from app.services import fsrs_service, insights, quiz
 from app.services.visibility import visible_item_clause
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/study", tags=["study"])
 cards_router = APIRouter(prefix="/cards", tags=["study"])
@@ -226,6 +229,23 @@ class AnswerBody(BaseModel):
     quiz_mode: str
     answer: str
     duration_ms: int | None = Field(default=None, ge=0, le=10 * 60 * 1000)
+
+
+@router.get("/items/{item_id}/insight")
+async def item_insight(
+    item_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """단어 인사이트 — 최초 조회 시 LLM 생성 후 캐시 (docs/proposal/word-insight.md)."""
+    try:
+        payload = await insights.get_or_generate(db, item_id)
+    except Exception as exc:  # 생성 실패는 일시 오류 — 클라이언트 재시도 유도
+        logger.exception("insight generation failed item=%s", item_id)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "insight_generation_failed") from exc
+    if payload is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "item_not_found")
+    return payload
 
 
 @router.post("/answer")

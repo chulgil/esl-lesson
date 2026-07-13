@@ -30,6 +30,17 @@ export interface AnswerResult {
   card: { state: string; due_at: string };
 }
 
+/** 단어 인사이트 카드 (docs/proposal/word-insight.md) */
+export interface WordInsight {
+  ipa?: string;
+  pos?: string;
+  nuance_ko?: string;
+  examples?: { en: string; ko: string }[];
+  collocations?: string[];
+  synonyms?: { word: string; ko: string; diff_ko: string }[];
+  confusables?: { word: string; ko: string; diff_ko: string }[];
+}
+
 export interface Stats {
   due_count: number;
   reviews_today: number;
@@ -93,11 +104,15 @@ export const studyApi = {
       study_level: number;
       levels_enabled: number[];
     }>("/api/settings"),
-  patchSettings: (body: { hint_delay_seconds?: number; study_level?: number }) =>
-    request<{ hint_delay_seconds: number; study_level: number; levels_enabled: number[] }>(
-      "/api/settings",
-      { method: "PATCH", body: JSON.stringify(body) },
-    ),
+  patchSettings: (body: {
+    hint_delay_seconds?: number;
+    study_level?: number;
+  }) =>
+    request<{
+      hint_delay_seconds: number;
+      study_level: number;
+      levels_enabled: number[];
+    }>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   answer: (body: {
     card_id: number;
     quiz_mode: string;
@@ -113,6 +128,8 @@ export const studyApi = {
       method: "POST",
       body: JSON.stringify({ card_id, rating }),
     }),
+  insight: (itemId: number) =>
+    request<WordInsight>(`/api/study/items/${itemId}/insight`),
   stats: () => request<Stats>("/api/study/stats"),
   library: () => request<{ items: LibraryContent[] }>("/api/contents"),
   libraryDetail: (id: number) => request<LibraryDetail>(`/api/contents/${id}`),

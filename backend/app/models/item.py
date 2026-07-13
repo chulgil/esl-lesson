@@ -77,3 +77,15 @@ class ItemOccurrence(Base, PkMixin):
     context_ko: Mapped[str | None] = mapped_column(Text)
 
     item: Mapped[LearningItem] = relationship(back_populates="occurrences")
+
+
+class WordInsight(Base, PkMixin, TimestampMixin):
+    """단어 인사이트 캐시 — 항목당 LLM 1회 생성 후 전역 공유 (docs/proposal/word-insight.md)."""
+
+    __tablename__ = "word_insights"
+
+    item_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("learning_items.id", ondelete="CASCADE"), unique=True
+    )
+    payload: Mapped[dict] = mapped_column(JsonDict)
+    model: Mapped[str] = mapped_column(Text)

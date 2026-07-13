@@ -53,8 +53,20 @@
   collocations[], synonyms[], confusables[]) + generated_at
 - **생성 시점: lazy** — 최초 조회 때 LLM 생성 후 영구 캐시 (파이프라인 일괄 생성
   대비 비용 최소화, 조회된 단어만 생성). 생성 중엔 스켈레톤 UI
-- **유사단어 후보**: 서버에 이미 상주하는 **qdrant** 에 단어 임베딩 저장 →
-  (1) 카드의 유사단어 후보 (2) 선다 오답 선지 품질 개선 (3) "아깝다" 판정에 재사용
+- **유사단어 후보(P2): pgvector** — 프로드 postgres 가 이미 pgvector 이미지
+  (vector **0.8.2** 가용, 2026-07-13 실측). 별도 벡터DB 없이 같은 DB 에서
+  조인·트랜잭션 일관성 확보 (2026-07-13 pgvector 리서치 반영):
+  - 스키마: `item_embeddings(item_id FK unique, embedding halfvec(1024))` —
+    **halfvec** 로 저장 50% 절감 (2GB 서버 배려), 수만 항목 규모에 충분
+  - 인덱스: `HNSW (embedding halfvec_cosine_ops)` — 연산자 클래스를 컬럼
+    타입과 일치시켜야 인덱스 사용됨 (주의점)
+  - 조회: `ORDER BY embedding <=> :query LIMIT k` (오름차순+LIMIT 이어야
+    인덱스 탐), 0.8.x **iterative index scan** 덕에 "내 학습 풀" 필터를
+    걸어도 후보 고갈 없음
+  - 용도: (1) 카드 유사단어 후보 (2) 선다 오답 선지 품질 개선 (3) "아깝다" 판정
+- **임베딩 제공자(P2 결정 필요)**: Voyage AI `voyage-3.5-lite`(1024d,
+  Matryoshka — 차원 축소 재사용 가능) 권장 / OpenAI text-embedding-3-small
+  대안. 둘 다 신규 API 키 필요
 - 비용 가드: 단어당 LLM 1회(수백 토큰) + 사용자 무관 공유 캐시(learning_items 가
   전역 공유이므로 1단어 1회면 끝)
 - 품질 가드: 예문은 내 영상 문맥 우선으로 환각 여지 축소, 카드에 "잘못됐어요"
@@ -77,6 +89,7 @@
 
 ## 리스크
 
-- 2GB 서버: qdrant 상주라 추가 인프라 없음, 임베딩 생성만 파이프라인에 추가
-  (배치, 저부하) — 게임/학습 루프와 격리 필요 (이벤트 루프 블로킹 금지)
+- 2GB 서버: pgvector 는 기존 postgres 안에서 동작 — 추가 프로세스 없음.
+  HNSW 인덱스 빌드는 데이터 적재 후 CONCURRENTLY 로 (쓰기 블로킹 방지)
+- 임베딩 생성은 파이프라인 배치로 — 게임/학습 루프와 격리 (이벤트 루프 블로킹 금지)
 - LLM 비용: lazy + 전역 캐시로 상한 자연 형성 (활성 어휘 수에 수렴)
