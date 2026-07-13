@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContentSummary } from "@/lib/admin-api";
+import { gameApi, type GameProfile, type LeaderboardEntry } from "@/lib/game-api";
 import { useAppTheme } from "@/lib/theme";
 import { Brick } from "@/components/brick/Brick";
 import { myApi } from "@/lib/my-api";
@@ -33,6 +34,8 @@ export default function GamePage() {
   const [itemToast, setItemToast] = useState<string | null>(null);
   const [garbageTip, setGarbageTip] = useState(false);
   const boardTheme = useAppTheme(); // 전역 테마(설정)를 게임 보드가 따름
+  const [profile, setProfile] = useState<GameProfile | null>(null);
+  const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
   const socketRef = useRef<GameSocket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const garbageTipShown = useRef(false);
@@ -125,6 +128,16 @@ export default function GamePage() {
       .catch(() => undefined);
   }, []);
 
+  // 내 전적 + 주간 리더보드 (P3 리텐션) — 로비 진입/경기 종료 시 갱신
+  useEffect(() => {
+    if (phase !== "lobby" && phase !== "ended") return;
+    gameApi.profile().then(setProfile).catch(() => undefined);
+    gameApi
+      .leaderboard()
+      .then((res) => setLeaders(res.items))
+      .catch(() => undefined);
+  }, [phase]);
+
   // 첫 garbage(회색 젤리) 수신 시 1회 설명 토스트 — 정체불명 혼란 방지
   useEffect(() => {
     const count = gameState?.me?.bricks.filter((b) => b.garbage).length ?? 0;
@@ -150,6 +163,29 @@ export default function GamePage() {
     socketRef.current?.useItem(item);
   }
 
+  // 재대결 — reload 대신 상태 리셋: PvE 는 같은 설정으로 즉시 한 판 더 (P3)
+  function playAgain() {
+    const wasPve = matchInfo?.mode === "pve";
+    setGameState(null);
+    setEndResult(null);
+    setMatchInfo(null);
+    setHint(null);
+    setItemToast(null);
+    setGarbageTip(false);
+    setMissSignal(0);
+    garbageTipShown.current = false;
+    prevGarbageCount.current = 0;
+    if (wasPve) {
+      socketRef.current?.joinPve(
+        "en",
+        botLevel,
+        selectedContents.length ? selectedContents : undefined,
+      );
+    } else {
+      setPhase("lobby");
+    }
+  }
+
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-4 py-8 sm:px-10">
       <header className="mb-6 flex items-center gap-4">
@@ -172,6 +208,8 @@ export default function GamePage() {
           myContents={myContents}
           selectedContents={selectedContents}
           setSelectedContents={setSelectedContents}
+          profile={profile}
+          leaders={leaders}
           onPve={() =>
             socketRef.current?.joinPve(
               "en",
@@ -244,7 +282,7 @@ export default function GamePage() {
         <ResultPanel
           result={endResult}
           you={matchInfo?.you ?? 1}
-          onAgain={() => window.location.reload()}
+          onAgain={playAgain}
         />
       )}
     </main>
@@ -259,6 +297,8 @@ function Lobby({
   myContents,
   selectedContents,
   setSelectedContents,
+  profile,
+  leaders,
   onPve,
   onPvp,
   onCreateRoom,
@@ -271,6 +311,8 @@ function Lobby({
   myContents: ContentSummary[];
   selectedContents: number[];
   setSelectedContents: (ids: number[]) => void;
+  profile: GameProfile | null;
+  leaders: LeaderboardEntry[];
   onPve: () => void;
   onPvp: () => void;
   onCreateRoom: () => void;
@@ -313,6 +355,45 @@ function Lobby({
           </li>
         </ul>
       </div>
+
+      {((profile?.played ?? 0) > 0 || leaders.length > 0) && (
+        <div className="flex flex-wrap gap-4">
+          {profile && profile.played > 0 && (
+            <div className="min-w-56 flex-1 rounded-lg border-2 border-ink/10 bg-white p-4">
+              <p className="mb-2 text-sm font-bold">내 전적</p>
+              <p className="text-sm opacity-80">
+                <b>
+                  {profile.wins}승 {profile.losses}패
+                </b>{" "}
+                · 최고 점수 <b>{profile.best_score}</b>
+              </p>
+              <p className="mt-1 text-xs opacity-60">
+                최다 콤보 {profile.best_combo} · 최고 WPM {profile.best_wpm}
+              </p>
+            </div>
+          )}
+          {leaders.length > 0 && (
+            <div className="min-w-56 flex-1 rounded-lg border-2 border-ink/10 bg-white p-4">
+              <p className="mb-2 text-sm font-bold">
+                주간 리더보드{" "}
+                <span className="text-xs font-normal opacity-60">
+                  최근 7일 합산
+                </span>
+              </p>
+              <ol className="flex flex-col gap-1 text-sm">
+                {leaders.slice(0, 5).map((l, i) => (
+                  <li key={`${l.name}-${i}`} className="flex justify-between">
+                    <span>
+                      {i + 1}. {l.name}
+                    </span>
+                    <b>{l.score}</b>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+      )}
 
       {myContents.length > 0 && (
         <div>
@@ -431,6 +512,12 @@ function ResultPanel({
 }) {
   const my = you === 1 ? result.stats.p1 : result.stats.p2;
   const titles = { win: "승리!", lose: "패배...", draw: "무승부" } as const;
+  const RECORD_LABELS: Record<string, string> = {
+    score: "최고 점수",
+    max_combo: "최다 콤보",
+    wpm: "최고 WPM",
+  };
+  const records = result.records ?? [];
   return (
     <section className="mt-6 max-w-md rounded-lg border-2 border-ink/10 bg-white p-6">
       <h2
@@ -444,6 +531,19 @@ function ResultPanel({
       >
         {titles[result.winner]}
       </h2>
+      {records.length > 0 && (
+        // 개인 기록 경신 — "지난번의 나"를 이기는 순간을 크게 (P3 리텐션)
+        <div className="mt-3 flex flex-wrap gap-2">
+          {records.map((r) => (
+            <span
+              key={r}
+              className="rounded-full bg-brick-yellow px-3 py-1 text-xs font-bold"
+            >
+              {RECORD_LABELS[r] ?? r} 경신!
+            </span>
+          ))}
+        </div>
+      )}
       <table className="mt-4 w-full text-sm">
         <tbody>
           <Row label="점수" value={my.score} />

@@ -321,7 +321,11 @@ async def submit_answer(
         try:
             for s in await embeddings.similar_items(db, item.id, k=5):
                 if s[field].strip().lower() == normalized:
-                    close_match = {"en_text": s["en_text"], "ko_text": s["ko_text"]}
+                    close_match = {
+                        "item_id": s["id"],
+                        "en_text": s["en_text"],
+                        "ko_text": s["ko_text"],
+                    }
                     break
         except Exception:  # 판정 실패는 기능 저하일 뿐 — 채점 응답은 정상 진행
             logger.exception("close-match check failed item=%s", item.id)
@@ -487,6 +491,43 @@ async def _load_card(db: AsyncSession, card_id: int, user: User) -> ReviewCard:
 
 class SuspendBody(BaseModel):
     suspended: bool
+
+
+class AddCardBody(BaseModel):
+    item_id: int
+
+
+@cards_router.post("")
+async def add_card(
+    body: AddCardBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """유사단어 원탭 학습 추가 (P3) — 이미 있으면 기존 카드 반환."""
+    item = (
+        await db.execute(
+            select(LearningItem).where(
+                LearningItem.id == body.item_id,
+                LearningItem.review_status == "approved",
+                visible_item_clause(user.id),
+            )
+        )
+    ).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "item_not_found")
+    existing = (
+        await db.execute(
+            select(ReviewCard).where(
+                ReviewCard.user_id == user.id, ReviewCard.item_id == body.item_id
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return {"added": False, "card_id": existing.id}
+    card = ReviewCard(user_id=user.id, item_id=body.item_id, state="new", due_at=datetime.now(UTC))
+    db.add(card)
+    await db.commit()
+    return {"added": True, "card_id": card.id}
 
 
 @cards_router.post("/{card_id}/suspend")

@@ -23,6 +23,7 @@ from app.models import (
     LearningItem,
     ReviewCard,
 )
+from app.services.game import records
 from app.services.game.bots import Bot
 from app.services.game.engine import Board, Match, build_word_queue
 from app.services.visibility import visible_item_clause
@@ -360,6 +361,20 @@ class GameManager:
             slot = session.players.get(winner_no)
             winner_user_id = slot.user_id if slot else None
 
+        # 개인 최고 기록 경신 판정 — 이번 결과 저장 "전"의 과거 기록과 비교 (P3)
+        records_by_player: dict[int, list[str]] = {}
+        if not aborted:
+            for player_no, slot in session.players.items():
+                if slot.user_id is None:
+                    continue
+                try:
+                    prev = await self._previous_bests(slot.user_id)
+                    records_by_player[player_no] = records.new_records(
+                        prev, stats[f"p{player_no}"]
+                    )
+                except Exception:
+                    logger.exception("records check failed user=%s", slot.user_id)
+
         await self._save_result(session, winner_user_id, stats, aborted)
 
         for player_no, slot in session.players.items():
@@ -368,7 +383,13 @@ class GameManager:
                 outcome = "win" if player_no == winner_no else "lose"
             await self._safe_send(
                 slot,
-                {"t": "match.end", "winner": outcome, "stats": stats, "aborted": aborted},
+                {
+                    "t": "match.end",
+                    "winner": outcome,
+                    "stats": stats,
+                    "aborted": aborted,
+                    "records": records_by_player.get(player_no, []),
+                },
             )
         self._cleanup(session)
 
@@ -400,6 +421,23 @@ class GameManager:
             db.add(row)
             await db.commit()
             return row.id
+
+    async def _previous_bests(self, user_id: int) -> dict:
+        async with get_session_factory()() as db:
+            rows = (
+                await db.execute(
+                    select(
+                        GameMatch.player1_id,
+                        GameMatch.p1_score,
+                        GameMatch.p2_score,
+                        GameMatch.stats,
+                    ).where(
+                        (GameMatch.player1_id == user_id) | (GameMatch.player2_id == user_id),
+                        GameMatch.status == "finished",
+                    )
+                )
+            ).all()
+        return records.bests_from_matches(user_id, rows)
 
     async def _update_match_row(self, session: MatchSession, player2_id: int) -> None:
         async with get_session_factory()() as db:

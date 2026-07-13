@@ -76,7 +76,7 @@ async def test_wrong_answer_reports_close_match(client, db_session):
     res = await client.get("/api/study/queue")
     q = res.json()["questions"][0]
     field = "ko_text" if q["quiz_mode"] == "choice_en2ko" else "en_text"
-    fake = [{"en_text": "villain", "ko_text": "악당", "distance": 0.1}]
+    fake = [{"id": 777, "en_text": "villain", "ko_text": "악당", "distance": 0.1}]
 
     with (
         patch.object(embeddings, "enabled", return_value=True),
@@ -93,7 +93,11 @@ async def test_wrong_answer_reports_close_match(client, db_session):
         )
     body = wrong_similar.json()
     assert body["correct"] is False
-    assert body["close_match"] == {"en_text": "villain", "ko_text": "악당"}
+    assert body["close_match"] == {
+        "item_id": 777,
+        "en_text": "villain",
+        "ko_text": "악당",
+    }
 
     # 무관 오답 → close_match 없음 (두 번째 문항이 없으므로 같은 카드 재채점은 하지 않고
     # 새 카드로 확인)

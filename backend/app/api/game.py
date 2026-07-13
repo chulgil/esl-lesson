@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db, get_session_factory
 from app.core.security import SESSION_COOKIE, decode_session_token, get_current_user
 from app.models import GameMatch, User
+from app.services.game import records
 from app.services.game.manager import WordPoolError, manager
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,25 @@ async def game_profile(
             )
         )
     ).scalar_one()
-    return {"played": played, "wins": wins, "losses": played - wins, "best_score": best_score or 0}
+    stat_rows = (
+        await db.execute(
+            select(
+                GameMatch.player1_id, GameMatch.p1_score, GameMatch.p2_score, GameMatch.stats
+            ).where(
+                (GameMatch.player1_id == user.id) | (GameMatch.player2_id == user.id),
+                GameMatch.status == "finished",
+            )
+        )
+    ).all()
+    bests = records.bests_from_matches(user.id, stat_rows)
+    return {
+        "played": played,
+        "wins": wins,
+        "losses": played - wins,
+        "best_score": best_score or 0,
+        "best_combo": int(bests["max_combo"]),
+        "best_wpm": round(bests["wpm"], 1),
+    }
 
 
 @router.get("/leaderboard")

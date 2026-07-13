@@ -583,6 +583,18 @@ function Feedback({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [showInsight, setShowInsight] = useState(false);
+  const [closeAdded, setCloseAdded] = useState(false);
+
+  // 헷갈린 유사단어를 원탭으로 학습 큐에 추가 — 어휘망 확장 루프 (P3)
+  async function addCloseWord() {
+    if (!result.close_match || closeAdded) return;
+    try {
+      await studyApi.addCard(result.close_match.item_id);
+      setCloseAdded(true);
+    } catch {
+      // 실패는 조용히 — 다음 기회에 다시 시도 가능
+    }
+  }
 
   // 인사이트는 항목의 영어 표현 기준 (en2ko 는 문제가 영어, 그 외는 정답이 영어)
   const enWord =
@@ -654,15 +666,27 @@ function Feedback({
               <p className="opacity-70">{result.explanation.ko}</p>
             </div>
           </div>
-          {question.level <= 2 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {question.level <= 2 && (
+              <button
+                type="button"
+                onClick={() => setShowInsight(true)}
+                className="min-h-8 cursor-pointer rounded-full border-2 border-brick-yellow bg-white px-3 py-1 text-xs font-bold transition hover:-translate-y-0.5"
+              >
+                두 단어 차이 자세히 보기
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setShowInsight(true)}
-              className="mt-2 min-h-8 cursor-pointer rounded-full border-2 border-brick-yellow bg-white px-3 py-1 text-xs font-bold transition hover:-translate-y-0.5"
+              disabled={closeAdded}
+              onClick={addCloseWord}
+              className="min-h-8 cursor-pointer rounded-full border-2 border-brick-green/60 bg-white px-3 py-1 text-xs font-bold text-brick-green transition hover:-translate-y-0.5 disabled:opacity-60"
             >
-              두 단어 차이 자세히 보기
+              {closeAdded
+                ? "학습 큐에 추가됨!"
+                : `"${result.close_match.en_text}" 도 학습에 추가`}
             </button>
-          )}
+          </div>
         </div>
       )}
 

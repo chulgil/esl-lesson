@@ -23,7 +23,7 @@ export interface AnswerResult {
   interval_previews: Record<string, number>;
   correct_answer: string;
   /** 오답이 유사단어였을 때 — "아깝다" 비교 카드 (P2) */
-  close_match: { en_text: string; ko_text: string } | null;
+  close_match: { item_id: number; en_text: string; ko_text: string } | null;
   explanation: {
     ko: string;
     thinking_ko: string | null;
@@ -129,6 +129,11 @@ export const studyApi = {
     request("/api/study/rate", {
       method: "POST",
       body: JSON.stringify({ card_id, rating }),
+    }),
+  addCard: (item_id: number) =>
+    request<{ added: boolean; card_id: number }>("/api/cards", {
+      method: "POST",
+      body: JSON.stringify({ item_id }),
     }),
   insight: (itemId: number) =>
     request<WordInsight>(`/api/study/items/${itemId}/insight`),

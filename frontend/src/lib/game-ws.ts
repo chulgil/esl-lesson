@@ -63,6 +63,8 @@ export interface MatchEndMsg {
     duration: number;
   };
   aborted: boolean;
+  /** 이번 매치로 경신한 개인 기록 (score/max_combo/wpm — P3) */
+  records?: string[];
 }
 
 export interface MatchPlayerStats {
