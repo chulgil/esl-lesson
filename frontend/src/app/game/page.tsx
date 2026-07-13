@@ -28,8 +28,13 @@ export default function GamePage() {
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [hint, setHint] = useState<string | null>(null);
+  const [missSignal, setMissSignal] = useState(0);
+  const [itemToast, setItemToast] = useState<string | null>(null);
+  const [garbageTip, setGarbageTip] = useState(false);
   const socketRef = useRef<GameSocket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const garbageTipShown = useRef(false);
+  const prevGarbageCount = useRef(0);
 
   const handleMessage = useCallback((msg: ServerMsg) => {
     switch (msg.t) {
@@ -43,6 +48,8 @@ export default function GamePage() {
       case "match.found":
         setMatchInfo(msg);
         setEndResult(null);
+        garbageTipShown.current = false;
+        prevGarbageCount.current = 0;
         setPhase(msg.countdown > 0 ? "countdown" : "playing");
         if (msg.countdown > 0) {
           setTimeout(() => setPhase("playing"), msg.countdown * 1000);
@@ -50,6 +57,16 @@ export default function GamePage() {
         break;
       case "state":
         setGameState(msg);
+        break;
+      case "clear.result":
+        // 오답은 조용히 지나가면 "왜 안 없어지지?" 혼란 — 셰이크 + 콤보 리셋 표시
+        if (!msg.ok && msg.effects.includes("miss")) {
+          setMissSignal((n) => n + 1);
+        }
+        break;
+      case "item.gained":
+        setItemToast(msg.item);
+        setTimeout(() => setItemToast(null), 2500);
         break;
       case "match.end":
         setEndResult(msg);
@@ -105,6 +122,17 @@ export default function GamePage() {
       )
       .catch(() => undefined);
   }, []);
+
+  // 첫 garbage(###) 수신 시 1회 설명 토스트 — "###가 뭐지?" 혼란 방지
+  useEffect(() => {
+    const count = gameState?.me?.bricks.filter((b) => b.garbage).length ?? 0;
+    if (count > prevGarbageCount.current && !garbageTipShown.current) {
+      garbageTipShown.current = true;
+      setGarbageTip(true);
+      setTimeout(() => setGarbageTip(false), 6000);
+    }
+    prevGarbageCount.current = count;
+  }, [gameState]);
 
   function submitWord() {
     if (!input.trim()) return;
@@ -199,6 +227,9 @@ export default function GamePage() {
           inputRef={inputRef}
           disabled={phase !== "playing"}
           hint={hint}
+          missSignal={missSignal}
+          itemToast={itemToast}
+          garbageTip={garbageTip}
           onInput={setInput}
           onSubmit={submitWord}
           onTap={tapChip}
@@ -260,15 +291,22 @@ function Lobby({
             떨어지면 하단 뜻 칩을 <b>탭</b>해서 제거
           </li>
           <li>
-            <b className="text-brick-green">한글 → 영어</b> 구간: 한글 뜻이
-            떨어지면 영어로 <b>타이핑</b>
+            <b className="text-brick-green">한글 → 영어</b> 구간: 영어로{" "}
+            <b>타이핑</b> — 철자가 비슷해도 정답!
           </li>
           <li className="opacity-70">
-            시간이 지날수록 방향 구간이 번갈아 바뀝니다.
+            시간이 지날수록 빨라지고 방향 구간이 번갈아 바뀝니다
           </li>
           <li>
-            <b>아이템</b>: 5콤보 / ★브릭으로 획득 — ❄정지 · ?힌트 · *폭탄 ·
-            ▽방어막
+            <b>3콤보</b>마다 상대에게 공격 · <b>8자 이상</b> 단어 클리어도 공격
+          </li>
+          <li>
+            회색 <b>###</b> = 상대의 공격 브릭 — 아무 단어나 클리어하면 1개씩
+            소멸
+          </li>
+          <li>
+            <b>아이템</b> (5콤보/★브릭 클리어): ❄3초 멈춤 · ?정답 보기 · *###
+            제거 · ▽공격 방어
           </li>
         </ul>
       </div>

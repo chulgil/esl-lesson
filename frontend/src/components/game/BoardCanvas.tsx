@@ -77,6 +77,19 @@ export function BoardCanvas({
       if (state.speed_level > prev.speed_level) {
         popups.current.push({ text: "SPEED UP!", life: 1, big: true });
       }
+      // 구간 전환 배너 (스펙: 방향 배너) — 입력 방식이 바뀌는 순간을 크게 알림
+      if (
+        state.direction !== prev.direction ||
+        state.input_mode !== prev.input_mode
+      ) {
+        const banner =
+          state.input_mode === "type"
+            ? "한글→영어 타이핑!"
+            : state.direction === "en2ko"
+              ? "영어→한글 뜻 탭!"
+              : "한글→영어 단어 탭!";
+        popups.current.push({ text: banner, life: 1.4, big: true });
+      }
       const prevGarbage = prev.bricks.filter((b) => b.garbage).length;
       const nowGarbage = state.bricks.filter((b) => b.garbage).length;
       if (nowGarbage > prevGarbage) {
@@ -211,7 +224,8 @@ function draw(
 
     const rowHeight = height / ROWS;
     const brickHeight = rowHeight * 0.86;
-    const fontSize = Math.max(10, Math.min(16, width / 14));
+    // 브릭 텍스트 = 출제 문제(주 읽기 대상) — 상한 18px 로 인지 우선
+    const fontSize = Math.max(10, Math.min(18, width / 14));
 
     for (const brick of state.bricks) {
       // 보간: 서버 y 로 부드럽게 수렴
@@ -221,7 +235,12 @@ function draw(
       smoothY.set(brick.id, next);
 
       const y = rowToY(next, height) - brickHeight;
-      const label = brick.garbage ? "###" : brick.display;
+      // ★ 브릭도 문제 텍스트를 표시 (★만 그리면 뭘 탭/타이핑할지 알 수 없음)
+      const label = brick.garbage
+        ? "###"
+        : brick.item
+          ? `★ ${brick.display}`
+          : brick.display;
       const textWidth = ctx.measureText(label).width;
       const brickWidth = Math.min(width - 8, Math.max(52, textWidth + 26));
       const x = (width - brickWidth) / 2;
@@ -236,10 +255,10 @@ function draw(
         ctx.fill();
         ctx.restore();
         ctx.fillStyle = "#2B2B33";
-        ctx.font = `bold ${fontSize + 4}px Inter, sans-serif`;
+        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("★", x + brickWidth / 2, y + brickHeight / 2 + 2);
+        ctx.fillText(label, x + brickWidth / 2, y + brickHeight / 2 + 2);
         continue;
       }
 

@@ -87,6 +87,30 @@ body {
   animation: typo-float 7s ease-in-out infinite;
 }
 
+/* 게임 오답 피드백 — 입력 영역 좌우 셰이크 */
+@keyframes miss-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-8px);
+  }
+  40% {
+    transform: translateX(8px);
+  }
+  60% {
+    transform: translateX(-5px);
+  }
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+.miss-shake {
+  animation: miss-shake 0.4s ease;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

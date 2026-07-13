@@ -17,12 +17,26 @@ function useIsDesktop(): boolean {
 }
 
 /** 대전 화면 레이아웃 — 데스크톱: 중앙 대형 보드 + 우측 상대/HUD, 모바일: 상대 스트립 상단 고정 + 내 보드 + 하단 입력 */
-const ITEM_META: Record<string, { icon: string; label: string }> = {
-  freeze: { icon: "❄", label: "정지" },
-  hint: { icon: "?", label: "힌트" },
-  bomb: { icon: "*", label: "폭탄" },
-  shield: { icon: "▽", label: "방어막" },
-};
+// label 에 효과를 내장 — 첫 사용자도 버튼만 보고 뭘 하는지 알게
+const ITEM_META: Record<string, { icon: string; label: string; desc: string }> =
+  {
+    freeze: {
+      icon: "❄",
+      label: "3초 멈춤",
+      desc: "3초간 내 보드 낙하/생성 정지",
+    },
+    hint: {
+      icon: "?",
+      label: "정답 보기",
+      desc: "가장 위험한 브릭의 정답을 표시",
+    },
+    bomb: {
+      icon: "*",
+      label: "### 제거",
+      desc: "상대가 보낸 회색 브릭 전부 제거",
+    },
+    shield: { icon: "▽", label: "공격 방어", desc: "다음 공격 1회 무효화" },
+  };
 
 export function PlayArea({
   me,
@@ -33,6 +47,9 @@ export function PlayArea({
   inputRef,
   disabled,
   hint,
+  missSignal,
+  itemToast,
+  garbageTip,
   onInput,
   onSubmit,
   onTap,
@@ -46,6 +63,9 @@ export function PlayArea({
   inputRef: React.RefObject<HTMLInputElement | null>;
   disabled: boolean;
   hint: string | null;
+  missSignal: number;
+  itemToast: string | null;
+  garbageTip: boolean;
   onInput: (v: string) => void;
   onSubmit: () => void;
   onTap: (chip: string) => void;
@@ -53,6 +73,15 @@ export function PlayArea({
 }) {
   const isDesktop = useIsDesktop();
   const timeLeft = Math.max(0, 180 - Math.floor(elapsed));
+
+  // 오답 피드백 — 셰이크 + "콤보 리셋" 표시 (조용한 실패 방지)
+  const [missFlash, setMissFlash] = useState(false);
+  useEffect(() => {
+    if (missSignal === 0) return;
+    setMissFlash(true);
+    const t = setTimeout(() => setMissFlash(false), 600);
+    return () => clearTimeout(t);
+  }, [missSignal]);
 
   // 입력 방식: 칩 있는 브릭(tap) / 칩 없는 일반 브릭(type). 구간 전환 시 공존 가능.
   const hasTapBricks = (me?.bricks ?? []).some((b) => !b.garbage && b.chip);
@@ -112,9 +141,27 @@ export function PlayArea({
 
   // 입력 영역: 칩(tap) 브릭 있으면 칩, 타이핑(type) 브릭 있으면 입력. 공존 시 둘 다.
   const interact = (
-    <div className="flex flex-col gap-2">
+    <div className={`flex flex-col gap-2 ${missFlash ? "miss-shake" : ""}`}>
+      {missFlash && (
+        <p className="text-center text-base font-bold text-brick-red">
+          오답! 콤보 리셋
+        </p>
+      )}
+      {itemToast && ITEM_META[itemToast] && (
+        <p className="text-center text-base font-bold text-ink">
+          <span className="rounded bg-brick-yellow/40 px-2 py-0.5">
+            + {ITEM_META[itemToast].icon} {ITEM_META[itemToast].label} 획득!
+          </span>
+        </p>
+      )}
+      {garbageTip && (
+        <p className="rounded-md bg-brick-red/10 px-3 py-2 text-center text-sm font-bold text-brick-red">
+          회색 ### = 상대의 공격! 아무 단어나 클리어하면 1개씩 사라져요
+        </p>
+      )}
       {hint && (
-        <p className="text-center text-sm font-bold text-brick-yellow">
+        // 힌트는 아이템 사용의 결과 — 작게 보이면 소비한 보람이 없음, 크게
+        <p className="rounded-md bg-highlight/60 py-1 text-center text-lg font-bold text-ink">
           힌트: {hint}
         </p>
       )}
@@ -196,8 +243,9 @@ function DirectionBadge({
         ? "영어 → 한글 (뜻 탭)"
         : "한글 → 영어 (단어 탭)";
   return (
+    // "지금 뭘 해야 하는가"의 1차 신호 — text-base 로 키워 인지 우선
     <div
-      className={`rounded-full px-4 py-1 text-sm font-bold ${
+      className={`rounded-full px-5 py-1.5 text-base font-bold ${
         inputMode === "type"
           ? "bg-brick-red/15 text-brick-red"
           : en2ko
@@ -224,7 +272,7 @@ function ItemBar({
   if (items.length === 0 && shield === 0) {
     return (
       <p className="text-center text-xs opacity-40">
-        아이템 없음 — 5콤보/★브릭으로 획득
+        아이템 없음 — 5콤보 또는 ★브릭 클리어로 획득
       </p>
     );
   }
@@ -232,7 +280,7 @@ function ItemBar({
     <div className="flex items-center justify-center gap-2">
       {shield > 0 && (
         <span className="rounded-md bg-brick-green/20 px-2 py-1 text-xs font-bold text-brick-green">
-          {ITEM_META.shield.icon} 방어막 x{shield}
+          {ITEM_META.shield.icon} 공격 방어 x{shield}
         </span>
       )}
       {items.map((item, i) => {
@@ -244,10 +292,10 @@ function ItemBar({
             disabled={disabled}
             onClick={() => onUse(item)}
             className="flex min-h-11 items-center gap-1 rounded-md border-2 border-brick-yellow/60 bg-brick-yellow/20 px-3 font-bold transition hover:-translate-y-0.5 hover:border-brick-yellow disabled:opacity-50"
-            title={`${meta?.label} 사용`}
+            title={meta?.desc}
           >
             <span className="text-lg">{meta?.icon}</span>
-            <span className="text-xs">{meta?.label}</span>
+            <span className="text-sm">{meta?.label}</span>
           </button>
         );
       })}
