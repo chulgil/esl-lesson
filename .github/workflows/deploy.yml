@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# 배포 런 겹침 금지 — 2026-07-12 동시 빌드로 서버(2GB) OOM wedge 재발 방지.
+# cancel-in-progress=false: 진행 중 배포는 완주시키고 새 런은 큐잉 (half-deployed 방지)
+concurrency:
+  group: deploy-codenavi
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to codenavi
