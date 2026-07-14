@@ -1,5 +1,6 @@
 import { Brick } from "@/components/brick/Brick";
 import { TypoBackground } from "@/components/landing/TypoBackground";
+import { TrustNote } from "@/components/landing/TrustNote";
 import { loginUrl } from "@/lib/api";
 
 /** 비로그인 쇼케이스 랜딩 — "이거 영어 학습에 획기적인데?" 를 목표로 하는 페이지 */
@@ -163,6 +164,7 @@ export function Showcase() {
         <Brick color="green" href={loginUrl("/")}>
           무료로 시작하기 — Google 로그인
         </Brick>
+        <TrustNote />
       </section>
     </div>
   );

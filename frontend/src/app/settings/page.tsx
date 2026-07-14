@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { useState } from "react";
+import { deleteMe } from "@/lib/api";
 import { APP_THEMES, setAppTheme, useAppTheme } from "@/lib/theme";
 
 export default function SettingsPage() {
@@ -47,6 +50,79 @@ export default function SettingsPage() {
           })}
         </div>
       </section>
+
+      <DangerZone />
     </main>
+  );
+}
+
+/** 회원탈퇴 — 2단계 확인 후 즉시 파기. 무엇이 지워지는지 명시해 불안 없이 결정하게 */
+function DangerZone() {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function handleDelete() {
+    setDeleting(true);
+    setFailed(false);
+    const ok = await deleteMe().catch(() => false);
+    if (ok) {
+      window.location.href = "/";
+      return;
+    }
+    setFailed(true);
+    setDeleting(false);
+  }
+
+  return (
+    <section className="mt-10 max-w-lg border-t-2 border-ink/10 pt-6">
+      <p className="mb-1 text-sm font-bold">계정</p>
+      <p className="mb-3 text-xs opacity-60">
+        탈퇴하면 계정·학습 기록·게임 전적이 즉시 삭제되고 복구할 수 없어요.
+        저장되는 개인정보는{" "}
+        <Link href="/privacy" className="underline underline-offset-2">
+          개인정보처리방침
+        </Link>
+        에서 확인할 수 있어요.
+      </p>
+      {!confirming ? (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="min-h-11 rounded-md border-2 border-ink/20 bg-white px-4 text-sm font-bold opacity-70 transition hover:border-brick-red hover:text-brick-red hover:opacity-100"
+        >
+          회원탈퇴
+        </button>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border-2 border-brick-red/40 bg-white p-3">
+          <p className="text-sm font-bold text-brick-red">
+            정말 탈퇴할까요? 모든 데이터가 즉시 삭제돼요.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={handleDelete}
+              className="min-h-11 rounded-md bg-brick-red px-4 text-sm font-bold text-brick-label transition-colors hover:bg-brick-red/85 disabled:opacity-50"
+            >
+              {deleting ? "삭제 중..." : "탈퇴하고 전부 삭제"}
+            </button>
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => setConfirming(false)}
+              className="min-h-11 rounded-md border-2 border-ink/20 bg-white px-4 text-sm font-bold"
+            >
+              취소
+            </button>
+          </div>
+          {failed && (
+            <p className="w-full text-xs text-brick-red">
+              탈퇴 처리에 실패했어요 — 잠시 후 다시 시도해주세요.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

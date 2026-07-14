@@ -6,9 +6,9 @@ from typing import Annotated
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -22,7 +22,9 @@ from app.core.security import (
     safe_next_path,
     verify_state_token,
 )
+from app.models import Content, ContentSubscription, ReviewCard, ReviewLog
 from app.models.user import ROLE_ADMIN, User, UserSettings
+from app.services.content_service import delete_content_row
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -178,3 +180,50 @@ async def me(user: Annotated[User, Depends(get_current_user)]) -> dict:
         "avatar_url": user.avatar_url,
         "role": user.role,
     }
+
+
+@me_router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """회원탈퇴 — 개인정보·학습 기록 즉시 파기 (개인정보처리방침의 파기 조항 구현).
+
+    유저 행 삭제로 설정/카드/로그/구독이 CASCADE 되고, 공용 콘텐츠·타인과
+    공유 중인 콘텐츠는 유지된다. 내가 마지막 구독자인 개인 콘텐츠만 본체 삭제.
+    """
+    settings = get_settings()
+    my_private = (
+        await db.execute(
+            select(Content)
+            .join(ContentSubscription, ContentSubscription.content_id == Content.id)
+            .where(
+                ContentSubscription.user_id == user.id,
+                Content.visibility == "private",
+            )
+        )
+    ).scalars()
+    for content in my_private:
+        others = (
+            await db.execute(
+                select(func.count(ContentSubscription.id)).where(
+                    ContentSubscription.content_id == content.id,
+                    ContentSubscription.user_id != user.id,
+                )
+            )
+        ).scalar_one()
+        if others == 0:
+            await delete_content_row(db, content)
+
+    # 파기 범위를 명시적으로 — DB CASCADE 에만 맡기지 않아 어떤 DB 에서도 동일 동작
+    for table, col in (
+        (ReviewLog.__table__, ReviewLog.user_id),
+        (ReviewCard.__table__, ReviewCard.user_id),
+        (ContentSubscription.__table__, ContentSubscription.user_id),
+        (UserSettings.__table__, UserSettings.user_id),
+    ):
+        await db.execute(table.delete().where(col == user.id))
+    await db.delete(user)
+    await db.commit()
+    response.delete_cookie(SESSION_COOKIE, domain=settings.cookie_domain or None)

@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Brick } from "@/components/brick/Brick";
+import { TrustNote } from "@/components/landing/TrustNote";
 import { loginUrl } from "@/lib/api";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -35,6 +36,7 @@ function LoginInner() {
       <Brick color="red" href={loginUrl("/")}>
         Google로 시작하기
       </Brick>
+      <TrustNote />
     </main>
   );
 }

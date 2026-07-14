@@ -19,7 +19,7 @@ from app.api.game import ws_router as game_ws_router
 from app.api.my_contents import router as my_contents_router
 from app.api.study import cards_router, settings_router
 from app.api.study import router as study_router
-from app.core.config import get_settings
+from app.core.config import assert_production_secrets, get_settings
 from app.core.db import get_db
 from app.workers.queue import start_workers, stop_workers
 
@@ -28,7 +28,9 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if get_settings().enable_workers:
+    settings = get_settings()
+    assert_production_secrets(settings)
+    if settings.enable_workers:
         await start_workers()
     yield
     await stop_workers()

@@ -4,6 +4,8 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEV_JWT_SECRET = "dev-only-secret-change-me"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -14,7 +16,7 @@ class Settings(BaseSettings):
     # 인증
     google_client_id: str = ""
     google_client_secret: str = ""
-    jwt_secret: str = "dev-only-secret-change-me"
+    jwt_secret: str = DEV_JWT_SECRET
     jwt_expires_hours: int = 24
     cookie_domain: str = ""  # 운영: .lessonaza.app / 로컬: 빈 값(호스트 쿠키)
     cookie_secure: bool = True
@@ -50,6 +52,12 @@ class Settings(BaseSettings):
     @property
     def admin_email_set(self) -> frozenset[str]:
         return frozenset(e.strip().lower() for e in self.admin_emails.split(",") if e.strip())
+
+
+def assert_production_secrets(settings: "Settings") -> None:
+    """운영 신호(cookie_secure)에서 기본 JWT 시크릿이면 기동 차단 — 세션 위조 방지."""
+    if settings.cookie_secure and settings.jwt_secret == DEV_JWT_SECRET:
+        raise RuntimeError("JWT_SECRET is the dev default — set a real secret in .env.api")
 
 
 @lru_cache
