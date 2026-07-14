@@ -38,3 +38,25 @@ class GameMatch(Base, PkMixin, CreatedAtMixin):
     stats: Mapped[dict] = mapped_column(JsonDict, default=dict)
     started_at: Mapped[datetime | None]
     ended_at: Mapped[datetime | None]
+
+
+class QuizRoyaleMatch(Base, PkMixin, CreatedAtMixin):
+    """스피드 퀴즈 로얄 — 최대 4인, 1:1 전용 game_matches 와 분리 (proposal/quiz-royale.md)."""
+
+    __tablename__ = "quiz_royale_matches"
+    __table_args__ = (
+        CheckConstraint("mode IN ('solo','room')", name="ck_qr_mode"),
+        CheckConstraint(
+            "status IN ('waiting','playing','finished','aborted')",
+            name="ck_qr_status",
+        ),
+    )
+
+    host_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    mode: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, default="waiting", server_default="waiting")
+    # {"players": [{user_id,name,score,rank,is_bot}]} — 종료 시 확정
+    players: Mapped[dict] = mapped_column(JsonDict, default=dict)
+    ended_at: Mapped[datetime | None]

@@ -1,10 +1,9 @@
 """환경 설정. 모든 시크릿은 환경변수로만 주입한다 (docs/architecture/deployment.md)."""
 
+import secrets as _secrets
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-DEV_JWT_SECRET = "dev-only-secret-change-me"
 
 
 class Settings(BaseSettings):
@@ -16,7 +15,9 @@ class Settings(BaseSettings):
     # 인증
     google_client_id: str = ""
     google_client_secret: str = ""
-    jwt_secret: str = DEV_JWT_SECRET
+    # 빈 값이면: 운영(cookie_secure)은 기동 차단, 로컬은 프로세스별 랜덤 생성
+    # — 알려진 기본 시크릿을 코드에 두지 않는다 (CWE-798)
+    jwt_secret: str = ""
     jwt_expires_hours: int = 24
     cookie_domain: str = ""  # 운영: .lessonaza.app / 로컬: 빈 값(호스트 쿠키)
     cookie_secure: bool = True
@@ -55,11 +56,16 @@ class Settings(BaseSettings):
 
 
 def assert_production_secrets(settings: "Settings") -> None:
-    """운영 신호(cookie_secure)에서 기본 JWT 시크릿이면 기동 차단 — 세션 위조 방지."""
-    if settings.cookie_secure and settings.jwt_secret == DEV_JWT_SECRET:
-        raise RuntimeError("JWT_SECRET is the dev default — set a real secret in .env.api")
+    """운영 신호(cookie_secure)에서 JWT 시크릿 미설정이면 기동 차단 — 세션 위조 방지."""
+    if settings.cookie_secure and not settings.jwt_secret:
+        raise RuntimeError("JWT_SECRET is not set — add a real secret to .env.api")
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    assert_production_secrets(settings)
+    if not settings.jwt_secret:
+        # 로컬 미설정: 프로세스별 랜덤 — 재시작 시 세션이 풀리지만 로컬에선 무해
+        settings.jwt_secret = _secrets.token_urlsafe(32)
+    return settings

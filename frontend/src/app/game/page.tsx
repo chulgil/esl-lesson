@@ -11,11 +11,13 @@ import { useAppTheme } from "@/lib/theme";
 import { Brick } from "@/components/brick/Brick";
 import { myApi } from "@/lib/my-api";
 import { PlayArea } from "@/app/game/PlayArea";
+import { QuizRoyale } from "@/app/game/QuizRoyale";
 import { ItemIcon } from "@/components/game/ItemIcon";
 import {
   GameSocket,
   type MatchEndMsg,
   type MatchFoundMsg,
+  type QrMsg,
   type ServerMsg,
   type StateMsg,
 } from "@/lib/game-ws";
@@ -45,8 +47,18 @@ export default function GamePage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const garbageTipShown = useRef(false);
   const prevGarbageCount = useRef(0);
+  // 퀴즈 로얄 — 별도 상태 머신 (테트리스 phase 와 독립)
+  const [royaleOpen, setRoyaleOpen] = useState(false);
+  const qrHandlerRef = useRef<((msg: QrMsg) => void) | null>(null);
+  const registerQrHandler = useCallback((handler: (msg: QrMsg) => void) => {
+    qrHandlerRef.current = handler;
+  }, []);
 
   const handleMessage = useCallback((msg: ServerMsg) => {
+    if (msg.t.startsWith("qr.")) {
+      qrHandlerRef.current?.(msg as QrMsg);
+      return;
+    }
     switch (msg.t) {
       case "queue.waiting":
         setPhase("waiting");
@@ -207,7 +219,19 @@ export default function GamePage() {
 
       {error && <p className="mb-4 text-sm text-brick-red">{error}</p>}
 
-      {phase === "lobby" && (
+      {royaleOpen && (
+        <QuizRoyale
+          registerHandler={registerQrHandler}
+          onAnswer={(answer) => socketRef.current?.qrAnswer(answer)}
+          onStart={() => socketRef.current?.qrStart()}
+          onExit={() => {
+            socketRef.current?.qrLeave();
+            setRoyaleOpen(false);
+          }}
+        />
+      )}
+
+      {phase === "lobby" && !royaleOpen && (
         <Lobby
           botLevel={botLevel}
           setBotLevel={setBotLevel}
@@ -235,6 +259,27 @@ export default function GamePage() {
           onJoinRoom={() =>
             roomCode.trim() && socketRef.current?.joinRoom(roomCode.trim())
           }
+          onQuizSolo={(bots) => {
+            setError(null);
+            setRoyaleOpen(true);
+            socketRef.current?.qrSolo(
+              botLevel,
+              bots,
+              selectedContents.length ? selectedContents : undefined,
+            );
+          }}
+          onQuizCreate={() => {
+            setError(null);
+            setRoyaleOpen(true);
+            socketRef.current?.qrCreate(
+              selectedContents.length ? selectedContents : undefined,
+            );
+          }}
+          onQuizJoin={(code) => {
+            setError(null);
+            setRoyaleOpen(true);
+            socketRef.current?.qrJoin(code);
+          }}
         />
       )}
 
@@ -313,6 +358,9 @@ function Lobby({
   onPvp,
   onCreateRoom,
   onJoinRoom,
+  onQuizSolo,
+  onQuizCreate,
+  onQuizJoin,
 }: {
   botLevel: number;
   setBotLevel: (n: number) => void;
@@ -327,6 +375,9 @@ function Lobby({
   onPvp: () => void;
   onCreateRoom: () => void;
   onJoinRoom: () => void;
+  onQuizSolo: (bots: number) => void;
+  onQuizCreate: () => void;
+  onQuizJoin: (code: string) => void;
 }) {
   function toggleContent(id: number) {
     setSelectedContents(
@@ -482,6 +533,12 @@ function Lobby({
         </Brick>
       </div>
 
+      <QuizRoyaleEntry
+        onSolo={onQuizSolo}
+        onCreate={onQuizCreate}
+        onJoin={onQuizJoin}
+      />
+
       <div className="rounded-lg border-2 border-ink/10 bg-white p-4">
         <p className="mb-3 text-sm font-bold">사람과 대전</p>
         <div className="flex flex-wrap items-center gap-3">
@@ -506,6 +563,65 @@ function Lobby({
         </div>
       </div>
     </section>
+  );
+}
+
+/** 퀴즈 로얄 진입 — 봇 수 선택 + 방 만들기/입장 (docs/proposal/quiz-royale.md) */
+function QuizRoyaleEntry({
+  onSolo,
+  onCreate,
+  onJoin,
+}: {
+  onSolo: (bots: number) => void;
+  onCreate: () => void;
+  onJoin: (code: string) => void;
+}) {
+  const [bots, setBots] = useState(1);
+  const [code, setCode] = useState("");
+
+  return (
+    <div className="rounded-lg border-2 border-ink/10 bg-white p-4">
+      <p className="mb-1 text-sm font-bold">
+        스피드 퀴즈 로얄
+        <span className="ml-2 text-xs font-normal opacity-60">
+          최대 4명 — 같은 문제, 빠를수록 높은 점수
+        </span>
+      </p>
+      <p className="mb-3 text-xs opacity-60">
+        10라운드 4지선다. 위에서 고른 대전 소재를 그대로 사용해요.
+      </p>
+      <div className="mb-3 flex items-center gap-1">
+        <span className="mr-1 text-sm opacity-70">봇</span>
+        {[1, 2, 3].map((n) => (
+          <ModeButton key={n} active={bots === n} onClick={() => setBots(n)}>
+            {n}명
+          </ModeButton>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Brick color="green" onClick={() => onSolo(bots)}>
+          AI와 퀴즈 시작
+        </Brick>
+        <Brick color="blue" onClick={onCreate}>
+          방 만들기
+        </Brick>
+        <div className="flex items-center gap-2">
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="방 코드"
+            maxLength={6}
+            className="min-h-11 w-28 rounded-md border-2 border-ink/20 px-2 font-mono uppercase transition-colors focus:border-brick-blue focus:outline-none"
+          />
+          <Brick
+            color="yellow"
+            onClick={() => code.trim() && onJoin(code.trim())}
+          >
+            입장
+          </Brick>
+        </div>
+      </div>
+    </div>
   );
 }
 

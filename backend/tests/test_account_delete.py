@@ -3,7 +3,7 @@
 import pytest
 from sqlalchemy import func, select
 
-from app.core.config import DEV_JWT_SECRET, Settings, assert_production_secrets
+from app.core.config import Settings, assert_production_secrets
 from app.models import Content, ReviewCard, User, UserSettings
 from tests.test_study import login, seed_items
 
@@ -55,12 +55,11 @@ async def test_delete_me_cleans_orphan_private_content(client, db_session):
     assert private_items and public_items  # 픽스처 사용 명시
 
 
-def test_assert_production_secrets_blocks_default_jwt():
-    """운영 신호(cookie_secure)에서 기본 JWT 시크릿이면 기동 실패."""
-    prod_default = Settings(jwt_secret=DEV_JWT_SECRET, cookie_secure=True)
+def test_assert_production_secrets_blocks_unset_jwt():
+    """운영 신호(cookie_secure)에서 JWT 시크릿 미설정이면 기동 실패."""
     with pytest.raises(RuntimeError):
-        assert_production_secrets(prod_default)
+        assert_production_secrets(Settings(jwt_secret="", cookie_secure=True))
 
     # 로컬(cookie_secure=false)이나 운영+실시크릿은 통과
-    assert_production_secrets(Settings(jwt_secret=DEV_JWT_SECRET, cookie_secure=False))
-    assert_production_secrets(Settings(jwt_secret="real-secret", cookie_secure=True))
+    assert_production_secrets(Settings(jwt_secret="", cookie_secure=False))
+    assert_production_secrets(Settings(jwt_secret="prod-ok", cookie_secure=True))

@@ -1,0 +1,38 @@
+# 스펙: 스피드 퀴즈 로얄 — 최대 4인 버저 퀴즈
+
+> 최종 수정: 2026-07-14 · P1 구현 완료 · 기획 배경: [proposal/quiz-royale.md](../proposal/quiz-royale.md)
+
+같은 4지선다를 최대 4명에게 동시 출제 — 빠르고 정확할수록 높은 점수.
+문제는 대전 소재(내 콘텐츠 선택 규칙 공유)의 단어 풀에서 생성.
+
+## 규칙 (P1 확정)
+
+- 10라운드, 문제당 10초, 1인 1제출(수정 불가)
+- 점수: 정답 = `50 + ⌈50 x 남은시간/10⌉` (50~100), 오답/미제출 0
+- 라운드 종료(전원 제출 or 시간 만료) → 정답·획득·누적 순위 3초 공개
+- 동점은 공동 순위. 진입: 솔로(나+봇 1~3, 즉시 시작) / 방 코드(2~4인, 호스트 시작)
+- 봇: 정답률 `0.35+0.1x레벨`, 응답시각 `gauss(7.5-레벨, 1.5)` 클램프
+- 단어 풀 최소 15개 미만이면 `words_insufficient` (테트리스와 동일 안내)
+- 이탈: 대기실=제거(호스트 이탈 시 방 해체), 진행 중=미제출 계속,
+  인간 전원 이탈 시 중단 저장(aborted)
+
+## 프로토콜 (WS /ws/game, `qr.*`)
+
+| C→S | S→C |
+|---|---|
+| `qr.solo{bot_level,bots,content_ids?}` | `qr.room{code,mode,host,players[]}` |
+| `qr.create{content_ids?}` / `qr.join{code}` | `qr.round{no,total,prompt,choices,seconds}` |
+| `qr.start` (호스트) / `qr.answer{answer}` | `qr.answered{name}` / `qr.reveal{no,answer,gains,scores}` |
+| `qr.leave` | `qr.end{ranking,aborted}` |
+
+## 구현 위치
+
+- 서버: `services/game/quiz_royale.py` (라운드 루프 = 방당 태스크 1개 +
+  0.05s 폴링, 실시간 tick 없음) · 저장 `quiz_royale_matches`
+  (마이그레이션 b8c9d0e1f2a3, players JSONB 에 최종 순위)
+- 클라: `app/game/QuizRoyale.tsx` (대기실/라운드/공개/시상대),
+  로비 `QuizRoyaleEntry` (봇 수 선택 + 방 만들기/입장, 소재 선택 공유)
+
+## P2 후보
+
+리더보드 합산, 오답 → 원탭 학습 추가, 라운드 수/시간 설정, 관전, 빠른대전 매칭

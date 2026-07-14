@@ -76,16 +76,70 @@ export interface MatchPlayerStats {
   accuracy: number;
 }
 
+/** 스피드 퀴즈 로얄 (docs/proposal/quiz-royale.md) */
+export interface QrRoomMsg {
+  t: "qr.room";
+  code: string | null;
+  mode: "solo" | "room";
+  host: string;
+  players: { name: string; is_bot: boolean }[];
+}
+
+export interface QrRoundMsg {
+  t: "qr.round";
+  no: number;
+  total: number;
+  prompt: string;
+  choices: string[];
+  seconds: number;
+}
+
+export interface QrRevealMsg {
+  t: "qr.reveal";
+  no: number;
+  answer: string;
+  gains: Record<string, number>;
+  scores: QrRank[];
+}
+
+export interface QrRank {
+  user_id: number | null;
+  name: string;
+  score: number;
+  rank: number;
+  is_bot: boolean;
+}
+
+export interface QrEndMsg {
+  t: "qr.end";
+  ranking: QrRank[];
+  aborted: boolean;
+}
+
+export type QrMsg =
+  | QrRoomMsg
+  | QrRoundMsg
+  | QrRevealMsg
+  | QrEndMsg
+  | { t: "qr.answered"; name: string };
+
 export type ServerMsg =
   | StateMsg
   | MatchFoundMsg
   | ClearResultMsg
   | MatchEndMsg
+  | QrMsg
   | { t: "queue.waiting" }
   | { t: "room.created"; code: string }
   | { t: "attack.recv"; count: number }
   | { t: "item.gained"; item: string }
-  | { t: "item.result"; ok: boolean; item?: string; hint_answer?: string | null; cleared?: number }
+  | {
+      t: "item.result";
+      ok: boolean;
+      item?: string;
+      hint_answer?: string | null;
+      cleared?: number;
+    }
   | { t: "error"; code: string }
   | { t: "pong" };
 
@@ -145,6 +199,29 @@ export class GameSocket {
   }
   useItem(item: string): void {
     this.send({ t: "item.use", item });
+  }
+  qrSolo(botLevel: number, bots: number, contentIds?: number[]): void {
+    this.send({
+      t: "qr.solo",
+      bot_level: botLevel,
+      bots,
+      content_ids: contentIds,
+    });
+  }
+  qrCreate(contentIds?: number[]): void {
+    this.send({ t: "qr.create", content_ids: contentIds });
+  }
+  qrJoin(code: string): void {
+    this.send({ t: "qr.join", code });
+  }
+  qrStart(): void {
+    this.send({ t: "qr.start" });
+  }
+  qrAnswer(answer: string): void {
+    this.send({ t: "qr.answer", answer });
+  }
+  qrLeave(): void {
+    this.send({ t: "qr.leave" });
   }
   close(): void {
     this.ws?.close();

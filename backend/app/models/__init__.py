@@ -3,7 +3,7 @@
 from app.models.base import Base
 from app.models.card import ReviewCard, ReviewLog
 from app.models.content import Content, ContentSubscription, ExtractionJob, TranscriptSegment
-from app.models.game import GameMatch
+from app.models.game import GameMatch, QuizRoyaleMatch
 from app.models.item import ItemOccurrence, LearningItem, WordInsight
 from app.models.user import User, UserSettings
 
@@ -13,6 +13,7 @@ __all__ = [
     "ContentSubscription",
     "ExtractionJob",
     "GameMatch",
+    "QuizRoyaleMatch",
     "ItemOccurrence",
     "LearningItem",
     "ReviewCard",

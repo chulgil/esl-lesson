@@ -14,6 +14,7 @@ from app.core.security import SESSION_COOKIE, decode_session_token, get_current_
 from app.models import GameMatch, User
 from app.services.game import records
 from app.services.game.manager import WordPoolError, manager
+from app.services.game.quiz_royale import royale
 
 logger = logging.getLogger(__name__)
 
@@ -184,10 +185,43 @@ async def game_ws(websocket: WebSocket) -> None:
                 )
             elif t == "item.use":
                 await manager.handle_item(user_id, str(msg.get("item", "")))
+            # --- 스피드 퀴즈 로얄 (docs/proposal/quiz-royale.md) ---
+            elif t == "qr.solo":
+                try:
+                    await royale.solo(
+                        user_id,
+                        user.name,
+                        send,
+                        bot_level=int(msg.get("bot_level", 3)),
+                        bots=int(msg.get("bots", 1)),
+                        content_ids=_parse_content_ids(msg),
+                    )
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "qr.create":
+                try:
+                    await royale.create(
+                        user_id, user.name, send, content_ids=_parse_content_ids(msg)
+                    )
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "qr.join":
+                await royale.join(user_id, user.name, send, str(msg.get("code", "")))
+            elif t == "qr.start":
+                try:
+                    await royale.start(user_id)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "qr.answer":
+                await royale.answer(user_id, str(msg.get("answer", "")))
+            elif t == "qr.leave":
+                royale.detach(user_id)
             else:
                 await send({"t": "error", "code": "unknown_message"})
     except WebSocketDisconnect:
         manager.detach(user_id)
+        royale.detach(user_id)
     except Exception:
         logger.exception("ws error user=%s", user_id)
         manager.detach(user_id)
+        royale.detach(user_id)
