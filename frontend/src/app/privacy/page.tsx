@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { BackLink } from "@/components/nav/BackLink";
 
 export const metadata: Metadata = {
@@ -104,7 +105,12 @@ export default function PrivacyPage() {
             {s.body}
           </section>
         ))}
-        <p className="text-xs opacity-50">시행일: 2026-07-14</p>
+        <p className="text-xs opacity-50">
+          시행일: 2026-07-14 · 관련 문서:{" "}
+          <Link href="/copyright" className="underline underline-offset-2">
+            저작권 안내
+          </Link>
+        </p>
       </div>
     </main>
   );

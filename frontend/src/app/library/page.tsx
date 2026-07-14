@@ -54,6 +54,14 @@ export default function LibraryPage() {
           <p className="text-sm opacity-50">아직 준비된 콘텐츠가 없어요.</p>
         )}
       </div>
+
+      <p className="mt-10 text-xs opacity-50">
+        모든 영상은 유튜브 공식 플레이어로 재생되며 수익은 원저작자에게 귀속돼요
+        ·{" "}
+        <Link href="/copyright" className="underline underline-offset-2">
+          저작권 안내
+        </Link>
+      </p>
     </main>
   );
 }
