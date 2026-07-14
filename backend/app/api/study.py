@@ -482,6 +482,70 @@ async def get_stats(
     }
 
 
+@router.get("/leaderboard")
+async def study_leaderboard(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """주간 학습 리더보드 — 나 + 수락된 친구의 최근 7일 복습 수 (P1 데일리 루프).
+
+    0건 친구도 표시한다 — "친구가 아직 0개"가 곧 동기부여라서.
+    """
+    from sqlalchemy import and_, or_
+
+    from app.models.friend import Friendship
+
+    friend_rows = (
+        (
+            await db.execute(
+                select(Friendship).where(
+                    Friendship.status == "accepted",
+                    or_(
+                        Friendship.requester_id == user.id,
+                        Friendship.addressee_id == user.id,
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    ids = {user.id} | {
+        r.addressee_id if r.requester_id == user.id else r.requester_id for r in friend_rows
+    }
+    since = datetime.now(UTC) - timedelta(days=7)
+    rows = (
+        await db.execute(
+            select(User.id, User.name, func.count(ReviewLog.id))
+            .join(
+                ReviewLog,
+                and_(ReviewLog.user_id == User.id, ReviewLog.reviewed_at >= since),
+                isouter=True,
+            )
+            .where(User.id.in_(ids))
+            .group_by(User.id, User.name)
+            .order_by(func.count(ReviewLog.id).desc(), User.name)
+        )
+    ).all()
+
+    items = []
+    prev_count: int | None = None
+    prev_rank = 0
+    for i, (uid, name, count) in enumerate(rows, start=1):
+        rank = prev_rank if count == prev_count else i
+        items.append(
+            {
+                "user_id": uid,
+                "name": name,
+                "reviews": count,
+                "rank": rank,
+                "me": uid == user.id,
+            }
+        )
+        prev_count, prev_rank = count, rank
+    return {"items": items}
+
+
 MAX_NETWORK_NODES = 300
 
 

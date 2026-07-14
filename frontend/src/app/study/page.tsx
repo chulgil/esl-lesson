@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { friendsApi } from "@/lib/friends-api";
-import { studyApi, type Stats } from "@/lib/study-api";
+import { studyApi, type Stats, type StudyRank } from "@/lib/study-api";
 
 /** 학습 허브 — 학습 관련 기능을 한눈에 (게임 허브와 동일 패턴, 2026-07-14 IA 정리) */
 export default function StudyHubPage() {
@@ -13,11 +13,16 @@ export default function StudyHubPage() {
     studying: number;
     incoming: number;
   } | null>(null);
+  const [ranks, setRanks] = useState<StudyRank[]>([]);
 
   useEffect(() => {
     studyApi
       .stats()
       .then(setStats)
+      .catch(() => undefined);
+    studyApi
+      .leaderboard()
+      .then((res) => setRanks(res.items))
       .catch(() => undefined);
     friendsApi
       .list()
@@ -111,6 +116,39 @@ export default function StudyHubPage() {
           </span>
         </Link>
       </div>
+
+      {/* 주간 랭킹 — 친구와의 학습량 경쟁 (P1 데일리 루프) */}
+      {ranks.length > 0 && (
+        <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-yellow/50 bg-white p-5 shadow-sm">
+          <h2 className="font-hand text-2xl font-bold">이번 주 학습 랭킹</h2>
+          <p className="mt-1 text-xs opacity-60">
+            최근 7일 복습 수 — 친구와 함께 집계돼요
+          </p>
+          <ol className="mt-3 flex flex-col gap-1.5">
+            {ranks.map((r) => (
+              <li
+                key={r.user_id}
+                className={`flex items-center justify-between rounded-md border-2 px-3 py-2 text-sm ${
+                  r.me
+                    ? "border-brick-yellow bg-highlight/40 font-bold"
+                    : "border-ink/10"
+                }`}
+              >
+                <span>
+                  {r.rank}위 {r.name}
+                  {r.me && " (나)"}
+                </span>
+                <b>{r.reviews}회</b>
+              </li>
+            ))}
+          </ol>
+          {ranks.length === 1 && (
+            <p className="mt-3 text-xs opacity-60">
+              아직 나 혼자예요 — 친구를 추가하면 함께 순위가 매겨져요!
+            </p>
+          )}
+        </section>
+      )}
     </main>
   );
 }

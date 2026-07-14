@@ -20,8 +20,15 @@ async function request<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface GameBests {
+  tetris_best_score: number;
+  quiz_best_score: number;
+  typing_best_cpm: number;
+}
+
 export const gameApi = {
   profile: () => request<GameProfile>("/api/game/profile"),
   leaderboard: () =>
     request<{ items: LeaderboardEntry[] }>("/api/game/leaderboard"),
+  bests: () => request<GameBests>("/api/game/bests"),
 };

@@ -76,6 +76,15 @@ export interface VocabNetwork {
   embeddings_enabled: boolean;
 }
 
+/** 주간 학습 리더보드 — 나+친구 (P1 데일리 루프) */
+export interface StudyRank {
+  user_id: number;
+  name: string;
+  reviews: number;
+  rank: number;
+  me: boolean;
+}
+
 export interface Stats {
   due_count: number;
   reviews_today: number;
@@ -171,6 +180,8 @@ export const studyApi = {
   insight: (itemId: number) =>
     request<WordInsight>(`/api/study/items/${itemId}/insight`),
   network: () => request<VocabNetwork>("/api/study/network"),
+  leaderboard: () =>
+    request<{ items: StudyRank[] }>("/api/study/leaderboard"),
   stats: () => request<Stats>("/api/study/stats"),
   library: () => request<{ items: LibraryContent[] }>("/api/contents"),
   libraryDetail: (id: number) => request<LibraryDetail>(`/api/contents/${id}`),

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { Showcase } from "@/components/landing/Showcase";
+import { StreakHeatmap } from "@/components/study/StreakHeatmap";
 import { fetchMe, type Me } from "@/lib/api";
 import { studyApi, type Stats } from "@/lib/study-api";
 
@@ -88,6 +89,45 @@ function Dashboard({ me }: { me: Me }) {
           워드 테트리스
         </Brick>
       </div>
+
+      {stats && (
+        // 데일리 목표 — "오늘 끝냈다" 감각이 매일 복귀의 전제 (P1 데일리 루프)
+        <div className="max-w-xl rounded-lg border-2 border-ink/10 bg-white p-4">
+          {stats.due_count === 0 && stats.reviews_today > 0 ? (
+            <p className="font-bold text-brick-green">
+              오늘 목표 달성! 복습 {stats.reviews_today}회 완료
+            </p>
+          ) : (
+            <>
+              <p className="text-sm font-bold">
+                오늘의 목표
+                <span className="ml-2 font-normal opacity-60">
+                  복습 {stats.reviews_today}회 완료 · {stats.due_count}개 남음
+                </span>
+              </p>
+              <div className="mt-2 h-3 overflow-hidden rounded-full bg-ink/10">
+                <div
+                  className="h-full rounded-full bg-brick-green transition-[width]"
+                  style={{
+                    width: `${
+                      stats.reviews_today + stats.due_count > 0
+                        ? Math.round(
+                            (stats.reviews_today /
+                              (stats.reviews_today + stats.due_count)) *
+                              100,
+                          )
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+            </>
+          )}
+          <div className="mt-3 border-t border-ink/10 pt-3">
+            <StreakHeatmap daily={stats.daily} />
+          </div>
+        </div>
+      )}
 
       {stats && (
         <div className="flex flex-wrap items-end gap-6">

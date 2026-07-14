@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db, get_session_factory
 from app.core.security import SESSION_COOKIE, decode_session_token, get_current_user
-from app.models import GameMatch, User
+from app.models import GameMatch, QuizRoyaleMatch, TypingRace, User
 from app.services.game import records
 from app.services.game.manager import WordPoolError, manager
 from app.services.game.quiz_royale import royale
@@ -77,6 +77,68 @@ async def game_profile(
         "best_score": best_score or 0,
         "best_combo": int(bests["max_combo"]),
         "best_wpm": round(bests["wpm"], 1),
+    }
+
+
+@router.get("/bests")
+async def game_bests(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """게임별 내 최고 기록 — 게임 허브 카드 배지용 (P1 데일리 루프)."""
+    tetris = (
+        await db.execute(
+            select(
+                func.max(
+                    case(
+                        (GameMatch.player1_id == user.id, GameMatch.p1_score),
+                        else_=GameMatch.p2_score,
+                    )
+                )
+            ).where(
+                (GameMatch.player1_id == user.id) | (GameMatch.player2_id == user.id),
+                GameMatch.status == "finished",
+            )
+        )
+    ).scalar_one()
+
+    quiz_best = 0
+    quiz_rows = (
+        (
+            await db.execute(
+                select(QuizRoyaleMatch.players).where(QuizRoyaleMatch.status == "finished")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for payload in quiz_rows:
+        for p in (payload or {}).get("players", []):
+            if p.get("user_id") == user.id:
+                quiz_best = max(quiz_best, int(p.get("score") or 0))
+
+    typing_best = 0
+    typing_rows = (
+        (
+            await db.execute(
+                select(TypingRace).where(
+                    (TypingRace.player1_id == user.id) | (TypingRace.player2_id == user.id),
+                    TypingRace.status == "finished",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in typing_rows:
+        slot = "p1" if row.player1_id == user.id else "p2"
+        stats = (row.stats or {}).get(slot) or {}
+        typing_best = max(typing_best, int(stats.get("peak_cpm") or 0))
+
+    return {
+        "tetris_best_score": tetris or 0,
+        "quiz_best_score": quiz_best,
+        "typing_best_cpm": typing_best,
     }
 
 
