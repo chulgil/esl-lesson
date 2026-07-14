@@ -43,6 +43,37 @@ export interface WordInsight {
   confusables?: { word: string; ko: string; diff_ko: string }[];
 }
 
+/** 어휘망 그래프 (docs/proposal/word-insight.md P3) */
+export interface NetworkNode {
+  item_id: number;
+  en: string;
+  ko: string;
+  item_type: string;
+  state: string;
+  reps: number;
+}
+
+export interface NetworkEdge {
+  source: number;
+  target: number;
+  distance: number;
+}
+
+export interface NetworkSuggestion {
+  item_id: number;
+  en: string;
+  ko: string;
+  distance: number;
+  near_item_id: number;
+}
+
+export interface VocabNetwork {
+  nodes: NetworkNode[];
+  edges: NetworkEdge[];
+  suggestions: NetworkSuggestion[];
+  embeddings_enabled: boolean;
+}
+
 export interface Stats {
   due_count: number;
   reviews_today: number;
@@ -137,6 +168,7 @@ export const studyApi = {
     }),
   insight: (itemId: number) =>
     request<WordInsight>(`/api/study/items/${itemId}/insight`),
+  network: () => request<VocabNetwork>("/api/study/network"),
   stats: () => request<Stats>("/api/study/stats"),
   library: () => request<{ items: LibraryContent[] }>("/api/contents"),
   libraryDetail: (id: number) => request<LibraryDetail>(`/api/contents/${id}`),

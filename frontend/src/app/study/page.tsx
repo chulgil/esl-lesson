@@ -244,6 +244,9 @@ export default function StudyPage() {
             <Brick color="green" onClick={() => window.location.reload()}>
               이어서 학습
             </Brick>
+            <Brick color="yellow" href="/study/network">
+              어휘망 보기
+            </Brick>
             <Brick color="blue" href="/">
               홈으로
             </Brick>

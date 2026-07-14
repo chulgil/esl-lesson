@@ -23,7 +23,7 @@ from app.models import (
     UserSettings,
 )
 from app.models.item import ITEM_TYPE_LEVEL
-from app.services import embeddings, fsrs_service, insights, quiz
+from app.services import embeddings, fsrs_service, insights, quiz, vocab_network
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -479,6 +479,73 @@ async def get_stats(
             for item_type, level in ITEM_TYPE_LEVEL.items()
         ],
         "daily": daily,
+    }
+
+
+MAX_NETWORK_NODES = 300
+
+
+@router.get("/network")
+async def get_network(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """어휘망 그래프 — 내 단어·숙어 카드 노드 + 임베딩 근접 엣지 + 덱 밖 추천 (P3)."""
+    rows = (
+        await db.execute(
+            select(ReviewCard, LearningItem)
+            .join(LearningItem, LearningItem.id == ReviewCard.item_id)
+            .where(
+                ReviewCard.user_id == user.id,
+                ReviewCard.suspended.is_(False),
+                LearningItem.item_type.in_(("word", "idiom")),
+            )
+            .order_by(ReviewCard.created_at.desc(), ReviewCard.id.desc())
+            .limit(MAX_NETWORK_NODES)
+        )
+    ).all()
+    nodes = [
+        {
+            "item_id": item.id,
+            "en": item.en_text,
+            "ko": item.ko_text,
+            "item_type": item.item_type,
+            "state": card.state,
+            "reps": card.reps,
+        }
+        for card, item in rows
+    ]
+
+    edges: list[dict] = []
+    suggestions: list[dict] = []
+    enabled = embeddings.enabled(db)
+    if enabled and nodes:
+        try:
+            my_ids = [n["item_id"] for n in nodes]
+            neighbor = await vocab_network.neighbor_rows(db, my_ids)
+            edges, candidates = vocab_network.build_network(set(my_ids), neighbor)
+            if candidates:
+                # 추천은 내 덱 밖 항목 — 가시성 규칙(공용 승인 ∪ 내 개인) 통과분만
+                visible = set(
+                    (
+                        await db.execute(
+                            select(LearningItem.id).where(
+                                LearningItem.id.in_([c["item_id"] for c in candidates]),
+                                visible_item_clause(user.id),
+                            )
+                        )
+                    ).scalars()
+                )
+                suggestions = [c for c in candidates if c["item_id"] in visible]
+        except Exception:
+            logger.exception("vocab network failed user=%s", user.id)
+            edges, suggestions = [], []
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "suggestions": suggestions,
+        "embeddings_enabled": enabled,
     }
 
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { Showcase } from "@/components/landing/Showcase";
@@ -112,6 +113,12 @@ function Dashboard({ me }: { me: Me }) {
           <p className="text-xs opacity-50">
             오늘 복습 {stats.reviews_today}회
           </p>
+          <Link
+            href="/study/network"
+            className="text-sm font-bold text-brick-blue underline decoration-2 underline-offset-4 hover:opacity-80"
+          >
+            내 어휘망 보기 →
+          </Link>
         </div>
       )}
     </section>
