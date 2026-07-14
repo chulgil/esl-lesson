@@ -73,27 +73,27 @@ def rank_players(players: list["RacerState"]) -> tuple[str | None, int | None]:
     return top.name, top.user_id
 
 
-async def load_sentence_pool(user_id: int) -> list[str]:
-    """가시성 규칙(공용 승인 ∪ 내 개인)을 지키는 문장 풀."""
+async def load_sentence_pool(user_id: int) -> list[dict]:
+    """가시성 규칙(공용 승인 ∪ 내 개인)을 지키는 (영문, 뜻) 문장 풀."""
     async with get_session_factory()() as db:
         rows = (
-            (
-                await db.execute(
-                    select(LearningItem.en_text)
-                    .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
-                    .join(Content, Content.id == ItemOccurrence.content_id)
-                    .where(
-                        LearningItem.item_type == "sentence",
-                        visible_item_clause(user_id),
-                    )
-                    .distinct()
-                    .limit(300)
+            await db.execute(
+                select(LearningItem.en_text, LearningItem.ko_text)
+                .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+                .join(Content, Content.id == ItemOccurrence.content_id)
+                .where(
+                    LearningItem.item_type == "sentence",
+                    visible_item_clause(user_id),
                 )
+                .distinct()
+                .limit(300)
             )
-            .scalars()
-            .all()
-        )
-    return [s.strip() for s in rows if s and len(s.strip()) <= MAX_SENTENCE_CHARS]
+        ).all()
+    return [
+        {"en": en.strip(), "ko": (ko or "").strip()}
+        for en, ko in rows
+        if en and len(en.strip()) <= MAX_SENTENCE_CHARS
+    ]
 
 
 @dataclass
@@ -108,6 +108,7 @@ class RacerState:
     # 현재 문장 진행 (정타 prefix 길이) — 다른 플레이어 줄에 표시
     live_chars: int = 0
     done_current: bool = False
+    peak_cpm: float = 0.0  # 최고 타속 (타/분) — 결과 화면용
 
 
 @dataclass
@@ -187,8 +188,9 @@ class TypingRaceManager:
         racer = next((p for p in session.players if p.user_id == user_id), None)
         if racer is None or racer.done_current:
             return
-        limit = len(session.sentences[idx])
+        limit = len(session.sentences[idx]["en"])
         racer.live_chars = min(max(chars, 0), limit)
+        racer.peak_cpm = max(racer.peak_cpm, self._live_wpm(session, racer) * 5)
         await self._broadcast(
             session,
             {
@@ -208,13 +210,14 @@ class TypingRaceManager:
         racer = next((p for p in session.players if p.user_id == user_id), None)
         if racer is None or racer.done_current:
             return
-        sentence_len = len(session.sentences[idx])
+        sentence_len = len(session.sentences[idx]["en"])
         racer.done_current = True
         racer.live_chars = sentence_len
         racer.chars += min(max(chars, 0), sentence_len)
         racer.errors += max(errors, 0)
         racer.sentences += 1
         racer.total_ms += int((time.monotonic() - session.round_started) * 1000)
+        racer.peak_cpm = max(racer.peak_cpm, self._live_wpm(session, racer) * 5)
         await self._broadcast(
             session,
             {

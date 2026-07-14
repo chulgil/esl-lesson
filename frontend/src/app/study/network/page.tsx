@@ -101,7 +101,7 @@ export default function VocabNetworkPage() {
   return (
     <main className="notebook-lines notebook-margin flex min-h-screen flex-col px-6 py-10 sm:px-16">
       <header className="mb-4 flex items-center gap-4">
-        <BackLink href="/" label="홈" />
+        <BackLink href="/study" label="학습" />
         <h1 className="font-hand text-3xl font-bold">
           <span className="hl">어휘망</span>
         </h1>

@@ -73,9 +73,10 @@ async def test_solo_advances_when_i_finish(wired_db, fast_race):  # noqa: F811
     session = await manager.solo(user.id, user.name, sender)
     start = next(m for m in sender.messages if m["t"] == "tp.start")
     assert start["total"] == 2 and start["players"] == [user.name]
+    assert "en" in start["sentences"][0] and "ko" in start["sentences"][0]  # 뜻 힌트
 
     await _wait_for(sender, "tp.sentence")
-    first = session.sentences[0]
+    first = session.sentences[0]["en"]
     await manager.done(user.id, idx=0, chars=len(first), errors=1)
     # 전원(=나) 완성 → 두 번째 문장 방송
     for _ in range(100):
@@ -116,7 +117,7 @@ async def test_race_four_players_sync_and_winner(wired_db, fast_race):  # noqa: 
     await manager.begin(host.id)
     session = manager.sessions[manager.by_user[host.id]]
     await _wait_for(senders[3], "tp.sentence")
-    sentence = session.sentences[0]
+    sentence = session.sentences[0]["en"]
 
     # 실시간 진행 — 다른 플레이어에게 tp.typing (WPM 포함) 전파
     await manager.typing(host.id, idx=0, chars=3)

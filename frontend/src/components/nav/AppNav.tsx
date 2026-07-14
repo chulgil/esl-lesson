@@ -14,7 +14,7 @@ const TABS = [
   {
     href: "/study",
     label: "학습",
-    match: (p: string) => p.startsWith("/study"),
+    match: (p: string) => p.startsWith("/study") || p.startsWith("/friends"),
     icon: StudyIcon,
   },
   {

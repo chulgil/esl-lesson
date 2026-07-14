@@ -124,9 +124,14 @@ export type QrMsg =
   | { t: "qr.answered"; name: string };
 
 /** 영문 타자연습 — 문장 동기 레이스 1~4인 (docs/specs/typing-race.md) */
+export interface TpSentence {
+  en: string;
+  ko: string;
+}
+
 export interface TpStartMsg {
   t: "tp.start";
-  sentences: string[];
+  sentences: TpSentence[];
   total: number;
   sentence_seconds: number;
   countdown: number;
@@ -138,6 +143,10 @@ export interface TpResult {
   chars: number;
   sentences: number;
   wpm: number;
+  /** 평균 타 (타/분) */
+  cpm: number;
+  /** 최고 타 (타/분) */
+  peak_cpm: number;
   accuracy: number;
 }
 

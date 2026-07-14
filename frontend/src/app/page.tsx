@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { Showcase } from "@/components/landing/Showcase";
@@ -76,7 +75,7 @@ function Dashboard({ me }: { me: Me }) {
         )}
       </p>
       <div className="flex flex-wrap gap-4">
-        <Brick color="green" href="/study">
+        <Brick color="green" href="/study/session">
           오늘의 학습 시작{stats ? ` (${stats.due_count})` : ""}
         </Brick>
         <Brick color="blue" href="/library">
@@ -113,18 +112,6 @@ function Dashboard({ me }: { me: Me }) {
           <p className="text-xs opacity-50">
             오늘 복습 {stats.reviews_today}회
           </p>
-          <Link
-            href="/study/network"
-            className="text-sm font-bold text-brick-blue underline decoration-2 underline-offset-4 hover:opacity-80"
-          >
-            내 어휘망 보기 →
-          </Link>
-          <Link
-            href="/study/watch"
-            className="text-sm font-bold text-brick-green underline decoration-2 underline-offset-4 hover:opacity-80"
-          >
-            친구 학습 관전 →
-          </Link>
         </div>
       )}
     </section>

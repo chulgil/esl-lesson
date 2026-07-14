@@ -147,7 +147,8 @@ export default function TypingRacePage() {
   }, [phase, idx]);
 
   const sentences = start?.sentences ?? [];
-  const target = sentences[idx] ?? "";
+  const target = sentences[idx]?.en ?? "";
+  const targetKo = sentences[idx]?.ko ?? "";
 
   function correctPrefixLen(value: string): number {
     let n = 0;
@@ -384,6 +385,12 @@ export default function TypingRacePage() {
             })}
           </div>
 
+          {targetKo && (
+            <p className="rounded-md bg-highlight/40 px-3 py-1.5 text-sm">
+              뜻: <b>{targetKo}</b>
+            </p>
+          )}
+
           <input
             ref={inputRef}
             value={typed}
@@ -424,7 +431,10 @@ export default function TypingRacePage() {
                       )}
                     </span>
                     <span className="rounded bg-ink/5 px-1.5 py-0.5 font-mono font-bold">
-                      {Math.round(row.wpm)} WPM
+                      {Math.round(row.wpm * 5)}타
+                      <span className="ml-1 font-normal opacity-60">
+                        {Math.round(row.wpm)}WPM
+                      </span>
                     </span>
                   </div>
                   <div className="font-mono text-sm leading-snug">
@@ -476,8 +486,12 @@ export default function TypingRacePage() {
             >
               <p className="font-bold">{r.name}</p>
               <p className="mt-1 text-sm opacity-80">
-                <b>{r.wpm} WPM</b> · 정확도 {Math.round(r.accuracy * 100)}% ·{" "}
-                {r.sentences}문장 ({r.chars}자)
+                평균 <b>{r.cpm}타</b> · 최고 <b>{r.peak_cpm}타</b> · {r.wpm}
+                WPM
+              </p>
+              <p className="mt-0.5 text-xs opacity-60">
+                정확도 {Math.round(r.accuracy * 100)}% · {r.sentences}문장 (
+                {r.chars}자)
               </p>
             </div>
           ))}
