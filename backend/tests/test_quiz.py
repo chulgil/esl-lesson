@@ -94,3 +94,5 @@ def test_build_pattern_question_chips_cover_sentence():
     for word in "It takes time to learn.".split():
         assert word in q["chips"]
     assert len(q["chips"]) == len("It takes time to learn.".split()) + 2
+    # 밑줄(___)의 한글 대응을 명시 — 어느 부분인지 혼동 방지 (2026-07-14)
+    assert q["blank_ko"] == "배우는 데 시간이 걸린다"

@@ -123,12 +123,69 @@ export type QrMsg =
   | QrEndMsg
   | { t: "qr.answered"; name: string };
 
+/** 영문 타자연습 — 문장 동기 레이스 1~4인 (docs/specs/typing-race.md) */
+export interface TpStartMsg {
+  t: "tp.start";
+  sentences: string[];
+  total: number;
+  sentence_seconds: number;
+  countdown: number;
+  players: string[];
+}
+
+export interface TpResult {
+  name: string;
+  chars: number;
+  sentences: number;
+  wpm: number;
+  accuracy: number;
+}
+
+export type TpMsg =
+  | TpStartMsg
+  | { t: "tp.room"; code: string | null; host: string; players: string[] }
+  | { t: "tp.sentence"; idx: number }
+  | { t: "tp.typing"; name: string; chars: number; wpm: number }
+  | { t: "tp.done_mark"; name: string; idx: number; wpm: number }
+  | {
+      t: "tp.end";
+      results: TpResult[];
+      winner: string | null;
+      aborted: boolean;
+    };
+
+/** 학습 관전 — 승인제 릴레이 (docs/specs/study-spectate.md) */
+export interface StEventPayload {
+  phase: string;
+  index?: number;
+  total?: number;
+  correct_count?: number;
+  answered_count?: number;
+  prompt?: string;
+  prompt_ko?: string;
+  template?: string;
+  choices?: string[];
+  result?: { correct: boolean; correct_answer: string };
+}
+
+export type StMsg =
+  | { t: "st.hosting"; code: string }
+  | { t: "st.request"; watcher_id: number; name: string }
+  | { t: "st.requested"; host: string }
+  | { t: "st.approved"; host: string }
+  | { t: "st.denied" }
+  | { t: "st.event"; payload: StEventPayload }
+  | { t: "st.left"; name: string }
+  | { t: "st.end" };
+
 export type ServerMsg =
   | StateMsg
   | MatchFoundMsg
   | ClearResultMsg
   | MatchEndMsg
   | QrMsg
+  | TpMsg
+  | StMsg
   | { t: "queue.waiting" }
   | { t: "room.created"; code: string }
   | { t: "attack.recv"; count: number }
@@ -222,6 +279,42 @@ export class GameSocket {
   }
   qrLeave(): void {
     this.send({ t: "qr.leave" });
+  }
+  tpSolo(): void {
+    this.send({ t: "tp.solo" });
+  }
+  tpCreate(): void {
+    this.send({ t: "tp.create" });
+  }
+  tpJoin(code: string): void {
+    this.send({ t: "tp.join", code });
+  }
+  tpBegin(): void {
+    this.send({ t: "tp.begin" });
+  }
+  tpTyping(idx: number, chars: number): void {
+    this.send({ t: "tp.typing", idx, chars });
+  }
+  tpDone(idx: number, chars: number, errors: number): void {
+    this.send({ t: "tp.done", idx, chars, errors });
+  }
+  tpLeave(): void {
+    this.send({ t: "tp.leave" });
+  }
+  stHost(): void {
+    this.send({ t: "st.host" });
+  }
+  stRequest(code: string): void {
+    this.send({ t: "st.request", code });
+  }
+  stAllow(watcherId: number, allow: boolean): void {
+    this.send({ t: "st.allow", watcher_id: watcherId, allow });
+  }
+  stEvent(payload: object): void {
+    this.send({ t: "st.event", payload });
+  }
+  stLeave(): void {
+    this.send({ t: "st.leave" });
   }
   close(): void {
     this.ws?.close();

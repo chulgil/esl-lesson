@@ -15,6 +15,8 @@ from app.models import GameMatch, User
 from app.services.game import records
 from app.services.game.manager import WordPoolError, manager
 from app.services.game.quiz_royale import royale
+from app.services.game.spectate import spectate_hub
+from app.services.game.typing_race import racer
 
 logger = logging.getLogger(__name__)
 
@@ -216,12 +218,67 @@ async def game_ws(websocket: WebSocket) -> None:
                 await royale.answer(user_id, str(msg.get("answer", "")))
             elif t == "qr.leave":
                 royale.detach(user_id)
+            # --- 영문 타자연습 (docs/specs/typing-race.md) ---
+            elif t == "tp.solo":
+                try:
+                    await racer.solo(user_id, user.name, send)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "tp.create":
+                try:
+                    await racer.create(user_id, user.name, send)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "tp.join":
+                try:
+                    await racer.join(user_id, user.name, send, str(msg.get("code", "")))
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "tp.begin":
+                try:
+                    await racer.begin(user_id)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "tp.typing":
+                await racer.typing(
+                    user_id, idx=int(msg.get("idx", -1)), chars=int(msg.get("chars", 0))
+                )
+            elif t == "tp.done":
+                await racer.done(
+                    user_id,
+                    idx=int(msg.get("idx", -1)),
+                    chars=int(msg.get("chars", 0)),
+                    errors=int(msg.get("errors", 0)),
+                )
+            elif t == "tp.leave":
+                racer.detach(user_id)
+            # --- 학습 관전 (승인제 릴레이 — docs/specs/study-spectate.md) ---
+            elif t == "st.host":
+                await spectate_hub.host(user_id, user.name, send)
+            elif t == "st.request":
+                await spectate_hub.request(user_id, user.name, send, str(msg.get("code", "")))
+            elif t == "st.allow":
+                await spectate_hub.allow(
+                    user_id,
+                    watcher_id=int(msg.get("watcher_id", 0)),
+                    allow=bool(msg.get("allow", False)),
+                )
+            elif t == "st.event":
+                payload = msg.get("payload")
+                if isinstance(payload, dict):
+                    await spectate_hub.event(user_id, payload)
+            elif t == "st.leave":
+                await spectate_hub.detach(user_id)
             else:
                 await send({"t": "error", "code": "unknown_message"})
     except WebSocketDisconnect:
         manager.detach(user_id)
         royale.detach(user_id)
+        racer.detach(user_id)
+        await spectate_hub.detach(user_id)
     except Exception:
         logger.exception("ws error user=%s", user_id)
         manager.detach(user_id)
         royale.detach(user_id)
+        racer.detach(user_id)
+        await spectate_hub.detach(user_id)

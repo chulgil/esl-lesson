@@ -1,0 +1,157 @@
+"""친구 API — 요청/수락/목록 + 학습 중(관전 가능) 표시 (docs/specs/study-spectate.md).
+
+관전 코드는 수락된 친구에게만 노출되며, 실제 스트림 시청은 학습자가
+관전 요청을 다시 수락해야 시작된다 (2중 동의).
+"""
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.db import get_db
+from app.core.security import get_current_user
+from app.models import User
+from app.models.friend import Friendship
+from app.services.game.spectate import spectate_hub
+
+router = APIRouter(prefix="/friends", tags=["friends"])
+
+
+class FriendRequestBody(BaseModel):
+    # 이메일 검증 라이브러리 불필요 — DB 정확 일치 조회만 함
+    email: str = Field(min_length=3, max_length=254)
+
+
+@router.post("/requests")
+async def send_request(
+    body: FriendRequestBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    target = (
+        await db.execute(select(User).where(User.email == body.email.lower()))
+    ).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "user_not_found")
+    if target.id == user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot_friend_self")
+    existing = (
+        await db.execute(
+            select(Friendship).where(
+                or_(
+                    (Friendship.requester_id == user.id) & (Friendship.addressee_id == target.id),
+                    (Friendship.requester_id == target.id) & (Friendship.addressee_id == user.id),
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "already_requested_or_friends")
+    row = Friendship(requester_id=user.id, addressee_id=target.id)
+    db.add(row)
+    await db.commit()
+    return {"id": row.id, "status": row.status}
+
+
+@router.post("/requests/{request_id}/accept")
+async def accept_request(
+    request_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    row = await db.get(Friendship, request_id)
+    if row is None or row.addressee_id != user.id or row.status != "pending":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "request_not_found")
+    row.status = "accepted"
+    await db.commit()
+    return {"id": row.id, "status": row.status}
+
+
+@router.delete("/requests/{request_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def decline_request(
+    request_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """거절(받은 요청) 또는 취소(보낸 요청)."""
+    row = await db.get(Friendship, request_id)
+    if row is None or user.id not in (row.requester_id, row.addressee_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "request_not_found")
+    await db.delete(row)
+    await db.commit()
+
+
+@router.delete("/{friend_user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_friend(
+    friend_user_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    row = (
+        await db.execute(
+            select(Friendship).where(
+                Friendship.status == "accepted",
+                or_(
+                    (Friendship.requester_id == user.id)
+                    & (Friendship.addressee_id == friend_user_id),
+                    (Friendship.requester_id == friend_user_id)
+                    & (Friendship.addressee_id == user.id),
+                ),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "friend_not_found")
+    await db.delete(row)
+    await db.commit()
+
+
+@router.get("")
+async def list_friends(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    rows = (
+        (
+            await db.execute(
+                select(Friendship).where(
+                    or_(
+                        Friendship.requester_id == user.id,
+                        Friendship.addressee_id == user.id,
+                    )
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    other_ids = {r.addressee_id if r.requester_id == user.id else r.requester_id for r in rows}
+    users = {
+        u.id: u
+        for u in ((await db.execute(select(User).where(User.id.in_(other_ids or {0})))).scalars())
+    }
+
+    friends, incoming, outgoing = [], [], []
+    for r in rows:
+        other = users.get(r.addressee_id if r.requester_id == user.id else r.requester_id)
+        if other is None:
+            continue
+        if r.status == "accepted":
+            code = spectate_hub.by_host.get(other.id)
+            friends.append(
+                {
+                    "user_id": other.id,
+                    "name": other.name,
+                    "avatar_url": other.avatar_url,
+                    "studying": code is not None,
+                    "watch_code": code,
+                }
+            )
+        elif r.addressee_id == user.id:
+            incoming.append({"id": r.id, "name": other.name})
+        else:
+            outgoing.append({"id": r.id, "name": other.name})
+    return {"friends": friends, "incoming": incoming, "outgoing": outgoing}

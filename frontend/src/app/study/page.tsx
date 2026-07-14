@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { InsightSheet } from "@/components/study/InsightSheet";
 import { SegmentPlayer } from "@/components/media/SegmentPlayer";
+import { SpectateHost } from "@/components/study/SpectateHost";
 import { studyApi, type AnswerResult, type Question } from "@/lib/study-api";
 
 type Phase = "loading" | "empty" | "question" | "feedback" | "done";
@@ -46,6 +47,36 @@ export default function StudyPage() {
   }, []);
 
   const question = queue[idx];
+
+  // 관전자에게 릴레이할 화면 상태 — 수락된 관전자만 수신 (study-spectate.md)
+  const spectateSnapshot =
+    phase === "question" || phase === "feedback"
+      ? {
+          phase,
+          index: Math.min(idx + 1, queue.length),
+          total: queue.length,
+          correct_count: correctCount,
+          prompt: question?.prompt ?? question?.prompt_ko ?? "",
+          prompt_ko:
+            question?.quiz_mode === "cloze" ? question?.prompt_ko : undefined,
+          template: question?.template,
+          choices: question?.choices,
+          result:
+            phase === "feedback" && result
+              ? {
+                  correct: result.correct,
+                  correct_answer: result.correct_answer,
+                }
+              : undefined,
+        }
+      : phase === "done"
+        ? {
+            phase: "done",
+            total: queue.length,
+            correct_count: correctCount,
+            answered_count: answeredCount,
+          }
+        : null;
 
   async function submit(answer: string) {
     if (!question) return;
@@ -112,6 +143,7 @@ export default function StudyPage() {
             {Math.min(idx + 1, queue.length)} / {queue.length}
           </span>
         )}
+        <SpectateHost snapshot={spectateSnapshot} />
         <button
           type="button"
           aria-label="학습 설정"
@@ -362,7 +394,12 @@ function ChoiceQuiz({
   return (
     <div>
       <p className="text-2xl font-bold">{prompt}</p>
-      {sub && <p className="mt-1 text-sm opacity-60">{sub}</p>}
+      {sub && (
+        // 빈칸(___)이 무슨 뜻인지 명시 — 어느 부분인지 혼동 방지 (2026-07-14)
+        <p className="mt-1 text-sm">
+          빈칸(___)의 뜻: <span className="hl font-bold">{sub}</span>
+        </p>
+      )}
       {question.context && (
         <p className="mt-2 text-sm opacity-50">
           &quot;{question.context}&quot;
@@ -412,6 +449,13 @@ function PatternQuiz({
     <div>
       <p className="text-lg font-bold">{question.prompt_ko}</p>
       <p className="mt-1 font-mono text-sm opacity-60">{question.template}</p>
+      {question.blank_ko && question.blank_ko !== question.prompt_ko && (
+        // 밑줄(___) 부분이 한글 해석의 어디인지 강조 (2026-07-14 피드백)
+        <p className="mt-1 text-sm">
+          밑줄(___) 부분:{" "}
+          <span className="hl font-bold">{question.blank_ko}</span>
+        </p>
+      )}
       <div className="mt-4 min-h-11 rounded border-2 border-dashed border-ink/20 bg-paper p-2">
         {picked.map((chipIdx, i) => (
           <button

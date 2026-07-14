@@ -213,6 +213,8 @@ def _pattern_question(item: LearningItem, context: str | None, context_ko: str |
         "level": 3,
         "hint_answer": sentence,
         "prompt_ko": context_ko or item.ko_text,
+        # 밑줄(___)이 한글 해석의 어느 부분인지 명시 — 혼동 방지 (2026-07-14 피드백)
+        "blank_ko": item.ko_text,
         "template": item.pattern_template or item.en_text,
         "chips": chips,
         "context": None,

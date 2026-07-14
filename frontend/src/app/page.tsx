@@ -119,6 +119,12 @@ function Dashboard({ me }: { me: Me }) {
           >
             내 어휘망 보기 →
           </Link>
+          <Link
+            href="/study/watch"
+            className="text-sm font-bold text-brick-green underline decoration-2 underline-offset-4 hover:opacity-80"
+          >
+            친구 학습 관전 →
+          </Link>
         </div>
       )}
     </section>

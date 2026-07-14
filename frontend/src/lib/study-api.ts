@@ -11,6 +11,8 @@ export interface Question {
   choices?: string[];
   chips?: string[];
   template?: string;
+  /** 밑줄(___)이 한글 해석의 어느 부분인지 — 패턴 문항 (2026-07-14) */
+  blank_ko?: string;
   hint_thinking?: string | null;
   context?: string | null;
   media?: { video_id: string; start_ms: number; end_ms: number } | null;

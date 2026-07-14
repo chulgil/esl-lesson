@@ -40,6 +40,36 @@ class GameMatch(Base, PkMixin, CreatedAtMixin):
     ended_at: Mapped[datetime | None]
 
 
+class TypingRace(Base, PkMixin, CreatedAtMixin):
+    """영문 타자연습 — 싱글 기록/2인 대결 (docs/specs/typing-race.md)."""
+
+    __tablename__ = "typing_races"
+    __table_args__ = (
+        CheckConstraint("mode IN ('solo','race')", name="ck_typing_mode"),
+        CheckConstraint(
+            "status IN ('waiting','playing','finished','aborted')",
+            name="ck_typing_status",
+        ),
+    )
+
+    mode: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, default="waiting", server_default="waiting")
+    player1_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    player2_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    winner_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    p1_chars: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    p2_chars: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # {"p1": {wpm, accuracy, sentences}, "p2": {...}}
+    stats: Mapped[dict] = mapped_column(JsonDict, default=dict)
+    ended_at: Mapped[datetime | None]
+
+
 class QuizRoyaleMatch(Base, PkMixin, CreatedAtMixin):
     """스피드 퀴즈 로얄 — 최대 4인, 1:1 전용 game_matches 와 분리 (proposal/quiz-royale.md)."""
 
