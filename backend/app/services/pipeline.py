@@ -115,7 +115,10 @@ async def _get_or_create_job(db: AsyncSession, content_id: int, step: str) -> Ex
 async def _step_metadata(db: AsyncSession, content: Content) -> dict:
     title = await youtube.fetch_title(content.youtube_video_id)
     content.title = title
-    return {"title": title}
+    if content.youtube_license is None:
+        # CC 게이트 참고용 — 키 미설정이면 None 유지 (docs/specs/content-pipeline.md)
+        content.youtube_license = await youtube.fetch_license(content.youtube_video_id)
+    return {"title": title, "license": content.youtube_license}
 
 
 async def _step_transcript(db: AsyncSession, content: Content) -> dict:

@@ -34,6 +34,8 @@ class Content(Base, PkMixin, TimestampMixin):
     # 규칙: docs/specs/content-pipeline.md 콘텐츠 가시성
     visibility: Mapped[str] = mapped_column(Text, default="public", server_default="public")
     youtube_video_id: Mapped[str | None] = mapped_column(Text, unique=True)
+    # Data API status.license — creativeCommons | youtube | NULL(미확인). 공용 승격 CC 게이트
+    youtube_license: Mapped[str | None] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)
     title_ko: Mapped[str | None] = mapped_column(Text)

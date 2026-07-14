@@ -16,13 +16,20 @@ export default function NewContentPage() {
   const [scriptKo, setScriptKo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // CC 게이트(cc_required) — 권리자 허락 확인 후에만 오버라이드 (저작권 검토 2026-07-14)
+  const [ccBlocked, setCcBlocked] = useState(false);
 
-  async function submit() {
+  async function submit(allowNonCc = false) {
     setError(null);
+    setCcBlocked(false);
     setSubmitting(true);
     try {
       if (tab === "youtube") {
-        await adminApi.createContent({ source: "youtube", url });
+        await adminApi.createContent({
+          source: "youtube",
+          url,
+          allow_non_cc: allowNonCc || undefined,
+        });
       } else {
         await adminApi.createContent({
           source: "manual",
@@ -34,7 +41,12 @@ export default function NewContentPage() {
       }
       router.push("/admin/contents");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "등록 실패");
+      const message = e instanceof Error ? e.message : "등록 실패";
+      if (message === "cc_required") {
+        setCcBlocked(true);
+      } else {
+        setError(message);
+      }
       setSubmitting(false);
     }
   }
@@ -114,8 +126,29 @@ export default function NewContentPage() {
 
         {error && <p className="text-sm text-brick-red">{error}</p>}
 
+        {ccBlocked && (
+          <div className="rounded-md border-2 border-brick-yellow bg-highlight/30 p-3 text-sm">
+            <p className="font-bold">
+              이 영상은 크리에이티브 커먼즈(CC) 라이선스가 아니거나 확인되지
+              않았어요.
+            </p>
+            <p className="mt-1 opacity-70">
+              공용 콘텐츠는 전 회원에게 공유되므로 CC 영상을 권장해요. 채널
+              소유자의 허락을 받았다면 아래 버튼으로 계속할 수 있어요.
+            </p>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => submit(true)}
+              className="mt-2 min-h-11 rounded-md border-2 border-brick-red/50 bg-white px-4 text-sm font-bold text-brick-red transition hover:border-brick-red disabled:opacity-50"
+            >
+              허락을 확인했어요 — 그래도 공용 등록
+            </button>
+          </div>
+        )}
+
         <div>
-          <Brick color="green" onClick={submitting ? undefined : submit}>
+          <Brick color="green" disabled={submitting} onClick={() => submit()}>
             {submitting ? "등록 중..." : "등록"}
           </Brick>
         </div>

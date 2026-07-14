@@ -91,7 +91,11 @@ async def test_admin_registering_existing_private_promotes_to_public(admin_clien
     db_session.add(content)
     await db_session.commit()
 
-    res = await admin_client.post("/api/admin/contents", json={"source": "youtube", "url": YT})
+    # CC 게이트 도입(2026-07-14) — 라이선스 미확인 승격은 관리자 오버라이드 필요
+    res = await admin_client.post(
+        "/api/admin/contents",
+        json={"source": "youtube", "url": YT, "allow_non_cc": True},
+    )
     assert res.status_code == 202
     assert res.json()["promoted"] is True
     await db_session.refresh(content)

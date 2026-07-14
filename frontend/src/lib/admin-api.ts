@@ -92,6 +92,8 @@ export const adminApi = {
     title?: string;
     script_en?: string;
     script_ko?: string;
+    /** CC 게이트 오버라이드 — 권리자 허락 확보 시에만 */
+    allow_non_cc?: boolean;
   }) =>
     request<{ id: number }>("/api/admin/contents", {
       method: "POST",

@@ -11,6 +11,7 @@ from app.core.db import get_db
 from app.core.security import require_admin
 from app.models import Content, ItemOccurrence, LearningItem, TranscriptSegment
 from app.models.user import User
+from app.services import youtube
 from app.services.content_service import (
     ContentCreate,
     content_detail,
@@ -32,24 +33,39 @@ async def get_public_content(db: AsyncSession, content_id: int) -> Content:
     return content
 
 
+class PublicContentCreate(ContentCreate):
+    # CC 게이트 오버라이드 — 권리자 허락을 확보한 영상만 true 로 (저작권 검토 2026-07-14)
+    allow_non_cc: bool = False
+
+
 @router.post("/contents", status_code=status.HTTP_202_ACCEPTED)
 async def create_public_content(
-    body: ContentCreate,
+    body: PublicContentCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
     admin: Annotated[User, Depends(require_admin)],
 ) -> dict:
-    # 이미 개인이 등록한 영상이면 공용으로 승격 (재추출 없음)
+    license_: str | None = None
     if body.source == "youtube":
         video_id = parse_video_id(body.url or "")
         if video_id:
+            # 공용 = 전 회원 전송이라 CC(재배포 허용) 영상만 기본 허용.
+            # 미확인(키 없음/조회 실패)도 안전 기본값으로 차단 — allow_non_cc 로만 우회
+            license_ = await youtube.fetch_license(video_id)
+            if license_ != "creativeCommons" and not body.allow_non_cc:
+                raise HTTPException(status.HTTP_409_CONFLICT, "cc_required")
+            # 이미 개인이 등록한 영상이면 공용으로 승격 (재추출 없음)
             existing = (
                 await db.execute(select(Content).where(Content.youtube_video_id == video_id))
             ).scalar_one_or_none()
             if existing is not None and existing.visibility == "private":
                 existing.visibility = "public"
+                existing.youtube_license = existing.youtube_license or license_
                 await db.commit()
                 return {"id": existing.id, "status": existing.status, "promoted": True}
     content = await create_content(db, body, admin.id, visibility="public")
+    if license_ is not None:
+        content.youtube_license = license_
+        await db.commit()
     enqueue(content.id)
     return {"id": content.id, "status": content.status}
 

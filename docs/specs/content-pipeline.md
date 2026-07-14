@@ -16,6 +16,18 @@
 - 개인 항목 제외는 검수 상태가 아니라 **본인 카드 suspend** 로 처리 (항목이 공용과 공유될 수 있으므로 전역 상태를 개인이 바꾸지 않는다).
 - 공개 전환(개인→공용)은 이번 범위 제외 (2026-07-11 사용자 결정). 단, 관리자가 이미 개인 등록된 영상을 백오피스에서 등록하면 **공용 승격** (재추출 없음).
 
+### 공용 승격 CC 라이선스 게이트 (2026-07-14 저작권 검토)
+
+공용 = 전 회원 전송이므로 **크리에이티브 커먼즈(CC BY) 영상만 기본 허용**한다.
+
+- `contents.youtube_license` (Data API `status.license`: `creativeCommons` | `youtube` |
+  NULL 미확인). 파이프라인 metadata 단계에서 자동 조회 (`YOUTUBE_API_KEY` 필요,
+  미설정 시 NULL 유지 — 공식 Data API 라 약관 안전)
+- 백오피스 공용 등록/승격 시 CC 가 아니면(미확인 포함) **409 `cc_required`** —
+  UI 에서 "권리자 허락을 확인했어요" 오버라이드(`allow_non_cc`)로만 진행 가능
+- 개인(private) 등록은 게이트 미적용 (본인 학습용 — 사적 이용 범주)
+- 기존 콘텐츠 백필: `scripts/backfill_licenses.py`
+
 ### 구독 구조 (2026-07-11 추가)
 
 같은 유튜브 영상은 콘텐츠 1행을 공유하고 `content_subscriptions(content_id, user_id)` 로 사용자와 연결한다.

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     public_service_url: str = "https://esl.lessonaza.app"
     public_admin_url: str = "https://esladmin.lessonaza.app"
 
+    # 유튜브 Data API (라이선스 조회 — 공용 승격 CC 게이트). 미설정 시 조회 스킵
+    youtube_api_key: str = ""
+
     # 유튜브 자막 프록시 (클라우드 IP 차단 우회 — docs/specs/content-pipeline.md)
     webshare_proxy_username: str = ""
     webshare_proxy_password: str = ""

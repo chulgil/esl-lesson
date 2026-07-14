@@ -44,6 +44,35 @@ async def fetch_title(video_id: str) -> str:
         return res.json()["title"]
 
 
+DATA_API_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+
+
+async def fetch_license(video_id: str) -> str | None:
+    """Data API 로 라이선스 조회 — 'creativeCommons' | 'youtube' | None(키 없음/실패).
+
+    공용 승격 CC 게이트용 (docs/specs/content-pipeline.md). 공식 API 라 약관 안전.
+    """
+    from app.core.config import get_settings
+
+    api_key = get_settings().youtube_api_key
+    if not api_key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(
+                DATA_API_VIDEOS_URL,
+                params={"part": "status", "id": video_id, "key": api_key},
+            )
+            res.raise_for_status()
+            items = res.json().get("items", [])
+        if not items:
+            return None
+        return items[0].get("status", {}).get("license")
+    except Exception:
+        # 조회 실패는 미확인(None) — 게이트가 안전 기본값으로 차단
+        return None
+
+
 @dataclass
 class Snippet:
     text: str

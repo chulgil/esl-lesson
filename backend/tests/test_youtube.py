@@ -76,3 +76,35 @@ def test_blocked_error_converted_to_friendly_message(monkeypatch):
         assert "차단" in str(exc)
         assert "수기 입력" in str(exc)
         assert len(str(exc)) < 200  # 라이브러리 장문 메시지 노출 금지
+
+
+async def test_fetch_license_parses_and_skips_without_key(monkeypatch):
+    """Data API 응답의 status.license 파싱, 키 미설정이면 네트워크 없이 None."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from app.core.config import get_settings
+    from app.services import youtube
+
+    settings = get_settings()
+    original = settings.youtube_api_key
+    try:
+        settings.youtube_api_key = ""
+        assert await youtube.fetch_license("abc123def45") is None  # 키 없음 → 스킵
+
+        settings.youtube_api_key = "test-key"
+        res = MagicMock()
+        res.json.return_value = {"items": [{"status": {"license": "creativeCommons"}}]}
+        res.raise_for_status.return_value = None
+        http = MagicMock()
+        http.__aenter__ = AsyncMock(return_value=http)
+        http.__aexit__ = AsyncMock(return_value=False)
+        http.get = AsyncMock(return_value=res)
+        with patch.object(youtube.httpx, "AsyncClient", return_value=http):
+            assert await youtube.fetch_license("abc123def45") == "creativeCommons"
+
+        # 조회 실패는 None (게이트가 안전 기본값으로 차단)
+        http.get = AsyncMock(side_effect=RuntimeError("boom"))
+        with patch.object(youtube.httpx, "AsyncClient", return_value=http):
+            assert await youtube.fetch_license("abc123def45") is None
+    finally:
+        settings.youtube_api_key = original

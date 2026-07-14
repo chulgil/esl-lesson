@@ -48,22 +48,111 @@ async def test_create_manual_content_splits_segments(admin_client, db_session):
 
 
 async def test_create_youtube_content_validates_and_dedups(admin_client, db_session):
+    from unittest.mock import AsyncMock, patch
+
+    import app.api.admin_contents as admin_mod
+
     bad = await admin_client.post(
         "/api/admin/contents", json={"source": "youtube", "url": "https://example.com/x"}
     )
     assert bad.status_code == 400
 
-    ok = await admin_client.post(
-        "/api/admin/contents",
-        json={"source": "youtube", "url": "https://youtu.be/dQw4w9WgXcQ"},
-    )
-    assert ok.status_code == 202
+    with patch.object(
+        admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="creativeCommons")
+    ):
+        ok = await admin_client.post(
+            "/api/admin/contents",
+            json={"source": "youtube", "url": "https://youtu.be/dQw4w9WgXcQ"},
+        )
+        assert ok.status_code == 202
 
-    dup = await admin_client.post(
-        "/api/admin/contents",
-        json={"source": "youtube", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+        dup = await admin_client.post(
+            "/api/admin/contents",
+            json={"source": "youtube", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+        )
+        assert dup.status_code == 409
+
+
+async def test_public_promotion_requires_cc_license(admin_client, db_session):
+    """공용 승격 CC 게이트 — CC 아니면(미확인 포함) 409, allow_non_cc 로만 우회."""
+    from unittest.mock import AsyncMock, patch
+
+    import app.api.admin_contents as admin_mod
+    from app.models import Content
+
+    # 표준 라이선스 → 차단
+    with patch.object(admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="youtube")):
+        blocked = await admin_client.post(
+            "/api/admin/contents",
+            json={"source": "youtube", "url": "https://youtu.be/aaaaaaaaaa1"},
+        )
+        assert blocked.status_code == 409
+        assert blocked.json()["detail"] == "cc_required"
+
+        # 관리자 명시 오버라이드(권리자 허락 확보 시) → 등록 + 라이선스 저장
+        forced = await admin_client.post(
+            "/api/admin/contents",
+            json={
+                "source": "youtube",
+                "url": "https://youtu.be/aaaaaaaaaa1",
+                "allow_non_cc": True,
+            },
+        )
+        assert forced.status_code == 202
+        row = await db_session.get(Content, forced.json()["id"])
+        assert row.youtube_license == "youtube"
+
+    # 라이선스 미확인(키 없음/조회 실패)도 안전 기본값으로 차단
+    with patch.object(admin_mod.youtube, "fetch_license", new=AsyncMock(return_value=None)):
+        unknown = await admin_client.post(
+            "/api/admin/contents",
+            json={"source": "youtube", "url": "https://youtu.be/aaaaaaaaaa2"},
+        )
+        assert unknown.status_code == 409
+
+
+async def test_private_promotion_also_gated_by_cc(admin_client, db_session):
+    """개인 콘텐츠의 공용 승격도 같은 게이트를 통과해야 한다."""
+    from unittest.mock import AsyncMock, patch
+
+    import app.api.admin_contents as admin_mod
+    from app.models import Content, User
+
+    # 쿠키를 건드리지 않도록 소유자는 DB 로 직접 생성 (login 은 admin 세션을 덮어씀)
+    owner = User(google_sub="g-owner", email="private-owner@example.com", name="Owner")
+    db_session.add(owner)
+    await db_session.flush()
+    private = Content(
+        source="youtube",
+        visibility="private",
+        youtube_video_id="privvid0001",
+        url="https://youtu.be/privvid0001",
+        title="개인 영상",
+        status="ready",
+        created_by=owner.id,
     )
-    assert dup.status_code == 409
+    db_session.add(private)
+    await db_session.commit()
+
+    with patch.object(admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="youtube")):
+        blocked = await admin_client.post(
+            "/api/admin/contents",
+            json={"source": "youtube", "url": "https://youtu.be/privvid0001"},
+        )
+        assert blocked.status_code == 409
+
+    with patch.object(
+        admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="creativeCommons")
+    ):
+        promoted = await admin_client.post(
+            "/api/admin/contents",
+            json={"source": "youtube", "url": "https://youtu.be/privvid0001"},
+        )
+        assert promoted.status_code == 202
+        assert promoted.json()["promoted"] is True
+    await db_session.refresh(private)
+    assert private.visibility == "public"
+    assert private.youtube_license == "creativeCommons"
 
 
 async def test_sentence_approval_requires_thinking_hint(admin_client, db_session):
