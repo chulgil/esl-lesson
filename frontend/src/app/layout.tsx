@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Gaegu, IBM_Plex_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { AppNav } from "@/components/nav/AppNav";
+import { InviteToaster } from "@/components/game/InviteToaster";
 
 const gaegu = Gaegu({
   variable: "--font-gaegu",
@@ -55,6 +56,7 @@ export default function RootLayout({
           }}
         />
         <AppNav />
+        <InviteToaster />
         {children}
       </body>
     </html>

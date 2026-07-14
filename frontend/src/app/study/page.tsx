@@ -43,6 +43,11 @@ export default function StudyHubPage() {
         </h1>
         <p className="mt-2 text-sm opacity-70">
           잊기 전에 다시 만나는 복습 — 오늘 할 일부터 시작해요.
+          {stats && (
+            <span className="ml-2 rounded bg-brick-blue/10 px-2 py-0.5 text-xs font-bold text-brick-blue">
+              Lv.{stats.level} · {stats.xp} XP
+            </span>
+          )}
         </p>
       </header>
 

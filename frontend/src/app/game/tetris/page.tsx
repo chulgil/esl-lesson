@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   gameApi,
   type GameProfile,
@@ -11,6 +12,7 @@ import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { PlayArea } from "@/app/game/PlayArea";
 import { ContentPicker } from "@/components/game/ContentPicker";
+import { InviteFriends } from "@/components/game/InviteFriends";
 import { ItemIcon } from "@/components/game/ItemIcon";
 import { ModeButton } from "@/components/game/ModeButton";
 import {
@@ -24,6 +26,15 @@ import {
 type Phase = "lobby" | "waiting" | "countdown" | "playing" | "ended";
 
 export default function GamePage() {
+  return (
+    <Suspense>
+      <TetrisInner />
+    </Suspense>
+  );
+}
+
+function TetrisInner() {
+  const joinCode = useSearchParams().get("join");
   const [phase, setPhase] = useState<Phase>("lobby");
   // 기본 Lv.2 — Lv.3(35WPM)는 실측상 초심자가 이기기 어려움 (2026-07-14 전적 데이터)
   const [botLevel, setBotLevel] = useState(2);
@@ -111,8 +122,15 @@ export default function GamePage() {
     });
     socket.connect();
     socketRef.current = socket;
-    return () => socket.close();
-  }, [handleMessage]);
+    // 초대 링크(?join=)로 진입 시 자동 입장
+    const timer = joinCode
+      ? setTimeout(() => socket.joinRoom(joinCode), 400)
+      : null;
+    return () => {
+      if (timer) clearTimeout(timer);
+      socket.close();
+    };
+  }, [handleMessage, joinCode]);
 
   useEffect(() => {
     if (phase === "playing") inputRef.current?.focus();
@@ -243,6 +261,12 @@ export default function GamePage() {
               <p className="text-sm opacity-60">
                 상대가 입장하면 자동으로 시작됩니다.
               </p>
+              <InviteFriends
+                onInvite={(uid) =>
+                  myRoomCode &&
+                  socketRef.current?.invite(uid, "tetris", myRoomCode)
+                }
+              />
             </>
           ) : (
             <p className="animate-pulse">상대를 찾는 중...</p>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { QuizRoyale } from "@/app/game/QuizRoyale";
@@ -8,8 +9,17 @@ import { ContentPicker } from "@/components/game/ContentPicker";
 import { ModeButton } from "@/components/game/ModeButton";
 import { GameSocket, type QrMsg, type ServerMsg } from "@/lib/game-ws";
 
-/** 스피드 퀴즈 로얄 — 최대 4인 버저 퀴즈 (docs/specs/quiz-royale.md) */
 export default function QuizRoyalePage() {
+  return (
+    <Suspense>
+      <QuizRoyaleInner />
+    </Suspense>
+  );
+}
+
+/** 스피드 퀴즈 로얄 — 최대 4인 버저 퀴즈 (docs/specs/quiz-royale.md) */
+function QuizRoyaleInner() {
+  const joinCode = useSearchParams().get("join");
   const [selectedContents, setSelectedContents] = useState<number[]>([]);
   const [botLevel, setBotLevel] = useState(3);
   const [bots, setBots] = useState(1);
@@ -47,8 +57,17 @@ export default function QuizRoyalePage() {
     });
     socket.connect();
     socketRef.current = socket;
-    return () => socket.close();
-  }, [handleMessage]);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    if (joinCode) {
+      // 초대 링크(?join=)로 진입 시 자동 입장
+      setPlaying(true);
+      timer = setTimeout(() => socket.qrJoin(joinCode), 400);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+      socket.close();
+    };
+  }, [handleMessage, joinCode]);
 
   const contentIds = selectedContents.length ? selectedContents : undefined;
 
@@ -72,6 +91,7 @@ export default function QuizRoyalePage() {
             socketRef.current?.qrLeave();
             setPlaying(false);
           }}
+          onInvite={(uid, code) => socketRef.current?.invite(uid, "quiz", code)}
         />
       ) : (
         <section className="flex max-w-lg flex-col gap-6">

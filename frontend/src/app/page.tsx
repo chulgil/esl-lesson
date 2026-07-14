@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { Showcase } from "@/components/landing/Showcase";
+import { OnboardingChecklist } from "@/components/study/OnboardingChecklist";
 import { StreakHeatmap } from "@/components/study/StreakHeatmap";
 import { fetchMe, type Me } from "@/lib/api";
 import { studyApi, type Stats } from "@/lib/study-api";
@@ -69,12 +70,22 @@ function Dashboard({ me }: { me: Me }) {
       <p>
         <span className="font-hand text-2xl">{me.name}</span> 님, 오늘도 한 브릭
         쌓아볼까요?
+        {stats && (
+          <span
+            className="ml-2 rounded bg-brick-blue/10 px-2 py-0.5 text-sm font-bold text-brick-blue"
+            title={`${stats.xp} XP — 복습·게임으로 쌓여요`}
+          >
+            Lv.{stats.level}
+          </span>
+        )}
         {stats && stats.streak_days > 0 && (
           <span className="ml-2 rounded bg-highlight/60 px-2 py-0.5 text-sm">
             {stats.streak_days}일 연속 학습 중
           </span>
         )}
       </p>
+      {stats && <OnboardingChecklist stats={stats} />}
+
       <div className="flex flex-wrap gap-4">
         <Brick color="green" href="/study/session">
           오늘의 학습 시작{stats ? ` (${stats.due_count})` : ""}

@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
+import { InviteFriends } from "@/components/game/InviteFriends";
 import { fetchMe } from "@/lib/api";
 import {
   GameSocket,
@@ -20,8 +22,17 @@ interface Row {
   done: boolean;
 }
 
-/** 영문 타자연습 — 같은 문장을 1~4인이 동시에, 전원 완성 시 다음 문장 (typing-race.md) */
 export default function TypingRacePage() {
+  return (
+    <Suspense>
+      <TypingRaceInner />
+    </Suspense>
+  );
+}
+
+/** 영문 타자연습 — 같은 문장을 1~4인이 동시에, 전원 완성 시 다음 문장 (typing-race.md) */
+function TypingRaceInner() {
+  const joinCode = useSearchParams().get("join");
   const [phase, setPhase] = useState<Phase>("lobby");
   const [code, setCode] = useState("");
   const [room, setRoom] = useState<{
@@ -139,8 +150,15 @@ export default function TypingRacePage() {
     });
     socket.connect();
     socketRef.current = socket;
-    return () => socket.close();
-  }, [handleMessage]);
+    // 초대 링크(?join=)로 진입 시 자동 입장
+    const timer = joinCode
+      ? setTimeout(() => socket.tpJoin(joinCode), 400)
+      : null;
+    return () => {
+      if (timer) clearTimeout(timer);
+      socket.close();
+    };
+  }, [handleMessage, joinCode]);
 
   useEffect(() => {
     if (phase === "racing") inputRef.current?.focus();
@@ -342,6 +360,11 @@ export default function TypingRacePage() {
           {room.host !== myName && (
             <p className="text-xs opacity-60">방장이 시작하면 바로 달려요!</p>
           )}
+          <InviteFriends
+            onInvite={(uid) =>
+              room.code && socketRef.current?.invite(uid, "typing", room.code)
+            }
+          />
         </section>
       )}
 

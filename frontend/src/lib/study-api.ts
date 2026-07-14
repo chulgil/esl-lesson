@@ -86,6 +86,9 @@ export interface StudyRank {
 }
 
 export interface Stats {
+  xp: number;
+  level: number;
+  level_progress: number;
   due_count: number;
   reviews_today: number;
   streak_days: number;

@@ -15,6 +15,7 @@ from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import User
 from app.models.friend import Friendship
+from app.services.game.invites import invite_hub
 from app.services.game.spectate import spectate_hub
 
 router = APIRouter(prefix="/friends", tags=["friends"])
@@ -148,6 +149,7 @@ async def list_friends(
                     "avatar_url": other.avatar_url,
                     "studying": code is not None,
                     "watch_code": code,
+                    "online": invite_hub.online(other.id),
                 }
             )
         elif r.addressee_id == user.id:

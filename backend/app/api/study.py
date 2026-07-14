@@ -465,7 +465,57 @@ async def get_stats(
         streak += 1
         cursor -= timedelta(days=1)
 
+    # XP·레벨 (P2) — 복습 10 + 게임 참여 20 + 테트리스 승리 보너스 30, 레벨=500XP 단위
+    from app.models import GameMatch, QuizRoyaleMatch, TypingRace
+
+    total_reviews = (
+        await db.execute(select(func.count(ReviewLog.id)).where(ReviewLog.user_id == user.id))
+    ).scalar_one()
+    tetris_played = (
+        await db.execute(
+            select(func.count(GameMatch.id)).where(
+                (GameMatch.player1_id == user.id) | (GameMatch.player2_id == user.id),
+                GameMatch.status == "finished",
+            )
+        )
+    ).scalar_one()
+    tetris_wins = (
+        await db.execute(
+            select(func.count(GameMatch.id)).where(
+                GameMatch.winner_id == user.id, GameMatch.status == "finished"
+            )
+        )
+    ).scalar_one()
+    typing_played = (
+        await db.execute(
+            select(func.count(TypingRace.id)).where(
+                (TypingRace.player1_id == user.id) | (TypingRace.player2_id == user.id),
+                TypingRace.status == "finished",
+            )
+        )
+    ).scalar_one()
+    quiz_played = 0
+    for payload in (
+        (
+            await db.execute(
+                select(QuizRoyaleMatch.players).where(QuizRoyaleMatch.status == "finished")
+            )
+        )
+        .scalars()
+        .all()
+    ):
+        if any(p.get("user_id") == user.id for p in (payload or {}).get("players", [])):
+            quiz_played += 1
+    xp = (
+        total_reviews * 10
+        + (tetris_played + typing_played + quiz_played) * 20
+        + tetris_wins * 30
+    )
+
     return {
+        "xp": xp,
+        "level": xp // 500 + 1,
+        "level_progress": (xp % 500) / 500,
         "due_count": due_count,
         "reviews_today": reviews_today,
         "streak_days": streak,

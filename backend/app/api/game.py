@@ -13,6 +13,7 @@ from app.core.db import get_db, get_session_factory
 from app.core.security import SESSION_COOKIE, decode_session_token, get_current_user
 from app.models import GameMatch, QuizRoyaleMatch, TypingRace, User
 from app.services.game import records
+from app.services.game.invites import invite_hub
 from app.services.game.manager import WordPoolError, manager
 from app.services.game.quiz_royale import royale
 from app.services.game.spectate import spectate_hub
@@ -200,7 +201,8 @@ async def game_ws(websocket: WebSocket) -> None:
     async def send(message: dict) -> None:
         await websocket.send_json(message)
 
-    # 진행 중이던 매치가 있으면 자동 복귀
+    # 프레즌스 등록 (친구 초대 수신용) + 진행 중이던 매치 자동 복귀
+    invite_hub.attach(user_id, user.name, send)
     await manager.attach(user_id, send)
 
     try:
@@ -331,15 +333,26 @@ async def game_ws(websocket: WebSocket) -> None:
                     await spectate_hub.event(user_id, payload)
             elif t == "st.leave":
                 await spectate_hub.detach(user_id)
+            # --- 친구 게임 초대 (P2 경쟁 루프) ---
+            elif t == "iv.invite":
+                delivered = await invite_hub.invite(
+                    user_id,
+                    to_user_id=int(msg.get("to_user_id", 0)),
+                    game=str(msg.get("game", "")),
+                    code=str(msg.get("code", "")),
+                )
+                await send({"t": "iv.sent", "ok": delivered})
             else:
                 await send({"t": "error", "code": "unknown_message"})
     except WebSocketDisconnect:
+        invite_hub.detach(user_id, send)
         manager.detach(user_id)
         royale.detach(user_id)
         racer.detach(user_id)
         await spectate_hub.detach(user_id)
     except Exception:
         logger.exception("ws error user=%s", user_id)
+        invite_hub.detach(user_id, send)
         manager.detach(user_id)
         royale.detach(user_id)
         racer.detach(user_id)

@@ -187,7 +187,13 @@ export type StMsg =
   | { t: "st.left"; name: string }
   | { t: "st.end" };
 
+/** 친구 게임 초대 (P2) */
+export type IvMsg =
+  | { t: "iv.invited"; from: string; game: "tetris" | "quiz" | "typing"; code: string }
+  | { t: "iv.sent"; ok: boolean };
+
 export type ServerMsg =
+  | IvMsg
   | StateMsg
   | MatchFoundMsg
   | ClearResultMsg
@@ -324,6 +330,9 @@ export class GameSocket {
   }
   stLeave(): void {
     this.send({ t: "st.leave" });
+  }
+  invite(toUserId: number, game: string, code: string): void {
+    this.send({ t: "iv.invite", to_user_id: toUserId, game, code });
   }
   close(): void {
     this.ws?.close();

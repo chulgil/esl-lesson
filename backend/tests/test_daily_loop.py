@@ -132,3 +132,28 @@ async def test_game_bests_empty_for_new_user(client, db_session):
         "quiz_best_score": 0,
         "typing_best_cpm": 0,
     }
+
+
+async def test_stats_include_xp_and_level(client, db_session):
+    """XP = 복습x10 + 게임 참여x20 + 승리 보너스x30, 레벨 = 500XP 단위."""
+    me = await login(client, db_session, email="xp@example.com")
+    await _log_reviews(db_session, me.id, 12)
+    db_session.add(
+        GameMatch(
+            mode="pve",
+            status="finished",
+            player1_id=me.id,
+            winner_id=me.id,
+            p1_score=100,
+            p2_score=50,
+            stats={},
+        )
+    )
+    await db_session.commit()
+
+    res = await client.get("/api/study/stats")
+    body = res.json()
+    # 복습 120 + 참여 20 + 승리 30 = 170
+    assert body["xp"] == 170
+    assert body["level"] == 1
+    assert 0 <= body["level_progress"] < 1

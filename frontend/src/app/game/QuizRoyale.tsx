@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
+import { InviteFriends } from "@/components/game/InviteFriends";
 import type {
   QrEndMsg,
   QrMsg,
@@ -18,11 +19,13 @@ export function QuizRoyale({
   onAnswer,
   onStart,
   onExit,
+  onInvite,
 }: {
   registerHandler: (handler: (msg: QrMsg) => void) => void;
   onAnswer: (answer: string) => void;
   onStart: () => void;
   onExit: () => void;
+  onInvite?: (userId: number, code: string) => void;
 }) {
   const [phase, setPhase] = useState<Phase>("waiting");
   const [room, setRoom] = useState<QrRoomMsg | null>(null);
@@ -146,6 +149,9 @@ export function QuizRoyale({
             <p className="text-xs opacity-60">
               2명 이상 모이면 방장이 시작할 수 있어요
             </p>
+          )}
+          {room.code && onInvite && (
+            <InviteFriends onInvite={(uid) => onInvite(uid, room.code!)} />
           )}
         </div>
       )}

@@ -6,6 +6,7 @@ export interface FriendEntry {
   avatar_url: string | null;
   studying: boolean;
   watch_code: string | null;
+  online: boolean;
 }
 
 export interface FriendRequestEntry {
