@@ -26,7 +26,8 @@ type Phase = "lobby" | "waiting" | "countdown" | "playing" | "ended";
 
 export default function GamePage() {
   const [phase, setPhase] = useState<Phase>("lobby");
-  const [botLevel, setBotLevel] = useState(3);
+  // 기본 Lv.2 — Lv.3(35WPM)는 실측상 초심자가 이기기 어려움 (2026-07-14 전적 데이터)
+  const [botLevel, setBotLevel] = useState(2);
   const [roomCode, setRoomCode] = useState("");
   const [myContents, setMyContents] = useState<ContentSummary[]>([]);
   const [selectedContents, setSelectedContents] = useState<number[]>([]);
@@ -337,6 +338,7 @@ export default function GamePage() {
         <ResultPanel
           result={endResult}
           you={matchInfo?.you ?? 1}
+          opponent={matchInfo?.opponent ?? "상대"}
           onAgain={playAgain}
         />
       )}
@@ -517,7 +519,7 @@ function Lobby({
 
       <div className="rounded-lg border-2 border-ink/10 bg-white p-4">
         <p className="mb-2 text-sm font-bold">AI 대전</p>
-        <div className="mb-3 flex gap-1">
+        <div className="mb-1 flex gap-1">
           {[1, 2, 3, 4, 5].map((level) => (
             <ModeButton
               key={level}
@@ -528,6 +530,10 @@ function Lobby({
             </ModeButton>
           ))}
         </div>
+        <p className="mb-3 text-xs opacity-60">
+          봇 타자 속도: Lv.1 느긋(15WPM) · Lv.2 무난(25) · Lv.3 빠름(35) · Lv.4
+          고수(50) · Lv.5 괴물(70)
+        </p>
         <Brick color="green" onClick={onPve}>
           AI와 대전 시작
         </Brick>
@@ -651,13 +657,16 @@ function ModeButton({
 function ResultPanel({
   result,
   you,
+  opponent,
   onAgain,
 }: {
   result: MatchEndMsg;
   you: number;
+  opponent: string;
   onAgain: () => void;
 }) {
   const my = you === 1 ? result.stats.p1 : result.stats.p2;
+  const op = you === 1 ? result.stats.p2 : result.stats.p1;
   const titles = { win: "승리!", lose: "패배...", draw: "무승부" } as const;
   const RECORD_LABELS: Record<string, string> = {
     score: "최고 점수",
@@ -678,6 +687,23 @@ function ResultPanel({
       >
         {titles[result.winner]}
       </h2>
+      {/* 최종 점수 비교 — "왜 이 결과인지"를 한눈에 (전적 인지 버그 수정 2026-07-14) */}
+      <p className="mt-2 font-hand text-3xl font-bold">
+        <span
+          className={result.winner === "win" ? "text-brick-green" : "text-ink"}
+        >
+          {my.score}
+        </span>
+        <span className="mx-2 opacity-30">:</span>
+        <span
+          className={result.winner === "lose" ? "text-brick-red" : "text-ink"}
+        >
+          {op.score}
+        </span>
+      </p>
+      <p className="text-xs opacity-60">
+        나 vs {opponent} — 최종 점수가 높은 쪽이 승리해요
+      </p>
       {records.length > 0 && (
         // 개인 기록 경신 — "지난번의 나"를 이기는 순간을 크게 (P3 리텐션)
         <div className="mt-3 flex flex-wrap gap-2">

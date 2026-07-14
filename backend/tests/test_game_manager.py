@@ -169,6 +169,27 @@ async def test_pve_rejects_when_no_words_visible(wired_db):
         await gm.join_pve(user.id, user.name, "en", bot_level=1, send=Collector())
 
 
+async def test_pve_disconnect_forfeit_is_aborted_not_loss(wired_db, monkeypatch):
+    """PvE 에서 사람이 이탈해 몰수되면 패 대신 aborted — 전적에 안 잡힘 (2026-07-14 버그)."""
+    import app.services.game.manager as manager_mod
+    from app.services.game.manager import GameManager
+
+    monkeypatch.setattr(manager_mod, "RECONNECT_GRACE_SECONDS", 0.0)
+    user = await seed_user_and_words(wired_db)
+    gm = GameManager()
+    session = await gm.join_pve(user.id, user.name, "en", bot_level=2, send=Collector())
+    session.task.cancel()
+
+    gm.detach(user.id)  # 이탈 → 유예 0초 → 다음 스텝에서 몰수
+    await gm._step(session, 0.1)
+    assert session.match.finished
+    await gm._finish(session, aborted=session.abandoned)
+
+    row = await wired_db.get(GameMatch, session.match_id)
+    await wired_db.refresh(row)
+    assert row.status == "aborted"  # 패(finished+winner=bot)가 아니라 기록 제외
+
+
 async def test_use_item_via_manager(wired_db):
     user = await seed_user_and_words(wired_db)
     gm = GameManager()

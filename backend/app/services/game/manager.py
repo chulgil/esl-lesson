@@ -61,6 +61,8 @@ class MatchSession:
     started: bool = False
     task: asyncio.Task | None = None
     input_seq: dict[int, int] = field(default_factory=dict)
+    # PvE 이탈 몰수 — 봇전 중도 이탈은 패 대신 기록 제외 (aborted)
+    abandoned: bool = False
 
 
 class GameManager:
@@ -213,7 +215,7 @@ class GameManager:
                 now = time.monotonic()
                 dt, last = now - last, now
                 await self._step(session, dt)
-            await self._finish(session)
+            await self._finish(session, aborted=session.abandoned)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -229,12 +231,14 @@ class GameManager:
             if text is not None:
                 session.match.submit(2, text)
 
-        # 이탈 유예 초과 → 몰수
+        # 이탈 유예 초과 → 몰수. 봇전은 혼자 연습이라 몰수패 대신 기록 제외
         for player_no, slot in session.players.items():
             if (
                 slot.disconnected_at
                 and time.monotonic() - slot.disconnected_at > RECONNECT_GRACE_SECONDS
             ):
+                if session.bot is not None:
+                    session.abandoned = True
                 session.match.forfeit(player_no)
 
         await self._broadcast_state(session, events)
@@ -369,9 +373,7 @@ class GameManager:
                     continue
                 try:
                     prev = await self._previous_bests(slot.user_id)
-                    records_by_player[player_no] = records.new_records(
-                        prev, stats[f"p{player_no}"]
-                    )
+                    records_by_player[player_no] = records.new_records(prev, stats[f"p{player_no}"])
                 except Exception:
                     logger.exception("records check failed user=%s", slot.user_id)
 
