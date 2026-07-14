@@ -23,6 +23,11 @@ TOKEN = os.environ.get("ESL_AGENT_TOKEN", "")
 POLL_SECONDS = 30
 
 
+def log(msg: str) -> None:
+    """이벤트에만 출력하므로 로그가 커지지 않음 — 시각 없인 장애 시점 특정 불가라 추가."""
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+
+
 def fetch_snippets(video_id: str, languages: tuple[str, ...]) -> list[dict] | None:
     """로컬 IP 로 자막 조회. 없으면 None."""
     from youtube_transcript_api import YouTubeTranscriptApi
@@ -31,7 +36,7 @@ def fetch_snippets(video_id: str, languages: tuple[str, ...]) -> list[dict] | No
     try:
         transcript_list = api.list(video_id)
     except Exception as exc:
-        print(f"  [x] {video_id}: 자막 목록 조회 실패 ({type(exc).__name__})")
+        log(f"  [x] {video_id}: 자막 목록 조회 실패 ({type(exc).__name__})")
         return None
     transcript = None
     for finder in ("find_manually_created_transcript", "find_generated_transcript"):
@@ -59,13 +64,13 @@ def process_once(client: httpx.Client) -> int:
     items = res.json()["items"]
     if not items:
         return 0
-    print(f"대기 {len(items)}건 발견")
+    log(f"대기 {len(items)}건 발견")
     done = 0
     for item in items:
         video_id = item["youtube_video_id"]
         en = fetch_snippets(video_id, ("en",))
         if not en:
-            print(f"  [x] {video_id}: 영어 자막 없음/실패 — 건너뜀")
+            log(f"  [x] {video_id}: 영어 자막 없음/실패 — 건너뜀")
             continue
         ko = fetch_snippets(video_id, ("ko",)) or []
         submit = client.post(
@@ -73,27 +78,27 @@ def process_once(client: httpx.Client) -> int:
             json={"en_snippets": en, "ko_snippets": ko},
         )
         if submit.status_code == 202:
-            print(f"  [o] {video_id}: 제출 완료 (en {len(en)}조각, ko {len(ko)}조각)")
+            log(f"  [o] {video_id}: 제출 완료 (en {len(en)}조각, ko {len(ko)}조각)")
             done += 1
         else:
-            print(f"  [x] {video_id}: 제출 실패 {submit.status_code} {submit.text[:100]}")
+            log(f"  [x] {video_id}: 제출 실패 {submit.status_code} {submit.text[:100]}")
     return done
 
 
 def main() -> None:
     if not TOKEN:
-        print("ESL_AGENT_TOKEN 환경변수가 필요합니다.")
+        log("ESL_AGENT_TOKEN 환경변수가 필요합니다.")
         sys.exit(1)
     once = "--once" in sys.argv
     client = httpx.Client(timeout=30, headers={"X-Agent-Token": TOKEN})
-    print(f"자막 수집기 시작 — 서버 {SERVER} ({'1회' if once else f'{POLL_SECONDS}초 간격'})")
+    log(f"자막 수집기 시작 — 서버 {SERVER} ({'1회' if once else f'{POLL_SECONDS}초 간격'})")
     while True:
         try:
             processed = process_once(client)
             if processed:
-                print(f"{processed}건 처리 완료 — 서버가 번역/추출을 이어서 진행합니다")
+                log(f"{processed}건 처리 완료 — 서버가 번역/추출을 이어서 진행합니다")
         except Exception as exc:
-            print(f"[!] 오류: {type(exc).__name__}: {exc}")
+            log(f"[!] 오류: {type(exc).__name__}: {exc}")
         if once:
             break
         time.sleep(POLL_SECONDS)
