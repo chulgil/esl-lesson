@@ -9,6 +9,7 @@ import {
   type GraphEdge,
   type GraphNode,
 } from "@/components/study/VocabGraph";
+import { fetchMe, loginUrl } from "@/lib/api";
 import { studyApi, type VocabNetwork } from "@/lib/study-api";
 
 const STATE_LEGEND = [
@@ -27,16 +28,24 @@ const STATE_LEGEND = [
 export default function VocabNetworkPage() {
   const [data, setData] = useState<VocabNetwork | null>(null);
   const [error, setError] = useState(false);
+  const [needLogin, setNeedLogin] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showInsight, setShowInsight] = useState(false);
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    studyApi
-      .network()
-      .then(setData)
-      .catch(() => setError(true));
+    // 공유 링크로 비로그인 진입 시 에러 대신 SSO 유도 (홈 Showcase 와 동일 게이트)
+    fetchMe().then((me) => {
+      if (!me) {
+        setNeedLogin(true);
+        return;
+      }
+      studyApi
+        .network()
+        .then(setData)
+        .catch(() => setError(true));
+    });
   }, []);
 
   const { nodes, edges } = useMemo(() => {
@@ -98,13 +107,24 @@ export default function VocabNetworkPage() {
         </h1>
       </header>
 
+      {needLogin && (
+        <div className="flex flex-col items-start gap-4">
+          <p>
+            어휘망은 로그인하면 볼 수 있어요 — 내가 학습한 단어들이 연결돼요.
+          </p>
+          <Brick color="red" href={loginUrl("/study/network")}>
+            Google로 시작하기
+          </Brick>
+        </div>
+      )}
+
       {error && (
         <p className="text-sm text-brick-red">
           어휘망을 불러오지 못했어요 — 새로고침해 주세요
         </p>
       )}
 
-      {!data && !error && (
+      {!data && !error && !needLogin && (
         <p className="text-sm opacity-60">어휘망을 그리는 중...</p>
       )}
 

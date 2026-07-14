@@ -15,10 +15,29 @@ const body = IBM_Plex_Sans_KR({
   subsets: ["latin"],
 });
 
+const TITLE = "ESL Lessonaza — 유튜브로 배우는 영어";
+const DESCRIPTION =
+  "유튜브 스크립트에서 단어·숙어·패턴·문장을 추출해 망각곡선으로 복습하는 영어 학습 서비스";
+
 export const metadata: Metadata = {
-  title: "ESL Lessonaza — 유튜브로 배우는 영어",
-  description:
-    "유튜브 스크립트에서 단어·숙어·패턴·문장을 추출해 망각곡선으로 복습하는 영어 학습 서비스",
+  metadataBase: new URL("https://esl.lessonaza.app"),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+    siteName: "ESL Lessonaza",
+    locale: "ko_KR",
+    type: "website",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: TITLE }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({
