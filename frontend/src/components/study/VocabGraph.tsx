@@ -396,7 +396,7 @@ export function VocabGraph({
           type="button"
           aria-label="확대"
           onClick={() => zoom(1.25)}
-          className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-ink/20 bg-white text-lg font-bold shadow-sm"
+          className="flex h-11 w-11 items-center justify-center rounded-md border-2 border-ink/20 bg-white text-lg font-bold shadow-sm transition-colors hover:border-brick-blue"
         >
           +
         </button>
@@ -404,7 +404,7 @@ export function VocabGraph({
           type="button"
           aria-label="축소"
           onClick={() => zoom(0.8)}
-          className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-ink/20 bg-white text-lg font-bold shadow-sm"
+          className="flex h-11 w-11 items-center justify-center rounded-md border-2 border-ink/20 bg-white text-lg font-bold shadow-sm transition-colors hover:border-brick-blue"
         >
           −
         </button>

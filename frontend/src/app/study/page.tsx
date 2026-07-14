@@ -191,7 +191,7 @@ export default function StudyPage() {
               setShowSettings(false);
               window.location.reload();
             }}
-            className="self-start rounded-md bg-brick-green px-4 py-2 font-bold text-white"
+            className="min-h-11 self-start rounded-md bg-brick-green px-4 py-2 font-bold text-brick-label transition-colors hover:bg-brick-green/85"
           >
             저장하고 새 난이도로 학습
           </button>
@@ -419,7 +419,7 @@ function PatternQuiz({
             type="button"
             disabled={disabled}
             onClick={() => setPicked((p) => p.filter((_, j) => j !== i))}
-            className="mb-1 mr-1 rounded bg-brick-blue px-2 py-1 text-sm font-bold text-white"
+            className="mb-1 mr-1 min-h-10 rounded-md bg-brick-blue px-3 py-1 text-sm font-bold text-white transition-colors hover:bg-brick-blue/80"
           >
             {chips[chipIdx]}
           </button>
@@ -433,7 +433,7 @@ function PatternQuiz({
               type="button"
               disabled={disabled}
               onClick={() => setPicked((p) => [...p, chipIdx])}
-              className={`rounded border-2 px-2 py-1 text-sm hover:border-brick-blue ${
+              className={`min-h-10 rounded-md border-2 px-3 py-1 text-sm transition hover:border-brick-blue active:scale-95 ${
                 nextWord && chip === nextWord
                   ? "border-brick-yellow bg-highlight/60 font-bold"
                   : "border-ink/15 bg-white"
@@ -635,7 +635,7 @@ function Feedback({
           <button
             type="button"
             onClick={() => setShowInsight(true)}
-            className="min-h-8 cursor-pointer rounded-full border-2 border-brick-blue/40 bg-white px-3 py-1 text-xs font-bold text-brick-blue transition hover:border-brick-blue"
+            className="min-h-10 cursor-pointer rounded-full border-2 border-brick-blue/40 bg-white px-3.5 py-1 text-xs font-bold text-brick-blue transition hover:border-brick-blue active:scale-95"
           >
             단어 정보
           </button>
@@ -674,7 +674,7 @@ function Feedback({
               <button
                 type="button"
                 onClick={() => setShowInsight(true)}
-                className="min-h-8 cursor-pointer rounded-full border-2 border-brick-yellow bg-white px-3 py-1 text-xs font-bold transition hover:-translate-y-0.5"
+                className="min-h-10 cursor-pointer rounded-full border-2 border-brick-yellow bg-white px-3.5 py-1 text-xs font-bold transition hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
               >
                 두 단어 차이 자세히 보기
               </button>
@@ -683,7 +683,7 @@ function Feedback({
               type="button"
               disabled={closeAdded}
               onClick={addCloseWord}
-              className="min-h-8 cursor-pointer rounded-full border-2 border-brick-green/60 bg-white px-3 py-1 text-xs font-bold text-brick-green transition hover:-translate-y-0.5 disabled:opacity-60"
+              className="min-h-10 cursor-pointer rounded-full border-2 border-brick-green/60 bg-white px-3.5 py-1 text-xs font-bold text-brick-green transition hover:-translate-y-0.5 active:translate-y-0 active:scale-95 disabled:opacity-60"
             >
               {closeAdded
                 ? "학습 큐에 추가됨!"

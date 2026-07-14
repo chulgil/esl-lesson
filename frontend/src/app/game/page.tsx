@@ -2,11 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ContentSummary } from "@/lib/admin-api";
-import { gameApi, type GameProfile, type LeaderboardEntry } from "@/lib/game-api";
+import {
+  gameApi,
+  type GameProfile,
+  type LeaderboardEntry,
+} from "@/lib/game-api";
 import { useAppTheme } from "@/lib/theme";
 import { Brick } from "@/components/brick/Brick";
 import { myApi } from "@/lib/my-api";
 import { PlayArea } from "@/app/game/PlayArea";
+import { ItemIcon } from "@/components/game/ItemIcon";
 import {
   GameSocket,
   type MatchEndMsg,
@@ -131,7 +136,10 @@ export default function GamePage() {
   // 내 전적 + 주간 리더보드 (P3 리텐션) — 로비 진입/경기 종료 시 갱신
   useEffect(() => {
     if (phase !== "lobby" && phase !== "ended") return;
-    gameApi.profile().then(setProfile).catch(() => undefined);
+    gameApi
+      .profile()
+      .then(setProfile)
+      .catch(() => undefined);
     gameApi
       .leaderboard()
       .then((res) => setLeaders(res.items))
@@ -254,7 +262,9 @@ export default function GamePage() {
       )}
 
       {phase === "countdown" && (
-        <p className="font-hand text-6xl font-bold text-brick-red">준비...</p>
+        <p className="animate-pulse font-hand text-6xl font-bold text-brick-red">
+          준비...
+        </p>
       )}
 
       {(phase === "playing" || phase === "ended") && (
@@ -349,9 +359,27 @@ function Lobby({
             회색 <b>×_× 젤리</b> = 상대의 공격 — 아무 단어나 클리어하면 1개씩
             소멸
           </li>
-          <li>
-            <b>아이템</b> (5콤보/★브릭 클리어): ❄3초 멈춤 · ?정답 보기 · *젤리
-            제거 · ▽공격 방어
+          <li className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <b>아이템</b> (5콤보/★브릭 클리어):
+            <span className="inline-flex items-center gap-0.5">
+              <ItemIcon kind="freeze" size={14} />
+              3초 멈춤
+            </span>
+            ·
+            <span className="inline-flex items-center gap-0.5">
+              <ItemIcon kind="hint" size={14} />
+              정답 보기
+            </span>
+            ·
+            <span className="inline-flex items-center gap-0.5">
+              <ItemIcon kind="bomb" size={14} />
+              젤리 제거
+            </span>
+            ·
+            <span className="inline-flex items-center gap-0.5">
+              <ItemIcon kind="shield" size={14} />
+              공격 방어
+            </span>
           </li>
         </ul>
       </div>
@@ -408,7 +436,8 @@ function Lobby({
             <button
               type="button"
               onClick={() => setSelectedContents([])}
-              className={`rounded px-3 py-1.5 text-sm font-bold ${
+              aria-pressed={selectedContents.length === 0}
+              className={`min-h-11 rounded-md px-3 text-sm font-bold transition-colors ${
                 selectedContents.length === 0
                   ? "bg-ink text-white"
                   : "bg-ink/5 hover:bg-ink/10"
@@ -421,7 +450,8 @@ function Lobby({
                 key={c.id}
                 type="button"
                 onClick={() => toggleContent(c.id)}
-                className={`max-w-56 truncate rounded px-3 py-1.5 text-sm ${
+                aria-pressed={selectedContents.includes(c.id)}
+                className={`min-h-11 max-w-56 truncate rounded-md px-3 text-sm transition-colors ${
                   selectedContents.includes(c.id)
                     ? "bg-brick-yellow font-bold"
                     : "bg-ink/5 hover:bg-ink/10"
@@ -467,7 +497,7 @@ function Lobby({
               onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
               placeholder="방 코드"
               maxLength={6}
-              className="w-28 rounded border-2 border-ink/20 px-2 py-2 font-mono uppercase"
+              className="min-h-11 w-28 rounded-md border-2 border-ink/20 px-2 font-mono uppercase transition-colors focus:border-brick-blue focus:outline-none"
             />
             <Brick color="yellow" onClick={onJoinRoom}>
               입장
@@ -492,7 +522,8 @@ function ModeButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded px-3 py-1.5 text-sm font-bold ${
+      aria-pressed={active}
+      className={`min-h-11 rounded-md px-3 text-sm font-bold transition-colors ${
         active ? "bg-ink text-white" : "bg-ink/5 hover:bg-ink/10"
       }`}
     >

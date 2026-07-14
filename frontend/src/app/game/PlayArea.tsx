@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  BoardCanvas,
-  type BoardTheme,
-} from "@/components/game/BoardCanvas";
+import { BoardCanvas, type BoardTheme } from "@/components/game/BoardCanvas";
+import { ItemIcon } from "@/components/game/ItemIcon";
 import type { BoardState } from "@/lib/game-ws";
 
 function useIsDesktop(): boolean {
@@ -21,25 +19,21 @@ function useIsDesktop(): boolean {
 
 /** 대전 화면 레이아웃 — 데스크톱: 중앙 대형 보드 + 우측 상대/HUD, 모바일: 상대 스트립 상단 고정 + 내 보드 + 하단 입력 */
 // label 에 효과를 내장 — 첫 사용자도 버튼만 보고 뭘 하는지 알게
-const ITEM_META: Record<string, { icon: string; label: string; desc: string }> =
-  {
-    freeze: {
-      icon: "❄",
-      label: "3초 멈춤",
-      desc: "3초간 내 보드 낙하/생성 정지",
-    },
-    hint: {
-      icon: "?",
-      label: "정답 보기",
-      desc: "가장 위험한 브릭의 정답을 표시",
-    },
-    bomb: {
-      icon: "*",
-      label: "젤리 제거",
-      desc: "상대가 보낸 회색 젤리 전부 제거",
-    },
-    shield: { icon: "▽", label: "공격 방어", desc: "다음 공격 1회 무효화" },
-  };
+const ITEM_META: Record<string, { label: string; desc: string }> = {
+  freeze: {
+    label: "3초 멈춤",
+    desc: "3초간 내 보드 낙하/생성 정지",
+  },
+  hint: {
+    label: "정답 보기",
+    desc: "가장 위험한 브릭의 정답을 표시",
+  },
+  bomb: {
+    label: "젤리 제거",
+    desc: "상대가 보낸 회색 젤리 전부 제거",
+  },
+  shield: { label: "공격 방어", desc: "다음 공격 1회 무효화" },
+};
 
 export function PlayArea({
   me,
@@ -132,7 +126,7 @@ export function PlayArea({
           type="button"
           disabled={disabled}
           onClick={() => onTap(chip)}
-          className={`min-h-11 rounded-full border-2 px-4 py-2 font-bold shadow-sm transition hover:-translate-y-0.5 disabled:opacity-50 ${
+          className={`min-h-11 rounded-full border-2 px-4 py-2 font-bold shadow-sm transition hover:-translate-y-0.5 active:translate-y-0 active:scale-95 disabled:opacity-50 ${
             hint === chip
               ? "border-brick-yellow bg-highlight/60"
               : "border-brick-blue/40 bg-white hover:border-brick-blue"
@@ -154,8 +148,9 @@ export function PlayArea({
       )}
       {itemToast && ITEM_META[itemToast] && (
         <p className="text-center text-base font-bold text-ink">
-          <span className="rounded bg-brick-yellow/40 px-2 py-0.5">
-            + {ITEM_META[itemToast].icon} {ITEM_META[itemToast].label} 획득!
+          <span className="inline-flex items-center gap-1.5 rounded bg-brick-yellow/40 px-2 py-0.5">
+            + <ItemIcon kind={itemToast} size={16} />
+            {ITEM_META[itemToast].label} 획득!
           </span>
         </p>
       )}
@@ -191,7 +186,13 @@ export function PlayArea({
             <p className="mb-1 text-sm font-bold opacity-70">
               vs {opponentName}
             </p>
-            <BoardCanvas state={op} width={256} height={366} mirror theme={boardTheme} />
+            <BoardCanvas
+              state={op}
+              width={256}
+              height={366}
+              mirror
+              theme={boardTheme}
+            />
           </div>
           <ScoreHud label={opponentName} board={op} />
           <ComboMeter combo={me?.combo ?? 0} />
@@ -203,7 +204,13 @@ export function PlayArea({
   return (
     <section className="flex flex-col gap-3 pb-40">
       <div className="sticky top-14 z-20 flex items-center gap-3 rounded-lg border-2 border-ink/10 bg-paper/95 p-2 backdrop-blur">
-        <BoardCanvas state={op} width={90} height={128} mirror theme={boardTheme} />
+        <BoardCanvas
+          state={op}
+          width={90}
+          height={128}
+          mirror
+          theme={boardTheme}
+        />
         <div className="flex-1">
           <p className="text-xs font-bold opacity-70">vs {opponentName}</p>
           <p className="text-sm">점수 {op?.score ?? 0}</p>
@@ -284,8 +291,8 @@ function ItemBar({
   return (
     <div className="flex items-center justify-center gap-2">
       {shield > 0 && (
-        <span className="rounded-md bg-brick-green/20 px-2 py-1 text-xs font-bold text-brick-green">
-          {ITEM_META.shield.icon} 공격 방어 x{shield}
+        <span className="inline-flex items-center gap-1 rounded-md bg-brick-green/20 px-2 py-1 text-xs font-bold text-brick-green">
+          <ItemIcon kind="shield" size={14} /> 공격 방어 x{shield}
         </span>
       )}
       {items.map((item, i) => {
@@ -296,10 +303,10 @@ function ItemBar({
             type="button"
             disabled={disabled}
             onClick={() => onUse(item)}
-            className="flex min-h-11 items-center gap-1 rounded-md border-2 border-brick-yellow/60 bg-brick-yellow/20 px-3 font-bold transition hover:-translate-y-0.5 hover:border-brick-yellow disabled:opacity-50"
+            className="flex min-h-11 items-center gap-1.5 rounded-md border-2 border-brick-yellow/60 bg-brick-yellow/20 px-3 font-bold transition hover:-translate-y-0.5 hover:border-brick-yellow active:translate-y-0 active:scale-95 disabled:opacity-50"
             title={meta?.desc}
           >
-            <span className="text-lg">{meta?.icon}</span>
+            <ItemIcon kind={item} size={18} />
             <span className="text-sm">{meta?.label}</span>
           </button>
         );

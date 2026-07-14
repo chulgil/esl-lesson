@@ -15,6 +15,8 @@
   --color-brick-green: #237841;
   --color-brick-green-shadow: #1a5a31;
   --color-highlight: #fff176;
+  /* 브릭 위 라벨색 — 파스텔 테마(캔디)는 흰 글씨가 대비 미달이라 테마별 토큰으로 분리 */
+  --color-brick-label: #ffffff;
 
   --font-hand: var(--font-gaegu);
   --font-sans: var(--font-body), "Apple SD Gothic Neo", sans-serif;
@@ -24,6 +26,23 @@ body {
   background-color: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
+}
+
+/* 인터랙션 기반 — Tailwind 4 preflight 는 버튼 커서가 default 라 명시 필요 */
+@layer base {
+  button:not(:disabled),
+  [role="button"] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  /* 키보드 포커스 — 테마 브릭 블루 링 (마우스 클릭에는 안 뜸) */
+  :is(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid
+      color-mix(in srgb, var(--color-brick-blue) 70%, transparent);
+    outline-offset: 2px;
+  }
 }
 
 /* 전역 테마: 캔디 — 파스텔 사탕 톤으로 토큰 전환 (설정 > 테마) */
@@ -41,6 +60,7 @@ html[data-theme="candy"] {
   --color-brick-green: #52bd8b;
   --color-brick-green-shadow: #3e9c70;
   --color-highlight: #ffd6ea;
+  --color-brick-label: #4a2d4f; /* 파스텔 위 흰 글씨는 2.3~2.8:1 — 잉크색으로 4.1:1+ 확보 */
 }
 
 /* 캔디: 줄노트 대신 버블 도트 배경 */
