@@ -12,6 +12,7 @@ import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { PlayArea } from "@/app/game/PlayArea";
 import { ContentPicker } from "@/components/game/ContentPicker";
+import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { InviteFriends } from "@/components/game/InviteFriends";
 import { ItemIcon } from "@/components/game/ItemIcon";
 import { ModeButton } from "@/components/game/ModeButton";
@@ -557,13 +558,35 @@ function ResultPanel({
           <Row label="정확도" value={`${Math.round(my.accuracy * 100)}%`} />
         </tbody>
       </table>
-      <div className="mt-5 flex gap-3">
+      <div className="mt-5 flex flex-wrap items-center gap-3">
         <Brick color="green" onClick={onAgain}>
           다시 하기
         </Brick>
         <Brick color="blue" href="/">
           홈으로
         </Brick>
+        <ShareResultButton
+          data={{
+            game: "워드 테트리스",
+            headline: titles[result.winner],
+            scoreline: `${my.score} : ${op.score}`,
+            tone:
+              result.winner === "win"
+                ? "win"
+                : result.winner === "lose"
+                  ? "lose"
+                  : "neutral",
+            lines: [
+              { label: "처리 단어", value: `${my.cleared}개` },
+              { label: "최다 콤보", value: `${my.max_combo}콤보` },
+              {
+                label: "타속",
+                value: `${Math.round(my.wpm * 5)}타 (${my.wpm}WPM)`,
+              },
+              { label: "정확도", value: `${Math.round(my.accuracy * 100)}%` },
+            ],
+          }}
+        />
       </div>
     </section>
   );

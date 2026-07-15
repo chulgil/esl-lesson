@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { fetchMe } from "@/lib/api";
 import {
   GameSocket,
@@ -531,6 +532,29 @@ function TypingRaceInner() {
             <Brick color="blue" href="/game">
               게임 메뉴로
             </Brick>
+            {end.results[0] && (
+              <ShareResultButton
+                data={{
+                  game: "영문 타자연습",
+                  headline: end.winner
+                    ? `${end.winner} 승리!`
+                    : end.results.length > 1
+                      ? "무승부"
+                      : "기록 완료!",
+                  scoreline: `최고 ${
+                    (end.winner
+                      ? end.results.find((r) => r.name === end.winner)
+                      : end.results[0]
+                    )?.peak_cpm ?? end.results[0].peak_cpm
+                  }타`,
+                  tone: end.winner ? "win" : "neutral",
+                  lines: end.results.slice(0, 4).map((r) => ({
+                    label: r.name,
+                    value: `평균 ${r.cpm}타 · 정확도 ${Math.round(r.accuracy * 100)}%`,
+                  })),
+                }}
+              />
+            )}
           </div>
         </section>
       )}

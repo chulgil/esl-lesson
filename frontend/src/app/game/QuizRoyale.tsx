@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { ShareResultButton } from "@/components/game/ShareResultButton";
 import type {
   QrEndMsg,
   QrMsg,
@@ -265,10 +266,24 @@ export function QuizRoyale({
               </li>
             ))}
           </ol>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Brick color="blue" onClick={onExit}>
               로비로
             </Brick>
+            {end.ranking[0] && (
+              <ShareResultButton
+                data={{
+                  game: "스피드 퀴즈",
+                  headline: `${end.ranking[0].name} 우승!`,
+                  scoreline: `${end.ranking[0].score}점`,
+                  tone: "win",
+                  lines: end.ranking.slice(0, 4).map((r) => ({
+                    label: `${r.rank}위 ${r.name}`,
+                    value: `${r.score}점`,
+                  })),
+                }}
+              />
+            )}
           </div>
         </div>
       )}
