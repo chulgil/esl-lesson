@@ -29,6 +29,17 @@ from app.workers.reminders import start_reminders, stop_reminders
 logging.basicConfig(level=logging.INFO)
 
 
+class AgentPollFilter(logging.Filter):
+    """자막 수집기 폴링 액세스 로그 제거 — 수 초 간격 폴링이 로그를 도배해
+    실제 오류 진단을 방해한다 (2026-07-15 실측)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/api/agent/pending-transcripts" not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(AgentPollFilter())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()

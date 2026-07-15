@@ -149,3 +149,18 @@ async def test_pending_list_and_submit_flow(client, db_session):
         json={"en_snippets": [{"text": "x.", "start_ms": 0, "end_ms": 1}]},
     )
     assert dup.json().get("skipped") is True
+
+
+def test_agent_poll_filter_drops_polling_access_logs():
+    """폴링 액세스 로그만 걸러내고 나머지는 통과 (진단 가시성)."""
+    import logging
+
+    from app.main import AgentPollFilter
+
+    f = AgentPollFilter()
+
+    def record(msg):
+        return logging.LogRecord("uvicorn.access", logging.INFO, "", 0, msg, None, None)
+
+    assert f.filter(record('"GET /api/agent/pending-transcripts HTTP/1.1" 200')) is False
+    assert f.filter(record('"GET /api/study/queue HTTP/1.1" 200')) is True
