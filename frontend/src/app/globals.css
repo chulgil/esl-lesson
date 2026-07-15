@@ -79,6 +79,34 @@ html[data-theme="lego"] {
   --color-highlight: #ffe066;
 }
 
+/* 전역 테마: 헤냥이 — 크림 고양이 톤, 몰랑몰랑 파스텔 */
+html[data-theme="cat"] {
+  --color-paper: #fff6ea;
+  --color-paper-line: #f3ddc2;
+  --color-margin-red: #f2b9a0;
+  --color-ink: #4d3b2a;
+  --color-brick-red: #ee8b74;
+  --color-brick-red-shadow: #cf6d57;
+  --color-brick-yellow: #f6c46a;
+  --color-brick-yellow-shadow: #d4a24a;
+  --color-brick-blue: #8cb8dd;
+  --color-brick-blue-shadow: #6d99bf;
+  --color-brick-green: #93c69b;
+  --color-brick-green-shadow: #74a87d;
+  --color-highlight: #ffdfae;
+  --color-brick-label: #4d3b2a; /* 파스텔 위 흰 글씨 대비 미달 — 캔디와 동일하게 잉크색 */
+}
+
+/* 헤냥이: 줄노트 대신 발도장 패턴 (젤리 1 + 발가락 3) */
+html[data-theme="cat"] .notebook-lines {
+  background-image:
+    radial-gradient(circle at 13px 17px, rgba(214, 166, 116, 0.2) 5px, transparent 5.5px),
+    radial-gradient(circle at 5px 8px, rgba(214, 166, 116, 0.2) 2.5px, transparent 3px),
+    radial-gradient(circle at 13px 5px, rgba(214, 166, 116, 0.2) 2.5px, transparent 3px),
+    radial-gradient(circle at 21px 8px, rgba(214, 166, 116, 0.2) 2.5px, transparent 3px);
+  background-size: 52px 52px;
+}
+
 /* 레고: 줄노트 대신 스터드 도트 격자 */
 html[data-theme="lego"] .notebook-lines {
   background-image: radial-gradient(
@@ -121,19 +149,65 @@ html[data-theme="lego"] .notebook-lines {
   box-shadow: 18px 0 0 currentColor;
 }
 
-/* 테마별 버튼 컨셉 (2026-07-14): 노트=스티커, 캔디=알사탕, 레고=브릭(기본 유지) */
+/* 테마별 버튼 컨셉 (2026-07-14): 노트=스티커, 캔디=알사탕, 레고=브릭(기본 유지), 헤냥이=몰랑 발바닥 */
 /* 노트(기본): 공책에 붙인 스티커 — 흰 다이컷 테두리 + 소프트 그림자 + 살짝 기울임 */
-html:not([data-theme="candy"]):not([data-theme="lego"]) .brick-studs {
+html:not([data-theme="candy"]):not([data-theme="lego"]):not([data-theme="cat"]) .brick-studs {
   border: 3px solid #fff;
   border-radius: 0.8rem;
   rotate: -1.2deg;
   box-shadow: 0 3px 8px rgb(0 0 0 / 0.22);
 }
-html:not([data-theme="candy"]):not([data-theme="lego"]) .brick-studs:active {
+html:not([data-theme="candy"]):not([data-theme="lego"]):not([data-theme="cat"]) .brick-studs:active {
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.28);
 }
-html:not([data-theme="candy"]):not([data-theme="lego"]) .brick-studs::before {
+html:not([data-theme="candy"]):not([data-theme="lego"]):not([data-theme="cat"]) .brick-studs::before {
   display: none;
+}
+
+/* 헤냥이: 몰랑 발바닥 — 둥근 젤리 패드 + 윗면 발가락 젤리 3개 */
+html[data-theme="cat"] .brick-studs {
+  border-radius: 1.4rem;
+  background-image: linear-gradient(rgb(255 255 255 / 0.25), rgb(255 255 255 / 0) 60%);
+  box-shadow: 0 4px 10px color-mix(in srgb, currentColor 40%, transparent);
+}
+html[data-theme="cat"] .brick-studs:active {
+  transform: scale(0.96);
+  box-shadow: 0 2px 4px color-mix(in srgb, currentColor 40%, transparent);
+}
+html[data-theme="cat"] .brick-studs::before {
+  top: -6px;
+  left: 14px;
+  width: 10px;
+  height: 8px;
+  border-radius: 9999px;
+  background: currentColor;
+  box-shadow:
+    15px -3px 0 currentColor,
+    30px 0 0 currentColor;
+}
+
+/* 헤냥이 마스코트 — 우하단 빼꼼 + 헤헤 웃음 */
+@keyframes henyang-giggle {
+  0%,
+  100% {
+    transform: translateY(12px) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(6px) rotate(2.5deg);
+  }
+}
+.henyang-peek svg {
+  animation: henyang-giggle 3.2s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+body.game-focus .henyang-peek {
+  display: none; /* 대전 중에는 입력바 시야 확보 */
+}
+@media (max-width: 639px) {
+  /* 모바일 하단 탭바(로그인 시) 위로 올려 겹침 방지 */
+  body.with-bottom-nav .henyang-peek {
+    bottom: 4.75rem;
+  }
 }
 
 /* 캔디: 광택 알사탕 — 필(pill) 형태 + 윗면 하이라이트, 은은한 색 글로우 */

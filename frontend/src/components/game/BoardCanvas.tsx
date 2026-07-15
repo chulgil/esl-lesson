@@ -6,12 +6,13 @@ import type { BoardState } from "@/lib/game-ws";
 const ROWS = 12;
 
 /** 보드 배경 테마 — 전역 앱 테마(설정 > 테마)를 따른다 */
-export type BoardTheme = "candy" | "note" | "lego";
+export type BoardTheme = "candy" | "note" | "lego" | "cat";
 
 const THEME_BORDER: Record<BoardTheme, string> = {
   candy: "border-[#F0C4E0]",
   note: "border-[#E8D9A8]",
   lego: "border-[#BFD4F2]",
+  cat: "border-[#EFD4AF]",
 };
 
 // 캔디 팔레트 — 밝은 파스텔 + 글로시 하이라이트 (Candy Crush 계열 비주얼 언어)
@@ -250,6 +251,30 @@ function drawBackground(
         ctx.beginPath();
         ctx.arc(gx, gy, 4.5, 0, Math.PI * 2);
         ctx.fill();
+      }
+    }
+    return;
+  }
+  if (theme === "cat") {
+    // 크림 종이 + 발도장 패턴 (헤냥이)
+    ctx.fillStyle = "#FFF6EA";
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = "rgba(214,166,116,0.16)";
+    const gap = 52;
+    for (let gy = gap / 2; gy < height; gy += gap) {
+      for (let gx = gap / 2; gx < width; gx += gap) {
+        ctx.beginPath();
+        ctx.ellipse(gx, gy + 6, 5.5, 4.5, 0, 0, Math.PI * 2); // 젤리
+        ctx.fill();
+        for (const [dx, dy] of [
+          [-7, -3],
+          [0, -7],
+          [7, -3],
+        ]) {
+          ctx.beginPath();
+          ctx.arc(gx + dx, gy + dy, 2.4, 0, Math.PI * 2); // 발가락
+          ctx.fill();
+        }
       }
     }
     return;

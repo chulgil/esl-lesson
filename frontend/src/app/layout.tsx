@@ -3,6 +3,7 @@ import { Gaegu, IBM_Plex_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { AppNav } from "@/components/nav/AppNav";
 import { InviteToaster } from "@/components/game/InviteToaster";
+import { HenyangPeek } from "@/components/theme/HenyangPeek";
 
 const gaegu = Gaegu({
   variable: "--font-gaegu",
@@ -54,11 +55,12 @@ export default function RootLayout({
         {/* 전역 테마 부트 — 페인트 전에 data-theme 적용 (FOUC 방지) */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem("app.theme");if(t==="candy"||t==="lego"||t==="note")document.documentElement.setAttribute("data-theme",t)}catch(e){}`,
+            __html: `try{var t=localStorage.getItem("app.theme");if(t==="candy"||t==="lego"||t==="note"||t==="cat")document.documentElement.setAttribute("data-theme",t)}catch(e){}`,
           }}
         />
         <AppNav />
         <InviteToaster />
+        <HenyangPeek />
         {children}
       </body>
     </html>
