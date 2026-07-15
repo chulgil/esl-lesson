@@ -141,30 +141,47 @@ function Dashboard({ me }: { me: Me }) {
       {stats && <OnboardingChecklist stats={stats} />}
 
       {stats && (
-        <div className="flex flex-wrap items-end gap-6">
-          {stats.levels.map((lv) => (
-            <div key={lv.level} className="flex flex-col items-center gap-1">
-              <div className="flex flex-col-reverse gap-0.5" aria-hidden>
-                {Array.from({ length: Math.min(8, lv.cards) }, (_, i) => (
-                  <span
-                    key={i}
-                    className={`h-2.5 w-8 rounded-sm ${LEVEL_COLORS[lv.level - 1]}`}
-                  />
-                ))}
-                {lv.cards === 0 && (
-                  <span className="h-2.5 w-8 rounded-sm bg-ink/10" />
-                )}
-              </div>
-              <p className="text-xs opacity-60">
-                레벨 {lv.level} · {lv.cards}/{lv.available_items}
-              </p>
-            </div>
-          ))}
-          <p className="text-xs opacity-50">
-            오늘 복습 {stats.reviews_today}회
+        // 누적 컬렉션 지표 — "오늘의 목표"(일일)와 명확히 구분 (2026-07-15 소유자 혼동 리포트)
+        <div>
+          <p className="text-sm font-bold">내 카드 컬렉션</p>
+          <p className="mb-2 text-xs opacity-60">
+            지금까지 만난 카드 / 만날 수 있는 전체 — 오늘 학습과는 무관하게
+            쌓여요
           </p>
+          <div className="flex flex-wrap items-end gap-6">
+            {stats.levels.map((lv) => (
+              <div
+                key={lv.level}
+                className="flex flex-col items-center gap-1"
+                title={`${TYPE_LABELS[lv.item_type] ?? lv.item_type} 카드 ${lv.available_items}개 중 ${lv.cards}개를 이미 만났어요`}
+              >
+                <div className="flex flex-col-reverse gap-0.5" aria-hidden>
+                  {Array.from({ length: Math.min(8, lv.cards) }, (_, i) => (
+                    <span
+                      key={i}
+                      className={`h-2.5 w-8 rounded-sm ${LEVEL_COLORS[lv.level - 1]}`}
+                    />
+                  ))}
+                  {lv.cards === 0 && (
+                    <span className="h-2.5 w-8 rounded-sm bg-ink/10" />
+                  )}
+                </div>
+                <p className="text-xs opacity-60">
+                  {TYPE_LABELS[lv.item_type] ?? `레벨 ${lv.level}`} · {lv.cards}
+                  /{lv.available_items}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </section>
   );
 }
+
+const TYPE_LABELS: Record<string, string> = {
+  word: "단어",
+  idiom: "숙어",
+  pattern: "패턴",
+  sentence: "문장",
+};
