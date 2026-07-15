@@ -135,12 +135,13 @@ export default function StudyPage() {
           </svg>
           <span className="hidden sm:inline">나가기</span>
         </Link>
-        <h1 className="font-hand text-3xl font-bold">
+        {/* 모바일 좁은 헤더에서 글자 단위 줄바꿈 방지 — 축소 폰트 + nowrap */}
+        <h1 className="font-hand text-xl font-bold whitespace-nowrap sm:text-3xl">
           <span className="hl">오늘의 학습</span>
         </h1>
         {(phase === "question" || phase === "feedback") && (
-          <span className="ml-auto rounded-full bg-white px-3 py-1 text-sm font-bold shadow-sm">
-            {Math.min(idx + 1, queue.length)} / {queue.length}
+          <span className="ml-auto rounded-full bg-white px-3 py-1 text-sm font-bold whitespace-nowrap shadow-sm">
+            {Math.min(idx + 1, queue.length)}/{queue.length}
           </span>
         )}
         <SpectateHost snapshot={spectateSnapshot} />
