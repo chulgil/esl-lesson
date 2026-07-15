@@ -20,7 +20,8 @@ from app.services.youtube import TranscriptBlockedError
 
 logger = logging.getLogger(__name__)
 
-WAITING_FOR_AGENT_MESSAGE = "자막 준비 중 — 수집기가 처리하면 자동으로 진행됩니다"
+# 사용자 노출 문구 — "수집기" 같은 내부 용어 금지 (my 화면 error_message 로 표시됨)
+WAITING_FOR_AGENT_MESSAGE = "자막 준비 중 — 자막을 받아 오면 자동으로 이어서 진행돼요"
 
 MAX_ATTEMPTS = 3
 BACKOFF_BASE_SECONDS = 5  # 5s -> 25s -> 125s (테스트에서 패치)

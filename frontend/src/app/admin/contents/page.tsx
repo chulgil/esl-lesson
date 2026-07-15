@@ -4,21 +4,8 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Brick } from "@/components/brick/Brick";
+import { STATUS_LABELS, StatusBadge } from "@/components/content/StatusBadge";
 import { adminApi, type ContentSummary } from "@/lib/admin-api";
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: "대기",
-  extracting: "추출 중",
-  ready: "완료",
-  failed: "실패",
-};
-
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-ink/10",
-  extracting: "bg-brick-yellow/30",
-  ready: "bg-brick-green/20 text-brick-green",
-  failed: "bg-brick-red/15 text-brick-red",
-};
 
 export default function AdminContentsPage() {
   return (
@@ -78,56 +65,55 @@ function ContentsInner() {
       {error && <p className="mt-4 text-sm text-brick-red">{error}</p>}
 
       <div className="overflow-x-auto">
-
-      <table className="mt-4 w-full border-collapse bg-white text-sm">
-        <thead>
-          <tr className="border-b-2 border-ink/20 text-left">
-            <th className="p-2">제목</th>
-            <th className="p-2 w-20">소스</th>
-            <th className="p-2 w-24">상태</th>
-            <th className="p-2 w-40">등록일</th>
-          </tr>
-        </thead>
-        <tbody>
-          {contents.map((c) => (
-            <tr key={c.id} className="border-b border-ink/10 hover:bg-paper">
-              <td className="p-2">
-                <Link
-                  href={`/admin/contents/${c.id}`}
-                  className="hover:underline"
-                >
-                  {c.title}
-                </Link>
-                {c.error_message && (
-                  <p className="mt-0.5 text-xs text-brick-red">
-                    {c.error_message}
-                  </p>
-                )}
-              </td>
-              <td className="p-2">
-                {c.source === "youtube" ? "유튜브" : "수기"}
-              </td>
-              <td className="p-2">
-                <span
-                  className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLES[c.status]}`}
-                >
-                  {STATUS_LABELS[c.status]}
-                </span>
-              </td>
-              <td className="p-2 text-xs opacity-60">
-                {new Date(c.created_at).toLocaleString("ko-KR")}
-              </td>
+        <table className="mt-4 w-full border-collapse bg-white text-sm">
+          <thead>
+            <tr className="border-b-2 border-ink/20 text-left">
+              <th className="p-2">제목</th>
+              <th className="p-2 w-20">소스</th>
+              <th className="p-2 w-24">상태</th>
+              <th className="p-2 w-40">등록일</th>
             </tr>
-          ))}
-          {contents.length === 0 && (
-            <tr>
-              <td colSpan={4} className="p-6 text-center text-sm opacity-50">
-                콘텐츠가 없습니다. 첫 콘텐츠를 등록해보세요.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {contents.map((c) => (
+              <tr key={c.id} className="border-b border-ink/10 hover:bg-paper">
+                <td className="p-2">
+                  <Link
+                    href={`/admin/contents/${c.id}`}
+                    className="hover:underline"
+                  >
+                    {c.title}
+                  </Link>
+                  {c.error_message && (
+                    <p
+                      className={`mt-0.5 text-xs ${
+                        c.status === "failed" ? "text-brick-red" : "opacity-60"
+                      }`}
+                    >
+                      {c.error_message}
+                    </p>
+                  )}
+                </td>
+                <td className="p-2">
+                  {c.source === "youtube" ? "유튜브" : "수기"}
+                </td>
+                <td className="p-2">
+                  <StatusBadge status={c.status} />
+                </td>
+                <td className="p-2 text-xs opacity-60">
+                  {new Date(c.created_at).toLocaleString("ko-KR")}
+                </td>
+              </tr>
+            ))}
+            {contents.length === 0 && (
+              <tr>
+                <td colSpan={4} className="p-6 text-center text-sm opacity-50">
+                  콘텐츠가 없습니다. 첫 콘텐츠를 등록해보세요.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </section>
   );

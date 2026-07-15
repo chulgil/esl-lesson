@@ -67,7 +67,7 @@ async def pending_transcripts(db: Annotated[AsyncSession, Depends(get_db)]) -> d
     return {"items": [{"content_id": c.id, "youtube_video_id": c.youtube_video_id} for c in rows]}
 
 
-NO_TRANSCRIPT_MESSAGE = "영어 자막이 없는 영상입니다 — 자막이 있는 영상으로 다시 등록해 주세요"
+NO_TRANSCRIPT_MESSAGE = "영어 자막이 없는 영상이에요 — 자막이 있는 영상으로 다시 등록해 주세요"
 
 
 @router.post("/transcripts/{content_id}/missing", dependencies=[Depends(require_agent_token)])

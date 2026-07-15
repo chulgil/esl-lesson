@@ -3,6 +3,8 @@
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
+import { ExtractionProgress } from "@/components/content/ExtractionProgress";
+import { StatusBadge } from "@/components/content/StatusBadge";
 import { BackLink } from "@/components/nav/BackLink";
 import { myApi, type MyContentDetail, type MyItem } from "@/lib/my-api";
 
@@ -48,7 +50,12 @@ export default function MyContentDetailPage() {
   }
 
   async function remove() {
-    if (!confirm("내 목록에서 삭제할까요? (다른 구독자가 있으면 콘텐츠는 유지됩니다)")) return;
+    if (
+      !confirm(
+        "내 목록에서 삭제할까요? (다른 구독자가 있으면 콘텐츠는 유지됩니다)",
+      )
+    )
+      return;
     await myApi.remove(contentId).catch((e) => setError(e.message));
     router.push("/my");
   }
@@ -60,9 +67,7 @@ export default function MyContentDetailPage() {
         <h1 className="font-hand text-2xl font-bold">
           <span className="hl">{detail.title}</span>
         </h1>
-        <span className="rounded bg-ink/10 px-2 py-0.5 text-xs">
-          {detail.status}
-        </span>
+        <StatusBadge status={detail.status} />
         {detail.status === "failed" && (
           <Brick
             color="yellow"
@@ -82,12 +87,10 @@ export default function MyContentDetailPage() {
       </header>
 
       {(detail.status === "pending" || detail.status === "extracting") && (
-        <p className="mb-4 text-sm opacity-60">
-          추출 중입니다... 완료되면 학습 항목이 자동으로 오늘의 학습에
-          들어갑니다.
-        </p>
+        <ExtractionProgress source={detail.source} jobs={detail.jobs} />
       )}
-      {detail.error_message && (
+      {/* 진행 중 안내(자막 준비 중 등)는 위 단계 표시가 담당 — 빨간 에러는 실패일 때만 */}
+      {detail.status === "failed" && detail.error_message && (
         <p className="mb-4 text-sm text-brick-red">{detail.error_message}</p>
       )}
 
@@ -100,26 +103,26 @@ export default function MyContentDetailPage() {
             </span>
           </h2>
           <div className="overflow-x-auto">
-          <table className="w-full border-collapse bg-white text-sm">
-            <thead>
-              <tr className="border-b-2 border-ink/20 text-left text-xs">
-                <th className="w-16 p-2">타입</th>
-                <th className="p-2">영어</th>
-                <th className="p-2">한글</th>
-                <th className="w-28 p-2">학습</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.items.map((item) => (
-                <ItemRow
-                  key={item.id}
-                  item={item}
-                  onChanged={load}
-                  onError={setError}
-                />
-              ))}
-            </tbody>
-          </table>
+            <table className="w-full border-collapse bg-white text-sm">
+              <thead>
+                <tr className="border-b-2 border-ink/20 text-left text-xs">
+                  <th className="w-16 p-2">타입</th>
+                  <th className="p-2">영어</th>
+                  <th className="p-2">한글</th>
+                  <th className="w-28 p-2">학습</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.items.map((item) => (
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    onChanged={load}
+                    onError={setError}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}
@@ -128,16 +131,16 @@ export default function MyContentDetailPage() {
         <section>
           <h2 className="mb-2 font-bold">스크립트</h2>
           <div className="overflow-x-auto">
-          <table className="w-full border-collapse bg-white text-sm">
-            <tbody>
-              {detail.segments.map((s) => (
-                <tr key={s.id} className="border-b border-ink/10 align-top">
-                  <td className="w-1/2 p-2">{s.en_text}</td>
-                  <td className="p-2 opacity-80">{s.ko_text ?? "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            <table className="w-full border-collapse bg-white text-sm">
+              <tbody>
+                {detail.segments.map((s) => (
+                  <tr key={s.id} className="border-b border-ink/10 align-top">
+                    <td className="w-1/2 p-2">{s.en_text}</td>
+                    <td className="p-2 opacity-80">{s.ko_text ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}

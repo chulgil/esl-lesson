@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
+import { StatusBadge as ContentStatusBadge } from "@/components/content/StatusBadge";
 import { adminApi, type ContentDetail, type Item } from "@/lib/admin-api";
 
 type Tab = "script" | "word" | "idiom" | "pattern" | "sentence";
@@ -77,9 +78,7 @@ export default function ContentDetailPage() {
         <h1 className="font-hand text-2xl font-bold">
           <span className="hl">{detail.title}</span>
         </h1>
-        <span className="rounded bg-ink/10 px-2 py-0.5 text-xs">
-          {detail.status}
-        </span>
+        <ContentStatusBadge status={detail.status} />
         {detail.status === "failed" && (
           <Brick
             color="yellow"
@@ -98,7 +97,13 @@ export default function ContentDetailPage() {
         </button>
       </div>
       {detail.error_message && (
-        <p className="mt-2 text-sm text-brick-red">{detail.error_message}</p>
+        <p
+          className={`mt-2 text-sm ${
+            detail.status === "failed" ? "text-brick-red" : "opacity-60"
+          }`}
+        >
+          {detail.error_message}
+        </p>
       )}
 
       <div className="mt-3 flex gap-2 text-xs">
@@ -182,19 +187,19 @@ function TabButton({
 function ScriptTable({ detail }: { detail: ContentDetail }) {
   return (
     <div className="overflow-x-auto">
-    <table className="mt-2 w-full border-collapse bg-white text-sm">
-      <tbody>
-        {detail.segments.map((s) => (
-          <tr key={s.id} className="border-b border-ink/10 align-top">
-            <td className="w-14 p-2 text-xs opacity-40">
-              {s.start_ms != null ? formatMs(s.start_ms) : s.seq}
-            </td>
-            <td className="w-1/2 p-2">{s.en_text}</td>
-            <td className="p-2 opacity-80">{s.ko_text ?? "-"}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+      <table className="mt-2 w-full border-collapse bg-white text-sm">
+        <tbody>
+          {detail.segments.map((s) => (
+            <tr key={s.id} className="border-b border-ink/10 align-top">
+              <td className="w-14 p-2 text-xs opacity-40">
+                {s.start_ms != null ? formatMs(s.start_ms) : s.seq}
+              </td>
+              <td className="w-1/2 p-2">{s.en_text}</td>
+              <td className="p-2 opacity-80">{s.ko_text ?? "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -224,35 +229,35 @@ function ItemTable({
 
   return (
     <div className="overflow-x-auto">
-    <table className="mt-2 w-full border-collapse bg-white text-sm">
-      <thead>
-        <tr className="border-b-2 border-ink/20 text-left text-xs">
-          <th className="p-2">영어</th>
-          <th className="p-2">한글</th>
-          <th className="p-2 w-24">난이도</th>
-          <th className="p-2 w-20">상태</th>
-          <th className="p-2 w-36">액션</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item) => (
-          <ItemRow
-            key={item.id}
-            item={item}
-            onStatus={setStatus}
-            onChanged={onChanged}
-            onError={onError}
-          />
-        ))}
-        {items.length === 0 && (
-          <tr>
-            <td colSpan={5} className="p-6 text-center text-sm opacity-50">
-              추출된 항목이 없습니다.
-            </td>
+      <table className="mt-2 w-full border-collapse bg-white text-sm">
+        <thead>
+          <tr className="border-b-2 border-ink/20 text-left text-xs">
+            <th className="p-2">영어</th>
+            <th className="p-2">한글</th>
+            <th className="p-2 w-24">난이도</th>
+            <th className="p-2 w-20">상태</th>
+            <th className="p-2 w-36">액션</th>
           </tr>
-        )}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <ItemRow
+              key={item.id}
+              item={item}
+              onStatus={setStatus}
+              onChanged={onChanged}
+              onError={onError}
+            />
+          ))}
+          {items.length === 0 && (
+            <tr>
+              <td colSpan={5} className="p-6 text-center text-sm opacity-50">
+                추출된 항목이 없습니다.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

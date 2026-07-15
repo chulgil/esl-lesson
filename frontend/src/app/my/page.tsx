@@ -3,15 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
+import { StatusBadge } from "@/components/content/StatusBadge";
 import type { ContentSummary } from "@/lib/admin-api";
 import { myApi } from "@/lib/my-api";
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: "대기",
-  extracting: "추출 중",
-  ready: "완료",
-  failed: "실패",
-};
 
 type Tab = "youtube" | "manual";
 
@@ -73,27 +67,24 @@ export default function MyContentsPage() {
               <span className="opacity-50">
                 {c.source === "youtube" ? "유튜브" : "수기"}
               </span>
-              <span
-                className={`rounded px-1.5 py-0.5 ${
-                  c.status === "ready"
-                    ? "bg-brick-green/20 text-brick-green"
-                    : c.status === "failed"
-                      ? "bg-brick-red/15 text-brick-red"
-                      : "bg-brick-yellow/30"
-                }`}
-              >
-                {STATUS_LABELS[c.status]}
-              </span>
+              <StatusBadge status={c.status} />
             </div>
             <p className="mt-2 font-bold">{c.title}</p>
-            {c.error_message && (
+            {/* 진행 안내는 실패가 아니므로 빨간 에러 톤을 쓰지 않는다 */}
+            {c.status === "failed" && c.error_message ? (
               <p className="mt-1 text-xs text-brick-red">{c.error_message}</p>
+            ) : (
+              c.status !== "ready" && (
+                <p className="mt-1 text-xs opacity-50">
+                  완성되면 저절로 오늘의 학습에 들어가요
+                </p>
+              )
             )}
           </Link>
         ))}
         {contents.length === 0 && !showForm && (
           <p className="text-sm opacity-50">
-            좋아하는 유튜브 영상을 등록하면 나만의 영어 교재가 됩니다.
+            좋아하는 유튜브 영상을 등록하면 나만의 영어 교재가 돼요.
           </p>
         )}
       </div>
@@ -157,8 +148,8 @@ function RegisterForm({ onDone }: { onDone: () => void }) {
             className="rounded border-2 border-ink/20 px-3 py-2"
           />
           <span className="text-xs opacity-60">
-            제목·스크립트·학습 항목이 자동으로 만들어지고, 바로 학습 큐에
-            들어갑니다.
+            제목·스크립트·학습 항목이 자동으로 만들어져요 (보통 1~2분). 영어
+            자막이 있는 영상만 등록할 수 있어요.
           </span>
         </label>
       ) : (
