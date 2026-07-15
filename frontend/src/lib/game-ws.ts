@@ -163,6 +163,48 @@ export type TpMsg =
       aborted: boolean;
     };
 
+/** 어순 조립 레이스 (docs/specs/scramble-race.md) */
+export interface ScRound {
+  answer: string[];
+  chips: string[];
+  ko: string;
+}
+
+export interface ScStartMsg {
+  t: "sc.start";
+  rounds: ScRound[];
+  total: number;
+  sentence_seconds: number;
+  countdown: number;
+  players: string[];
+}
+
+export interface ScResult {
+  name: string;
+  sentences: number;
+  mistakes: number;
+  score: number;
+}
+
+export type ScMsg =
+  | ScStartMsg
+  | { t: "sc.room"; code: string | null; host: string; players: string[] }
+  | { t: "sc.sentence"; idx: number }
+  | { t: "sc.progress"; name: string; placed: number; total: number }
+  | {
+      t: "sc.done_mark";
+      name: string;
+      idx: number;
+      gained: number;
+      score: number;
+    }
+  | {
+      t: "sc.end";
+      results: ScResult[];
+      winner: string | null;
+      aborted: boolean;
+    };
+
 /** 학습 관전 — 승인제 릴레이 (docs/specs/study-spectate.md) */
 export interface StEventPayload {
   phase: string;
@@ -194,7 +236,7 @@ export type IvMsg =
   | {
       t: "iv.invited";
       from: string;
-      game: "tetris" | "quiz" | "typing";
+      game: "tetris" | "quiz" | "typing" | "scramble";
       code: string;
     }
   | { t: "iv.sent"; ok: boolean };
@@ -207,6 +249,7 @@ export type ServerMsg =
   | MatchEndMsg
   | QrMsg
   | TpMsg
+  | ScMsg
   | StMsg
   | { t: "queue.waiting" }
   | { t: "room.created"; code: string }
@@ -334,6 +377,27 @@ export class GameSocket {
   }
   stEvent(payload: object): void {
     this.send({ t: "st.event", payload });
+  }
+  scSolo(): void {
+    this.send({ t: "sc.solo" });
+  }
+  scCreate(): void {
+    this.send({ t: "sc.create" });
+  }
+  scJoin(code: string): void {
+    this.send({ t: "sc.join", code });
+  }
+  scBegin(): void {
+    this.send({ t: "sc.begin" });
+  }
+  scProgress(idx: number, placed: number): void {
+    this.send({ t: "sc.progress", idx, placed });
+  }
+  scDone(idx: number, mistakes: number): void {
+    this.send({ t: "sc.done", idx, mistakes });
+  }
+  scLeave(): void {
+    this.send({ t: "sc.leave" });
   }
   stChat(text: string): void {
     this.send({ t: "st.chat", text });

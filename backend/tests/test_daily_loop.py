@@ -135,6 +135,7 @@ async def test_game_bests_empty_for_new_user(client, db_session):
         "tetris_best_score": 0,
         "quiz_best_score": 0,
         "typing_best_cpm": 0,
+        "scramble_best_score": 0,
     }
 
 

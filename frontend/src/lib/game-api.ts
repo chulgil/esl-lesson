@@ -24,6 +24,7 @@ export interface GameBests {
   tetris_best_score: number;
   quiz_best_score: number;
   typing_best_cpm: number;
+  scramble_best_score: number;
 }
 
 /** 게임별 주간 최고 기록 랭킹 (P3) */
@@ -37,6 +38,7 @@ export interface WeeklyLeaderboards {
   tetris: WeeklyRank[];
   quiz: WeeklyRank[];
   typing: WeeklyRank[];
+  scramble: WeeklyRank[];
 }
 
 export const gameApi = {

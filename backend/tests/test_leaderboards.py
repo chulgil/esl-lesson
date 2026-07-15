@@ -90,4 +90,4 @@ async def test_leaderboards_empty_and_requires_auth(client, db_session):
 
     await login(client, db_session)
     res = await client.get("/api/game/leaderboards")
-    assert res.json() == {"tetris": [], "quiz": [], "typing": []}
+    assert res.json() == {"tetris": [], "quiz": [], "typing": [], "scramble": []}

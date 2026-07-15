@@ -36,6 +36,18 @@ const GAMES: {
     color: "border-brick-blue/40",
   },
   {
+    href: "/game/scramble",
+    name: "어순 조립 레이스",
+    tagline: "섞인 단어를 올바른 어순으로 — 문법 감각 퍼즐",
+    players: "1인(기록 도전) · 2~4인(레이스 대결)",
+    how: [
+      "한글 뜻을 보고 섞인 단어 칩을 올바른 영어 어순으로 탭",
+      "빠르고 정확할수록 높은 점수 — 실수하면 감점, 완성 최소 점수는 보장",
+      "총 8문장 — 전원이 완성하면 다음 문장, 점수 합산 1위가 승리",
+    ],
+    color: "border-brick-yellow/50",
+  },
+  {
     href: "/game/typing",
     name: "영문 타자연습",
     tagline: "같은 문장을 동시에 치는 타이핑 레이스",
@@ -62,7 +74,7 @@ export default function GameHubPage() {
         <MyBests />
       </header>
 
-      <div className="mt-6 grid max-w-4xl gap-5 lg:grid-cols-3">
+      <div className="mt-6 grid max-w-4xl gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {GAMES.map((game) => (
           <Link
             key={game.href}

@@ -11,11 +11,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db, get_session_factory
 from app.core.security import SESSION_COOKIE, decode_session_token, get_current_user
-from app.models import GameMatch, QuizRoyaleMatch, QuizRoyalePlayer, TypingRace, User
+from app.models import (
+    GameMatch,
+    QuizRoyaleMatch,
+    QuizRoyalePlayer,
+    ScrambleRace,
+    TypingRace,
+    User,
+)
 from app.services.game import records
 from app.services.game.invites import invite_hub
 from app.services.game.manager import WordPoolError, manager
 from app.services.game.quiz_royale import royale
+from app.services.game.scramble import scrambler
 from app.services.game.spectate import spectate_hub
 from app.services.game.typing_race import racer
 
@@ -132,10 +140,30 @@ async def game_bests(
         stats = (row.stats or {}).get(slot) or {}
         typing_best = max(typing_best, int(stats.get("peak_cpm") or 0))
 
+    scramble_best = (
+        await db.execute(
+            select(
+                func.coalesce(
+                    func.max(
+                        case(
+                            (ScrambleRace.player1_id == user.id, ScrambleRace.p1_score),
+                            else_=ScrambleRace.p2_score,
+                        )
+                    ),
+                    0,
+                )
+            ).where(
+                (ScrambleRace.player1_id == user.id) | (ScrambleRace.player2_id == user.id),
+                ScrambleRace.status == "finished",
+            )
+        )
+    ).scalar_one()
+
     return {
         "tetris_best_score": tetris or 0,
         "quiz_best_score": quiz_best,
         "typing_best_cpm": typing_best,
+        "scramble_best_score": scramble_best,
     }
 
 
@@ -223,7 +251,24 @@ async def weekly_leaderboards(
             peak = int(((race.stats or {}).get(slot) or {}).get("peak_cpm") or 0)
             typing_best[uid] = max(typing_best.get(uid, 0), peak)
 
-    all_ids = set(tetris_best) | set(quiz_best) | set(typing_best)
+    # 어순 레이스: 유저별 주간 최고 점수
+    scramble_best: dict[int, int] = {}
+    for p1_id, p2_id, s1, s2 in (
+        await db.execute(
+            select(
+                ScrambleRace.player1_id,
+                ScrambleRace.player2_id,
+                ScrambleRace.p1_score,
+                ScrambleRace.p2_score,
+            ).where(ScrambleRace.status == "finished", ScrambleRace.ended_at >= since)
+        )
+    ).all():
+        if p1_id is not None:
+            scramble_best[p1_id] = max(scramble_best.get(p1_id, 0), s1 or 0)
+        if p2_id is not None:
+            scramble_best[p2_id] = max(scramble_best.get(p2_id, 0), s2 or 0)
+
+    all_ids = set(tetris_best) | set(quiz_best) | set(typing_best) | set(scramble_best)
     names: dict[int, str] = {}
     if all_ids:
         names = dict(
@@ -238,7 +283,12 @@ async def weekly_leaderboards(
             if value > 0
         ]
 
-    return {"tetris": top(tetris_best), "quiz": top(quiz_best), "typing": top(typing_best)}
+    return {
+        "tetris": top(tetris_best),
+        "quiz": top(quiz_best),
+        "typing": top(typing_best),
+        "scramble": top(scramble_best),
+    }
 
 
 def _parse_content_ids(msg: dict) -> list[int] | None:
@@ -355,6 +405,37 @@ async def game_ws(websocket: WebSocket) -> None:
                 await royale.answer(user_id, str(msg.get("answer", "")))
             elif t == "qr.leave":
                 royale.detach(user_id)
+            # --- 어순 조립 레이스 (docs/specs/scramble-race.md) ---
+            elif t == "sc.solo":
+                try:
+                    await scrambler.solo(user_id, user.nickname, send)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "sc.create":
+                try:
+                    await scrambler.create(user_id, user.nickname, send)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "sc.join":
+                try:
+                    await scrambler.join(user_id, user.nickname, send, str(msg.get("code", "")))
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "sc.begin":
+                try:
+                    await scrambler.begin(user_id)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "sc.progress":
+                await scrambler.progress(
+                    user_id, idx=int(msg.get("idx", -1)), placed=int(msg.get("placed", 0))
+                )
+            elif t == "sc.done":
+                await scrambler.done(
+                    user_id, idx=int(msg.get("idx", -1)), mistakes=int(msg.get("mistakes", 0))
+                )
+            elif t == "sc.leave":
+                scrambler.detach(user_id)
             # --- 영문 타자연습 (docs/specs/typing-race.md) ---
             elif t == "tp.solo":
                 try:
@@ -426,6 +507,7 @@ async def game_ws(websocket: WebSocket) -> None:
         manager.detach(user_id)
         royale.detach(user_id)
         racer.detach(user_id)
+        scrambler.detach(user_id)
         await spectate_hub.detach(user_id)
     except Exception:
         logger.exception("ws error user=%s", user_id)
@@ -433,4 +515,5 @@ async def game_ws(websocket: WebSocket) -> None:
         manager.detach(user_id)
         royale.detach(user_id)
         racer.detach(user_id)
+        scrambler.detach(user_id)
         await spectate_hub.detach(user_id)

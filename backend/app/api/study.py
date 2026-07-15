@@ -477,7 +477,7 @@ async def get_stats(
         cursor -= timedelta(days=1)
 
     # XP·레벨 (P2) — 복습 10 + 게임 참여 20 + 테트리스 승리 보너스 30, 레벨=500XP 단위
-    from app.models import GameMatch, QuizRoyaleMatch, QuizRoyalePlayer, TypingRace
+    from app.models import GameMatch, QuizRoyaleMatch, QuizRoyalePlayer, ScrambleRace, TypingRace
 
     total_reviews = (
         await db.execute(select(func.count(ReviewLog.id)).where(ReviewLog.user_id == user.id))
@@ -515,7 +515,19 @@ async def get_stats(
             )
         )
     ).scalar_one()
-    xp = total_reviews * 10 + (tetris_played + typing_played + quiz_played) * 20 + tetris_wins * 30
+    scramble_played = (
+        await db.execute(
+            select(func.count(ScrambleRace.id)).where(
+                (ScrambleRace.player1_id == user.id) | (ScrambleRace.player2_id == user.id),
+                ScrambleRace.status == "finished",
+            )
+        )
+    ).scalar_one()
+    xp = (
+        total_reviews * 10
+        + (tetris_played + typing_played + quiz_played + scramble_played) * 20
+        + tetris_wins * 30
+    )
 
     return {
         "xp": xp,

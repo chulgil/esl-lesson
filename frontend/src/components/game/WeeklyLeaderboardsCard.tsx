@@ -15,6 +15,7 @@ const BOARDS: {
   { key: "tetris", title: "워드 테트리스", unit: (v) => `${v}점` },
   { key: "quiz", title: "스피드 퀴즈", unit: (v) => `${v}점` },
   { key: "typing", title: "타자연습", unit: (v) => `${v}타` },
+  { key: "scramble", title: "어순 조립", unit: (v) => `${v}점` },
 ];
 
 /** 게임별 주간 최고 기록 top5 — 게임 허브 하단 (P3) */
@@ -36,7 +37,7 @@ export function WeeklyLeaderboardsCard() {
       <p className="mt-1 text-xs opacity-60">
         최근 7일 게임별 최고 기록 — 매주 새로 시작해요
       </p>
-      <div className="mt-3 grid gap-4 sm:grid-cols-3">
+      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {BOARDS.map((board) => (
           <div key={board.key}>
             <p className="mb-1.5 text-sm font-bold">{board.title}</p>
