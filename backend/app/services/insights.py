@@ -66,28 +66,45 @@ async def _contexts(db: AsyncSession, item_id: int) -> list[str]:
     return [r for r in rows if r]
 
 
+def _first_text(res) -> str:
+    """텍스트 블록만 추출 — thinking 등 비텍스트 블록 선행 대응 (extraction 과 동일 패턴)."""
+    for block in res.content:
+        text = getattr(block, "text", None)
+        if text:
+            return text
+    raise ValueError("no text block in insight response")
+
+
+# 한국어 페이로드(예문 2+유의어 3+혼동어 2)가 1000 토큰을 넘어 JSON 이 잘리면
+# 파싱 실패 → 502 가 특정 단어에서 일관 재현 (2026-07-15 delegate 실측 대응)
+TOKEN_BUDGETS = (2000, 4000)
+
+
 async def _generate(item: LearningItem, contexts: list[str]) -> dict:
     settings = get_settings()
     context_block = (
         "실제 사용 문맥:\n" + "\n".join(f"- {c}" for c in contexts) + "\n" if contexts else ""
     )
     client = AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=60, max_retries=2)
-    res = await client.messages.create(
-        model=settings.anthropic_insight_model,
-        max_tokens=1000,
-        messages=[
-            {
-                "role": "user",
-                "content": PROMPT.format(
-                    en_text=item.en_text,
-                    ko_text=item.ko_text,
-                    item_type=item.item_type,
-                    context_block=context_block,
-                ),
-            }
-        ],
+    prompt = PROMPT.format(
+        en_text=item.en_text,
+        ko_text=item.ko_text,
+        item_type=item.item_type,
+        context_block=context_block,
     )
-    payload = _parse_json(res.content[0].text)
+    for max_tokens in TOKEN_BUDGETS:
+        res = await client.messages.create(
+            model=settings.anthropic_insight_model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        if res.stop_reason != "max_tokens":
+            break
+        logger.warning("insight truncated at %s tokens item=%s — retrying", max_tokens, item.id)
+    else:
+        raise ValueError("insight response truncated at max budget")
+
+    payload = _parse_json(_first_text(res))
     if not isinstance(payload.get("examples"), list) or not payload["examples"]:
         raise ValueError("insight payload missing examples")
     return payload

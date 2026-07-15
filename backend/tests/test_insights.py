@@ -80,3 +80,41 @@ def test_parse_json_tolerates_fences():
     assert _parse_json(fenced) == {"ipa": "/a/"}
     chatty = 'Here you go:\n{"pos": "noun"} hope this helps'
     assert _parse_json(chatty) == {"pos": "noun"}
+
+
+class _Block:
+    def __init__(self, text=None):
+        if text is not None:
+            self.text = text
+
+
+class _Res:
+    def __init__(self, text, stop_reason="end_turn", leading_non_text=False):
+        self.content = ([_Block()] if leading_non_text else []) + [_Block(text)]
+        self.stop_reason = stop_reason
+
+
+async def test_generate_retries_on_truncation(db_session, monkeypatch):
+    """max_tokens 절단(잘린 JSON) → 예산 늘려 1회 재시도 (2026-07-15 delegate 502 실측)."""
+    import json
+
+    from app.services import insights
+
+    items = await seed_items(db_session, count=1)
+    ok_json = json.dumps(FAKE_PAYLOAD, ensure_ascii=False)
+    calls: list[int] = []
+
+    async def fake_create(*, model, max_tokens, messages):
+        calls.append(max_tokens)
+        if len(calls) == 1:
+            return _Res(ok_json[:80], stop_reason="max_tokens")  # 잘린 응답
+        return _Res(ok_json, leading_non_text=True)  # thinking 류 선행 블록도 통과
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.messages = type("M", (), {"create": staticmethod(fake_create)})()
+
+    monkeypatch.setattr(insights, "AsyncAnthropic", FakeClient)
+    payload = await insights._generate(items[0], [])
+    assert payload == FAKE_PAYLOAD
+    assert len(calls) == 2 and calls[1] > calls[0]
