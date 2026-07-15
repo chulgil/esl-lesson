@@ -76,7 +76,11 @@ export default function FriendsPage() {
               type="email"
               className="min-h-11 flex-1 rounded-md border-2 border-ink/20 px-3 text-sm transition-colors focus:border-brick-blue focus:outline-none"
             />
-            <Brick color="blue" onClick={addFriend}>
+            <Brick
+              color="blue"
+              onClick={addFriend}
+              className="shrink-0 whitespace-nowrap"
+            >
               요청 보내기
             </Brick>
           </div>

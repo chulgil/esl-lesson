@@ -29,16 +29,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="notebook-lines notebook-margin min-h-screen px-6 py-12 sm:px-16">
-      <header className="mb-12">
-        <h1 className="font-hand text-5xl font-bold">
-          <span className="hl">ESL Lessonaza</span>
-        </h1>
-        <p className="mt-2 text-lg">
-          유튜브로 배우고, 잊기 전에 다시 만나는 영어.
-        </p>
-      </header>
-
+    <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
       {loading || !me ? (
         <p className="text-sm opacity-60">불러오는 중...</p>
       ) : (
@@ -66,29 +57,34 @@ function Dashboard({ me }: { me: Me }) {
   }, []);
 
   return (
-    <section className="flex flex-col gap-8">
-      <p>
-        <span className="font-hand text-2xl">{me.name}</span> 님, 오늘도 한 브릭
-        쌓아볼까요?
-        {stats && (
-          <span
-            className="ml-2 rounded bg-brick-blue/10 px-2 py-0.5 text-sm font-bold text-brick-blue"
-            title={`${stats.xp} XP — 복습·게임으로 쌓여요`}
-          >
-            Lv.{stats.level}
-          </span>
-        )}
-        {stats && stats.streak_days > 0 && (
-          <span className="ml-2 rounded bg-highlight/60 px-2 py-0.5 text-sm">
-            {stats.streak_days}일 연속 학습 중
-          </span>
-        )}
-      </p>
-      {stats && <OnboardingChecklist stats={stats} />}
+    <section className="flex flex-col gap-7">
+      {/* 인사 = 페이지 제목 — 랜딩용 대형 타이틀은 AppNav 로고와 중복이라 제거 (2026-07-15 UX 검토) */}
+      <header>
+        <h1 className="font-hand text-3xl font-bold sm:text-4xl">
+          <span className="hl">{me.name}</span> 님, 오늘도 한 브릭 쌓아볼까요?
+        </h1>
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+          {stats && (
+            <span
+              className="rounded bg-brick-blue/10 px-2 py-0.5 font-bold whitespace-nowrap text-brick-blue"
+              title={`${stats.xp} XP — 복습·게임으로 쌓여요`}
+            >
+              Lv.{stats.level}
+            </span>
+          )}
+          {stats && stats.streak_days > 0 && (
+            <span className="rounded bg-highlight/60 px-2 py-0.5 whitespace-nowrap">
+              {stats.streak_days}일 연속 학습 중
+            </span>
+          )}
+        </p>
+      </header>
 
       <div className="flex flex-wrap gap-4">
         <Brick color="green" href="/study/session">
-          오늘의 학습 시작{stats ? ` (${stats.due_count})` : ""}
+          {stats && stats.due_count === 0
+            ? "새 카드 만나러 가기"
+            : `오늘의 학습 시작${stats ? ` (${stats.due_count})` : ""}`}
         </Brick>
         <Brick color="blue" href="/library">
           콘텐츠 라이브러리
@@ -97,7 +93,7 @@ function Dashboard({ me }: { me: Me }) {
           내 콘텐츠 등록
         </Brick>
         <Brick color="red" href="/game">
-          워드 테트리스
+          게임
         </Brick>
       </div>
 
@@ -139,6 +135,9 @@ function Dashboard({ me }: { me: Me }) {
           </div>
         </div>
       )}
+
+      {/* 시작 체크리스트 — 오늘 할 일보다 아래 (기존 사용자의 첫 시선은 데일리 루프) */}
+      {stats && <OnboardingChecklist stats={stats} />}
 
       {stats && (
         <div className="flex flex-wrap items-end gap-6">

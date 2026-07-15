@@ -88,13 +88,24 @@ function DangerZone() {
         에서 확인할 수 있어요.
       </p>
       {!confirming ? (
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="min-h-11 rounded-md border-2 border-ink/20 bg-white px-4 text-sm font-bold opacity-70 transition hover:border-brick-red hover:text-brick-red hover:opacity-100"
-        >
-          회원탈퇴
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {/* 로그아웃 — 공용 PC 대응. POST 후 303 리다이렉트를 브라우저가 따라감 */}
+          <form action="/api/auth/logout" method="post">
+            <button
+              type="submit"
+              className="min-h-11 rounded-md border-2 border-ink/20 bg-white px-4 text-sm font-bold transition hover:border-ink/50"
+            >
+              로그아웃
+            </button>
+          </form>
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="min-h-11 rounded-md border-2 border-ink/20 bg-white px-4 text-sm font-bold opacity-70 transition hover:border-brick-red hover:text-brick-red hover:opacity-100"
+          >
+            회원탈퇴
+          </button>
+        </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3 rounded-md border-2 border-brick-red/40 bg-white p-3">
           <p className="text-sm font-bold text-brick-red">
