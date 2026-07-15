@@ -36,6 +36,12 @@ jobs:
           script: |
             set -e
             cd ~/apps/eng-lesson
+            # 디스크 선확보 — dangling 이미지·BuildKit 캐시 누적으로 배포 3회 만에
+            # 디스크 풀 실패 (2026-07-15 run 29383033986 실측). 빌드 후 prune 만으로는
+            # 실패한 빌드의 캐시가 남아 다음 배포도 연쇄 실패한다.
+            docker image prune -f
+            docker builder prune -f --keep-storage 2GB
+            df -h / | tail -1
             git fetch origin main
             git reset --hard origin/main
             export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
