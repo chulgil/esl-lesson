@@ -7,7 +7,7 @@
 from datetime import UTC, datetime
 
 from app.services import push
-from tests.test_push import SUB_BODY, _add_due_card, vapid_keys  # noqa: F401
+from tests.test_push import SUB_BODY, _add_due_card
 from tests.test_study import login, seed_items
 
 

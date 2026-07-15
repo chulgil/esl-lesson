@@ -2,10 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
 from sqlalchemy import select
 
-from app.core.config import get_settings
 from app.models import PushSubscription, ReviewCard
 from app.services import push
 from tests.test_study import login, seed_items
@@ -14,16 +12,6 @@ SUB_BODY = {
     "endpoint": "https://push.example.com/sub/abc",
     "keys": {"p256dh": "pkey", "auth": "akey"},
 }
-
-
-@pytest.fixture
-def vapid_keys():
-    settings = get_settings()
-    settings.vapid_public_key = "test-public-key"
-    settings.vapid_private_key = "test-private-key"
-    yield settings
-    settings.vapid_public_key = ""
-    settings.vapid_private_key = ""
 
 
 async def _add_due_card(db, user_id: int, count: int = 1) -> None:

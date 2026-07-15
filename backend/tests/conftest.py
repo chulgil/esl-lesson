@@ -65,3 +65,16 @@ async def client(db_session):
     async with AsyncClient(transport=transport, base_url="http://localhost:8000") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def vapid_keys():
+    """VAPID 키 설정/해제 — push 관련 테스트 공용."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    settings.vapid_public_key = "test-public-key"
+    settings.vapid_private_key = "test-private-key"
+    yield settings
+    settings.vapid_public_key = ""
+    settings.vapid_private_key = ""
