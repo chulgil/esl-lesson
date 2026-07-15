@@ -38,7 +38,7 @@ export function WeeklyLeaderboardsCard() {
       <p className="mt-1 text-xs opacity-60">
         최근 7일 게임별 최고 기록 — 매주 새로 시작해요
       </p>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {BOARDS.map((board) => (
           <div key={board.key}>
             <p className="mb-1.5 text-sm font-bold">{board.title}</p>

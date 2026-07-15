@@ -60,6 +60,18 @@ const GAMES: {
     color: "border-brick-blue/40",
   },
   {
+    href: "/game/puzzle",
+    name: "데일리 단어 퍼즐",
+    tagline: "하루 한 단어, 모두에게 같은 문제 — 6번 안에!",
+    players: "1인 · 하루 한 판",
+    how: [
+      "오늘의 영어 단어를 6번 안에 추측 — 초록=자리 정확, 노랑=자리 다름",
+      "전원 같은 단어라 친구와 \"몇 번 만에 맞혔나\" 자랑 대결",
+      "끝나면 단어와 뜻 공개 — 자정에 새 단어가 나와요",
+    ],
+    color: "border-ink/25",
+  },
+  {
     href: "/game/typing",
     name: "영문 타자연습",
     tagline: "같은 문장을 동시에 치는 타이핑 레이스",
@@ -86,7 +98,7 @@ export default function GameHubPage() {
         <MyBests />
       </header>
 
-      <div className="mt-6 grid max-w-4xl gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid max-w-4xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {GAMES.map((game) => (
           <Link
             key={game.href}
@@ -116,25 +128,6 @@ export default function GameHubPage() {
           </Link>
         ))}
       </div>
-
-      {/* 데일리 퍼즐 — 하루 1판 리텐션 훅 */}
-      <Link
-        href="/game/puzzle"
-        className="group mt-5 flex max-w-4xl flex-col rounded-xl border-2 border-ink/20 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md sm:flex-row sm:items-center sm:gap-6"
-      >
-        <div className="flex-1">
-          <h2 className="font-hand text-2xl font-bold group-hover:underline group-hover:decoration-highlight group-hover:decoration-4 group-hover:underline-offset-4">
-            데일리 단어 퍼즐
-          </h2>
-          <p className="mt-1 text-sm opacity-80">
-            하루 한 단어, 모두에게 같은 문제 — 6번 안에 맞혀보세요. 친구와
-            &ldquo;몇 번 만에 맞혔나&rdquo; 자랑 대결!
-          </p>
-        </div>
-        <span className="mt-3 text-sm font-bold text-brick-blue sm:mt-0">
-          오늘의 퍼즐 풀기 →
-        </span>
-      </Link>
 
       {/* 게임별 주간 최고 기록 — 매주 리셋되는 경쟁 루프 (P3) */}
       <WeeklyLeaderboardsCard />
