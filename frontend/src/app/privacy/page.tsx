@@ -73,7 +73,7 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
     title: "6. 문의",
     body: (
       <p>
-        개인정보 관련 문의는 관리자 이메일(rimanbackend@gmail.com)로 보내주세요.
+        개인정보 관련 문의는 관리자 이메일(codenavi@gmail.com)로 보내주세요.
         지체 없이 답변드립니다.
       </p>
     ),
