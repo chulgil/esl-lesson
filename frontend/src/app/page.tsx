@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { Showcase } from "@/components/landing/Showcase";
+import { DailyGoalCard } from "@/components/study/DailyGoalCard";
 import { OnboardingChecklist } from "@/components/study/OnboardingChecklist";
-import { StreakHeatmap } from "@/components/study/StreakHeatmap";
 import { fetchMe, type Me } from "@/lib/api";
 import { studyApi, type Stats } from "@/lib/study-api";
 
@@ -83,9 +83,17 @@ function Dashboard({ me }: { me: Me }) {
 
       <div className="flex flex-wrap gap-4">
         <Brick color="green" href="/study/session">
-          {stats && stats.due_count === 0
-            ? "새 카드 만나러 가기"
-            : `오늘의 학습 시작${stats ? ` (${stats.due_count})` : ""}`}
+          {/* 낚싯대: 밀린 전체가 아니라 오늘 목표 잔여만 보여준다 (포기 방지) */}
+          {!stats
+            ? "오늘의 학습 시작"
+            : stats.due_count === 0
+              ? "새 카드 만나러 가기"
+              : stats.reviews_today >= stats.daily_goal
+                ? "이어서 더 학습하기"
+                : `오늘의 학습 시작 (${Math.min(
+                    stats.due_count,
+                    stats.daily_goal - stats.reviews_today,
+                  )}개만)`}
         </Brick>
         <Brick color="blue" href="/library">
           콘텐츠 라이브러리
@@ -98,44 +106,8 @@ function Dashboard({ me }: { me: Me }) {
         </Brick>
       </div>
 
-      {stats && (
-        // 데일리 목표 — "오늘 끝냈다" 감각이 매일 복귀의 전제 (P1 데일리 루프)
-        <div className="max-w-xl rounded-lg border-2 border-ink/10 bg-white p-4">
-          {stats.due_count === 0 && stats.reviews_today > 0 ? (
-            <p className="font-bold text-brick-green">
-              오늘 목표 달성! 복습 {stats.reviews_today}회 완료
-            </p>
-          ) : (
-            <>
-              <p className="text-sm font-bold">
-                오늘의 목표
-                <span className="ml-2 font-normal opacity-60">
-                  복습 {stats.reviews_today}회 완료 · {stats.due_count}개 남음
-                </span>
-              </p>
-              <div className="mt-2 h-3 overflow-hidden rounded-full bg-ink/10">
-                <div
-                  className="h-full rounded-full bg-brick-green transition-[width]"
-                  style={{
-                    width: `${
-                      stats.reviews_today + stats.due_count > 0
-                        ? Math.round(
-                            (stats.reviews_today /
-                              (stats.reviews_today + stats.due_count)) *
-                              100,
-                          )
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-            </>
-          )}
-          <div className="mt-3 border-t border-ink/10 pt-3">
-            <StreakHeatmap daily={stats.daily} />
-          </div>
-        </div>
-      )}
+      {/* 오늘의 목표 — 밀린 전체가 아닌 목표 기준 진행 (포기 방지 기획 2026-07-15) */}
+      {stats && <DailyGoalCard stats={stats} />}
 
       {/* 시작 체크리스트 — 오늘 할 일보다 아래 (기존 사용자의 첫 시선은 데일리 루프) */}
       {stats && <OnboardingChecklist stats={stats} />}

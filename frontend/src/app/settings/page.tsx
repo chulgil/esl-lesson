@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { DailyGoalSetting } from "@/components/settings/DailyGoalSetting";
 import { NicknameCard } from "@/components/settings/NicknameCard";
 import { PushReminderCard } from "@/components/settings/PushReminderCard";
 import { deleteMe } from "@/lib/api";
@@ -17,6 +18,7 @@ export default function SettingsPage() {
       </h1>
 
       <NicknameCard />
+      <DailyGoalSetting />
 
       <section className="mt-10 max-w-lg">
         <p className="mb-1 text-sm font-bold">테마</p>

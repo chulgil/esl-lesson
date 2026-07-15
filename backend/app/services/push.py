@@ -14,7 +14,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.models import LearningItem, PushSubscription, ReviewCard
+from app.models import LearningItem, PushSubscription, ReviewCard, ReviewLog, UserSettings
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -68,13 +68,34 @@ async def due_count(db: AsyncSession, user_id: int, now: datetime) -> int:
     ).scalar_one()
 
 
-def reminder_payload(due: int) -> dict:
+def reminder_payload(remaining: int) -> dict:
+    """목표까지 남은 소량만 언급 — 밀린 전체 수는 위협적이라 싣지 않는다 (포기 방지 기획)."""
     return {
         "title": "ESL Lessonaza",
-        "body": f"복습 {due}개가 기다려요 — 잊기 전에 다시 만나요",
+        "body": f"오늘 목표까지 {remaining}개 — 지금 하면 금방이에요",
         "url": "/study/session",
         "tag": "review-reminder",
     }
+
+
+DEFAULT_DAILY_GOAL = 20
+
+
+async def _goal_progress(db: AsyncSession, user_id: int, now: datetime) -> tuple[int, int]:
+    """(오늘의 목표, 오늘 복습 수) — KST 자정 기준."""
+    goal = (
+        await db.execute(select(UserSettings.daily_goal).where(UserSettings.user_id == user_id))
+    ).scalar_one_or_none() or DEFAULT_DAILY_GOAL
+    local = now.astimezone(KST)
+    day_start = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+    done = (
+        await db.execute(
+            select(func.count(ReviewLog.id)).where(
+                ReviewLog.user_id == user_id, ReviewLog.reviewed_at >= day_start
+            )
+        )
+    ).scalar_one()
+    return goal, done
 
 
 async def send_review_reminders(db: AsyncSession, now: datetime | None = None) -> int:
@@ -111,7 +132,10 @@ async def send_review_reminders(db: AsyncSession, now: datetime | None = None) -
         due = await due_count(db, user_id, now)
         if due == 0:
             continue  # 마킹하지 않음 — 이후 due 가 생기면 같은 날에도 발송
-        payload = reminder_payload(due)
+        goal, done = await _goal_progress(db, user_id, now)
+        if done >= goal:
+            continue  # 오늘 목표를 이미 채움 — 달성감 보존, 알림 없음
+        payload = reminder_payload(min(due, goal - done))
         for sub in user_subs:
             if await send_to(sub, payload, settings):
                 sub.last_sent_on = today

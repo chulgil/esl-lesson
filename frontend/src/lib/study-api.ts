@@ -102,6 +102,8 @@ export interface Stats {
   level_progress: number;
   due_count: number;
   reviews_today: number;
+  /** 오늘의 목표 — 밀린 양과 무관한 달성 가능 소량 (포기 방지 기획) */
+  daily_goal: number;
   streak_days: number;
   levels: {
     level: number;
@@ -162,15 +164,18 @@ export const studyApi = {
       hint_delay_seconds: number;
       study_level: number;
       levels_enabled: number[];
+      daily_goal: number;
     }>("/api/settings"),
   patchSettings: (body: {
     hint_delay_seconds?: number;
     study_level?: number;
+    daily_goal?: number;
   }) =>
     request<{
       hint_delay_seconds: number;
       study_level: number;
       levels_enabled: number[];
+      daily_goal: number;
     }>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   answer: (body: {
     card_id: number;

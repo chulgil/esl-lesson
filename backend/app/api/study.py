@@ -412,6 +412,7 @@ async def get_stats(
 ) -> dict:
     now = datetime.now(UTC)
     day_start = kst_day_start(now)
+    user_settings = await get_user_settings(db, user)
 
     due_count = (
         await db.execute(
@@ -522,6 +523,7 @@ async def get_stats(
         "level_progress": (xp % 500) / 500,
         "due_count": due_count,
         "reviews_today": reviews_today,
+        "daily_goal": user_settings.daily_goal,
         "streak_days": streak,
         "levels": [
             {
@@ -757,6 +759,7 @@ async def suspend_card(
 class SettingsPatch(BaseModel):
     daily_new_limit: int | None = Field(default=None, ge=0, le=200)
     daily_review_limit: int | None = Field(default=None, ge=0, le=1000)
+    daily_goal: int | None = Field(default=None, ge=5, le=200)
     desired_retention: float | None = Field(default=None, ge=0.7, le=0.97)
     hint_delay_seconds: int | None = Field(default=None, ge=0, le=120)
     study_level: int | None = Field(default=None, ge=1, le=4)
@@ -789,7 +792,13 @@ async def update_settings(
         if invalid:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"invalid levels {invalid}")
         settings.levels_enabled = sorted(set(body.levels_enabled))
-    fields = ("daily_new_limit", "daily_review_limit", "desired_retention", "hint_delay_seconds")
+    fields = (
+        "daily_new_limit",
+        "daily_review_limit",
+        "daily_goal",
+        "desired_retention",
+        "hint_delay_seconds",
+    )
     for field in fields:
         value = getattr(body, field)
         if value is not None:
@@ -802,6 +811,7 @@ def _settings_dict(settings: UserSettings) -> dict:
     return {
         "daily_new_limit": settings.daily_new_limit,
         "daily_review_limit": settings.daily_review_limit,
+        "daily_goal": settings.daily_goal,
         "desired_retention": settings.desired_retention,
         "hint_delay_seconds": settings.hint_delay_seconds,
         "study_level": settings.study_level,
