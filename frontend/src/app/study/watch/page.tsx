@@ -4,6 +4,12 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
+import {
+  CHEER_KINDS,
+  CheerIcon,
+  FloatingCheers,
+  useFloatingCheers,
+} from "@/components/study/FloatingCheers";
 import { GameSocket, type ServerMsg, type StEventPayload } from "@/lib/game-ws";
 
 type Phase = "idle" | "requesting" | "watching" | "ended" | "denied";
@@ -24,37 +30,55 @@ function WatchInner() {
   const [hostName, setHostName] = useState("");
   const [event, setEvent] = useState<StEventPayload | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [chat, setChat] = useState("");
   const socketRef = useRef<GameSocket | null>(null);
+  const { items: cheers, push: pushCheer } = useFloatingCheers();
 
-  const handleMessage = useCallback((msg: ServerMsg) => {
-    switch (msg.t) {
-      case "st.requested":
-        setHostName(msg.host);
-        setPhase("requesting");
-        break;
-      case "st.approved":
-        setHostName(msg.host);
-        setPhase("watching");
-        break;
-      case "st.denied":
-        setPhase("denied");
-        break;
-      case "st.event":
-        setEvent(msg.payload);
-        break;
-      case "st.end":
-        setPhase("ended");
-        break;
-      case "error":
-        setPhase("idle");
-        setNote(
-          msg.code === "room_not_found"
-            ? "지금은 관전할 수 없어요 — 친구가 학습을 끝냈거나 관전을 껐어요"
-            : msg.code,
-        );
-        break;
-    }
-  }, []);
+  const handleMessage = useCallback(
+    (msg: ServerMsg) => {
+      switch (msg.t) {
+        case "st.requested":
+          setHostName(msg.host);
+          setPhase("requesting");
+          break;
+        case "st.approved":
+          setHostName(msg.host);
+          setPhase("watching");
+          break;
+        case "st.denied":
+          setPhase("denied");
+          break;
+        case "st.event":
+          setEvent(msg.payload);
+          break;
+        case "st.chat":
+          pushCheer({ name: msg.name, text: msg.text });
+          break;
+        case "st.cheer":
+          pushCheer({ name: msg.name, kind: msg.kind });
+          break;
+        case "st.end":
+          setPhase("ended");
+          break;
+        case "error":
+          setPhase("idle");
+          setNote(
+            msg.code === "room_not_found"
+              ? "지금은 관전할 수 없어요 — 친구가 학습을 끝냈거나 관전을 껐어요"
+              : msg.code,
+          );
+          break;
+      }
+    },
+    [pushCheer],
+  );
+
+  function sendChat() {
+    const text = chat.trim();
+    if (!text) return;
+    socketRef.current?.stChat(text);
+    setChat("");
+  }
 
   // 친구 페이지에서 ?code= 로 진입 → 자동 관전 요청
   useEffect(() => {
@@ -198,6 +222,38 @@ function WatchInner() {
             </div>
           )}
 
+          {/* 응원 보내기 — 아프리카TV 별풍선처럼 원탭, 서버가 도배 방지 스로틀 */}
+          <div className="flex flex-wrap items-center gap-2">
+            {CHEER_KINDS.map((c) => (
+              <button
+                key={c.kind}
+                type="button"
+                onClick={() => socketRef.current?.stCheer(c.kind)}
+                className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-full border-2 border-ink/15 bg-white px-3 text-sm font-bold transition hover:-translate-y-0.5 hover:border-ink/40 active:translate-y-0"
+              >
+                <CheerIcon kind={c.kind} />
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              value={chat}
+              onChange={(e) => setChat(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendChat()}
+              maxLength={100}
+              placeholder="응원 한마디 (친구 화면에 떠올라요)"
+              className="min-h-11 flex-1 rounded-md border-2 border-ink/20 bg-white px-3 text-sm transition-colors focus:border-brick-blue focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={sendChat}
+              className="min-h-11 shrink-0 rounded-md border-2 border-ink/20 bg-white px-4 text-sm font-bold whitespace-nowrap transition hover:border-ink/50"
+            >
+              보내기
+            </button>
+          </div>
+
           <div>
             <Brick color="yellow" href="/friends">
               관전 종료
@@ -205,6 +261,8 @@ function WatchInner() {
           </div>
         </section>
       )}
+
+      <FloatingCheers items={cheers} />
     </main>
   );
 }

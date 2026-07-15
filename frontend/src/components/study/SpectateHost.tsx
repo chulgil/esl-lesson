@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  FloatingCheers,
+  useFloatingCheers,
+} from "@/components/study/FloatingCheers";
 import { GameSocket, type ServerMsg, type StEventPayload } from "@/lib/game-ws";
 
 /** 학습 관전 호스트 — 허용 토글 + 관전 요청 수락/거절 (승인제, study-spectate.md).
@@ -18,25 +22,36 @@ export function SpectateHost({
   const [watcherNote, setWatcherNote] = useState<string | null>(null);
   const socketRef = useRef<GameSocket | null>(null);
   const lastSentRef = useRef<string>("");
+  // 관전자 응원·채팅 — 떠오르며 사라지는 오버레이 (집중 보호, 입력 없음)
+  const { items: cheers, push: pushCheer } = useFloatingCheers();
 
-  const handleMessage = useCallback((msg: ServerMsg) => {
-    switch (msg.t) {
-      case "st.hosting":
-        setCode(msg.code);
-        break;
-      case "st.request":
-        setRequests((prev) =>
-          prev.some((r) => r.watcher_id === msg.watcher_id)
-            ? prev
-            : [...prev, { watcher_id: msg.watcher_id, name: msg.name }],
-        );
-        break;
-      case "st.left":
-        setWatcherNote(`${msg.name} 님이 관전을 종료했어요`);
-        setTimeout(() => setWatcherNote(null), 3000);
-        break;
-    }
-  }, []);
+  const handleMessage = useCallback(
+    (msg: ServerMsg) => {
+      switch (msg.t) {
+        case "st.hosting":
+          setCode(msg.code);
+          break;
+        case "st.request":
+          setRequests((prev) =>
+            prev.some((r) => r.watcher_id === msg.watcher_id)
+              ? prev
+              : [...prev, { watcher_id: msg.watcher_id, name: msg.name }],
+          );
+          break;
+        case "st.chat":
+          pushCheer({ name: msg.name, text: msg.text });
+          break;
+        case "st.cheer":
+          pushCheer({ name: msg.name, kind: msg.kind });
+          break;
+        case "st.left":
+          setWatcherNote(`${msg.name} 님이 관전을 종료했어요`);
+          setTimeout(() => setWatcherNote(null), 3000);
+          break;
+      }
+    },
+    [pushCheer],
+  );
 
   // 토글 on → 연결 + 호스팅, off → 정리
   useEffect(() => {
@@ -125,6 +140,8 @@ export function SpectateHost({
           {watcherNote}
         </p>
       )}
+
+      <FloatingCheers items={cheers} />
     </>
   );
 }

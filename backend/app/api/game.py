@@ -404,6 +404,10 @@ async def game_ws(websocket: WebSocket) -> None:
                 payload = msg.get("payload")
                 if isinstance(payload, dict):
                     await spectate_hub.event(user_id, payload)
+            elif t == "st.chat":
+                await spectate_hub.chat(user_id, str(msg.get("text", "")))
+            elif t == "st.cheer":
+                await spectate_hub.cheer(user_id, str(msg.get("kind", "")))
             elif t == "st.leave":
                 await spectate_hub.detach(user_id)
             # --- 친구 게임 초대 (P2 경쟁 루프) ---

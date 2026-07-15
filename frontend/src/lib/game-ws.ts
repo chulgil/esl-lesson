@@ -185,11 +185,18 @@ export type StMsg =
   | { t: "st.denied" }
   | { t: "st.event"; payload: StEventPayload }
   | { t: "st.left"; name: string }
+  | { t: "st.chat"; name: string; text: string }
+  | { t: "st.cheer"; name: string; kind: string }
   | { t: "st.end" };
 
 /** 친구 게임 초대 (P2) */
 export type IvMsg =
-  | { t: "iv.invited"; from: string; game: "tetris" | "quiz" | "typing"; code: string }
+  | {
+      t: "iv.invited";
+      from: string;
+      game: "tetris" | "quiz" | "typing";
+      code: string;
+    }
   | { t: "iv.sent"; ok: boolean };
 
 export type ServerMsg =
@@ -327,6 +334,12 @@ export class GameSocket {
   }
   stEvent(payload: object): void {
     this.send({ t: "st.event", payload });
+  }
+  stChat(text: string): void {
+    this.send({ t: "st.chat", text });
+  }
+  stCheer(kind: string): void {
+    this.send({ t: "st.cheer", kind });
   }
   stLeave(): void {
     this.send({ t: "st.leave" });

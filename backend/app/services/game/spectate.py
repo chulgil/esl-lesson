@@ -6,12 +6,19 @@
 
 import logging
 import secrets
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
 Sender = Callable[[dict], Awaitable[None]]
+
+# 채팅·응원 (2026-07-15): 호스트+수락 관전자만, 도배 방지 스로틀
+CHAT_MAX_LEN = 100
+CHAT_INTERVAL = 1.0  # 초당 1건
+CHEER_INTERVAL = 0.3  # 응원 연타는 허용하되 폭주만 차단
+CHEER_KINDS = ("star", "heart", "party", "paw")
 
 
 @dataclass
@@ -36,6 +43,7 @@ class SpectateHub:
         self.rooms: dict[str, SpectateRoom] = {}
         self.by_host: dict[int, str] = {}
         self.by_watcher: dict[int, str] = {}
+        self._last_sent: dict[tuple[int, str], float] = {}  # (user_id, 채널) → monotonic
 
     async def host(self, user_id: int, name: str, send: Sender) -> str:
         """관전 허용 시작 — 기존 방은 대체(이전 코드 무효)."""
@@ -80,6 +88,46 @@ class SpectateHub:
         room.last_event = payload
         for watcher in list(room.watchers.values()):
             await self._safe(watcher.send, {"t": "st.event", "payload": payload})
+
+    def _room_member(self, user_id: int) -> tuple[SpectateRoom | None, str]:
+        """호스트 또는 수락된 관전자만 발화 가능 — (방, 표시 이름)."""
+        code = self.by_host.get(user_id)
+        if code and (room := self.rooms.get(code)):
+            return room, room.host_name
+        code = self.by_watcher.get(user_id)
+        if code and (room := self.rooms.get(code)):
+            watcher = room.watchers.get(user_id)
+            if watcher is not None:
+                return room, watcher.name
+        return None, ""
+
+    def _throttled(self, user_id: int, channel: str, interval: float) -> bool:
+        now = time.monotonic()
+        if now - self._last_sent.get((user_id, channel), 0.0) < interval:
+            return True
+        self._last_sent[(user_id, channel)] = now
+        return False
+
+    async def chat(self, user_id: int, text: str) -> None:
+        room, name = self._room_member(user_id)
+        text = " ".join(text.split())[:CHAT_MAX_LEN]
+        if room is None or not text or self._throttled(user_id, "chat", CHAT_INTERVAL):
+            return
+        await self._broadcast(room, {"t": "st.chat", "name": name, "text": text})
+
+    async def cheer(self, user_id: int, kind: str) -> None:
+        room, name = self._room_member(user_id)
+        if room is None or kind not in CHEER_KINDS:
+            return
+        if self._throttled(user_id, "cheer", CHEER_INTERVAL):
+            return
+        await self._broadcast(room, {"t": "st.cheer", "name": name, "kind": kind})
+
+    async def _broadcast(self, room: SpectateRoom, message: dict) -> None:
+        """호스트 + 수락 관전자 전원 (보낸 사람 포함 — 표시 일관성)."""
+        await self._safe(room.host_send, message)
+        for watcher in list(room.watchers.values()):
+            await self._safe(watcher.send, message)
 
     async def detach(self, user_id: int) -> None:
         """호스트 이탈 → 방 해체 + 관전자 통지. 관전자 이탈 → 목록 정리."""

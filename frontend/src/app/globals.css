@@ -258,6 +258,28 @@ html[data-theme="candy"] .brick-studs::before {
   animation: typo-float 7s ease-in-out infinite;
 }
 
+/* 관전 채팅·응원 — 위로 떠오르며 사라짐 (집중 보호: 반투명·클릭 통과) */
+@keyframes cheer-float {
+  0% {
+    transform: translateY(6px) scale(0.9);
+    opacity: 0;
+  }
+  8% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-150px);
+    opacity: 0;
+  }
+}
+.cheer-float {
+  animation: cheer-float 4.5s ease-out forwards;
+}
+
 /* 게임 오답 피드백 — 입력 영역 좌우 셰이크 */
 @keyframes miss-shake {
   0%,
