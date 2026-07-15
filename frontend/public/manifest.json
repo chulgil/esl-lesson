@@ -1,0 +1,27 @@
+{
+    "name": "ESL Lessonaza \u2014 \uc720\ud29c\ube0c\ub85c \ubc30\uc6b0\ub294 \uc601\uc5b4",
+    "short_name": "Lessonaza",
+    "description": "\uc720\ud29c\ube0c \uc2a4\ud06c\ub9bd\ud2b8\uc5d0\uc11c \ub2e8\uc5b4\u00b7\uc219\uc5b4\u00b7\ud328\ud134\u00b7\ubb38\uc7a5\uc744 \ucd94\ucd9c\ud574 \ub9dd\uac01\uace1\uc120\uc73c\ub85c \ubcf5\uc2b5\ud558\ub294 \uc601\uc5b4 \ud559\uc2b5 \uc11c\ube44\uc2a4",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#fdfbf3",
+    "theme_color": "#fdfbf3",
+    "icons": [
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { PushReminderCard } from "@/components/settings/PushReminderCard";
 import { deleteMe } from "@/lib/api";
 import { APP_THEMES, setAppTheme, useAppTheme } from "@/lib/theme";
 
@@ -51,6 +52,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <PushReminderCard />
       <DangerZone />
     </main>
   );

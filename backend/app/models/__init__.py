@@ -6,6 +6,7 @@ from app.models.content import Content, ContentSubscription, ExtractionJob, Tran
 from app.models.friend import Friendship
 from app.models.game import GameMatch, QuizRoyaleMatch, TypingRace
 from app.models.item import ItemOccurrence, LearningItem, WordInsight
+from app.models.push import PushSubscription
 from app.models.user import User, UserSettings
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "TypingRace",
     "ItemOccurrence",
     "LearningItem",
+    "PushSubscription",
     "ReviewCard",
     "ReviewLog",
     "TranscriptSegment",

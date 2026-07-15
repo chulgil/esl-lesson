@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     # 유튜브 Data API (라이선스 조회 — 공용 승격 CC 게이트). 미설정 시 조회 스킵
     youtube_api_key: str = ""
 
+    # 웹 푸시 VAPID (P3 복습 리마인더). 미설정 시 푸시 기능 전체 비활성
+    # 공개키=브라우저 applicationServerKey(base64url), 개인키=base64url raw
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:rimanbackend@gmail.com"
+
     # 유튜브 자막 프록시 (클라우드 IP 차단 우회 — docs/specs/content-pipeline.md)
     webshare_proxy_username: str = ""
     webshare_proxy_password: str = ""

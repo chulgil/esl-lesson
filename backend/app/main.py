@@ -18,11 +18,13 @@ from app.api.friends import router as friends_router
 from app.api.game import router as game_router
 from app.api.game import ws_router as game_ws_router
 from app.api.my_contents import router as my_contents_router
+from app.api.push import router as push_router
 from app.api.study import cards_router, settings_router
 from app.api.study import router as study_router
 from app.core.config import assert_production_secrets, get_settings
 from app.core.db import get_db
 from app.workers.queue import start_workers, stop_workers
+from app.workers.reminders import start_reminders, stop_reminders
 
 logging.basicConfig(level=logging.INFO)
 
@@ -33,7 +35,9 @@ async def lifespan(app: FastAPI):
     assert_production_secrets(settings)
     if settings.enable_workers:
         await start_workers()
+        start_reminders()
     yield
+    stop_reminders()
     await stop_workers()
 
 
@@ -50,6 +54,7 @@ app.include_router(study_router, prefix="/api")
 app.include_router(cards_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(friends_router, prefix="/api")
+app.include_router(push_router, prefix="/api")
 app.include_router(game_router, prefix="/api")
 app.include_router(game_ws_router)  # /ws/game (traefik PathPrefix:/ws)
 

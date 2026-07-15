@@ -24,6 +24,8 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://esl.lessonaza.app"),
   title: TITLE,
   description: DESCRIPTION,
+  manifest: "/manifest.json",
+  icons: { icon: "/icon-192.png", apple: "/icon-192.png" },
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
