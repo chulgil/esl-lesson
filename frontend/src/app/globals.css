@@ -310,3 +310,107 @@ html[data-theme="candy"] .brick-studs::before {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 어순 레이스 — 물 차오르는 라운드 타이머 (조립창 내부, 게임다움 기획 2026-07-15) */
+.water-fill {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--color-brick-blue) 13%, transparent);
+  transition: height 0.15s linear;
+}
+.water-fill::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: -24px;
+  width: calc(100% + 48px);
+  height: 8px;
+  background: radial-gradient(
+    circle at 12px 8px,
+    color-mix(in srgb, var(--color-brick-blue) 13%, transparent) 8px,
+    transparent 9px
+  );
+  background-size: 24px 8px;
+  animation: wave-roll 2.2s linear infinite;
+}
+.water-fill.low {
+  background: color-mix(in srgb, var(--color-brick-red) 15%, transparent);
+}
+.water-fill.low::before {
+  background: radial-gradient(
+    circle at 12px 8px,
+    color-mix(in srgb, var(--color-brick-red) 15%, transparent) 8px,
+    transparent 9px
+  );
+  background-size: 24px 8px;
+}
+@keyframes wave-roll {
+  to {
+    transform: translateX(24px);
+  }
+}
+
+/* 점수 팝업 — 완성 시 +N 이 떠오르며 사라짐 */
+@keyframes score-pop {
+  0% {
+    transform: translateY(0) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    transform: translateY(-8px) scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-70px) scale(1);
+    opacity: 0;
+  }
+}
+.score-pop {
+  animation: score-pop 1.3s ease-out forwards;
+}
+
+/* 완성 파티클 버스트 */
+@keyframes burst-dot {
+  to {
+    transform: translate(var(--dx), var(--dy)) scale(0.2);
+    opacity: 0;
+  }
+}
+.burst-dot {
+  animation: burst-dot 0.7s ease-out forwards;
+}
+
+/* 콤보 배지 펄스 */
+@keyframes combo-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+}
+.combo-pulse {
+  animation: combo-pulse 0.35s ease;
+}
+
+/* 조립된 단어 팝인 */
+@keyframes word-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.word-pop {
+  display: inline-block;
+  animation: word-pop 0.25s ease-out;
+}

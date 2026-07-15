@@ -16,6 +16,7 @@ const BOARDS: {
   { key: "quiz", title: "스피드 퀴즈", unit: (v) => `${v}점` },
   { key: "typing", title: "타자연습", unit: (v) => `${v}타` },
   { key: "scramble", title: "어순 조립", unit: (v) => `${v}점` },
+  { key: "dictation", title: "받아쓰기", unit: (v) => `${v}점` },
 ];
 
 /** 게임별 주간 최고 기록 top5 — 게임 허브 하단 (P3) */

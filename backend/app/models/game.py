@@ -1,6 +1,16 @@
+from datetime import date as date_type
 from datetime import datetime
 
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Integer, SmallInteger, Text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, CreatedAtMixin, PkMixin
@@ -68,6 +78,52 @@ class TypingRace(Base, PkMixin, CreatedAtMixin):
     # {"p1": {wpm, accuracy, sentences}, "p2": {...}}
     stats: Mapped[dict] = mapped_column(JsonDict, default=dict)
     ended_at: Mapped[datetime | None]
+
+
+class DictationRace(Base, PkMixin, CreatedAtMixin):
+    """받아쓰기 배틀 — 원음 듣고 문장 받아쓰기, 1~4인 (docs/specs/dictation-battle.md)."""
+
+    __tablename__ = "dictation_races"
+    __table_args__ = (
+        CheckConstraint("mode IN ('solo','race')", name="ck_dictation_mode"),
+        CheckConstraint(
+            "status IN ('waiting','playing','finished','aborted')",
+            name="ck_dictation_status",
+        ),
+    )
+
+    mode: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, default="waiting", server_default="waiting")
+    player1_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    player2_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    winner_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    p1_score: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    p2_score: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # {"p1": {name, sentences, accuracy, score}, ...}
+    stats: Mapped[dict] = mapped_column(JsonDict, default=dict)
+    ended_at: Mapped[datetime | None]
+
+
+class DailyPuzzlePlay(Base, PkMixin, CreatedAtMixin):
+    """데일리 단어 퍼즐 — 하루 1판, 유저별 진행 (docs/specs/daily-puzzle.md)."""
+
+    __tablename__ = "daily_puzzle_plays"
+    __table_args__ = (UniqueConstraint("user_id", "day", name="uq_puzzle_user_day"),)
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    day: Mapped[date_type] = mapped_column(Date)
+    # 첫 추측 시점의 정답을 고정 — 단어 풀이 낮에 변해도 채점이 흔들리지 않게
+    answer: Mapped[str] = mapped_column(Text, default="", server_default="")
+    guesses: Mapped[list] = mapped_column(JsonDict, default=list)  # ["apple", ...]
+    solved: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
 class ScrambleRace(Base, PkMixin, CreatedAtMixin):

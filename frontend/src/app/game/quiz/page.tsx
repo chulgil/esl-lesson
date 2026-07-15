@@ -22,6 +22,7 @@ function QuizRoyaleInner() {
   const joinCode = useSearchParams().get("join");
   const [selectedContents, setSelectedContents] = useState<number[]>([]);
   const [botLevel, setBotLevel] = useState(3);
+  const [variant, setVariant] = useState<"meaning" | "nuance">("meaning");
   const [bots, setBots] = useState(1);
   const [code, setCode] = useState("");
   const [playing, setPlaying] = useState(false);
@@ -44,6 +45,8 @@ function QuizRoyaleInner() {
         {
           words_insufficient:
             "퀴즈에 쓸 단어가 부족해요 (최소 15개). 다른 소재를 선택해주세요.",
+          nuance_unavailable:
+            "뉘앙스 문항을 만들 재료가 아직 부족해요 — 뜻 맞히기로 즐겨주세요.",
           room_not_found: "방을 찾을 수 없어요.",
           room_full: "방이 가득 찼어요 (최대 4명).",
         }[msg.code] ?? msg.code,
@@ -110,6 +113,29 @@ function QuizRoyaleInner() {
             </ul>
           </div>
 
+          <div className="rounded-lg border-2 border-ink/10 bg-white p-4">
+            <p className="mb-2 text-sm font-bold">문제 유형</p>
+            <div className="flex items-center gap-1">
+              <ModeButton
+                active={variant === "meaning"}
+                onClick={() => setVariant("meaning")}
+              >
+                뜻 맞히기
+              </ModeButton>
+              <ModeButton
+                active={variant === "nuance"}
+                onClick={() => setVariant("nuance")}
+              >
+                뉘앙스 저격
+              </ModeButton>
+            </div>
+            <p className="mt-2 text-xs opacity-60">
+              {variant === "meaning"
+                ? "단어를 보고 뜻(또는 반대로)을 고르는 기본 모드"
+                : "비슷한 뜻 4개 중 결이 다른 하나를 저격 — 유의어 뉘앙스 훈련 (AI 임베딩 출제)"}
+            </p>
+          </div>
+
           <ContentPicker
             selected={selectedContents}
             onChange={setSelectedContents}
@@ -148,7 +174,7 @@ function QuizRoyaleInner() {
               onClick={() => {
                 setError(null);
                 setPlaying(true);
-                socketRef.current?.qrSolo(botLevel, bots, contentIds);
+                socketRef.current?.qrSolo(botLevel, bots, contentIds, variant);
               }}
             >
               AI와 퀴즈 시작
@@ -163,7 +189,7 @@ function QuizRoyaleInner() {
                 onClick={() => {
                   setError(null);
                   setPlaying(true);
-                  socketRef.current?.qrCreate(contentIds);
+                  socketRef.current?.qrCreate(contentIds, variant);
                 }}
               >
                 방 만들기

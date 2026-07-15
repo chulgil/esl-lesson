@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 Sender = Callable[[dict], Awaitable[None]]
 
-GAMES = ("tetris", "quiz", "typing", "scramble")
+GAMES = ("tetris", "quiz", "typing", "scramble", "dictation")
 
 
 class InviteHub:

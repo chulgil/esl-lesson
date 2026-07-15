@@ -1,117 +1,138 @@
-"""어순 조립 레이스 — 문장 어순 퍼즐 동기 레이스, 1~4인 (docs/specs/scramble-race.md).
+"""받아쓰기 배틀 — 유튜브 원음 듣고 문장 받아쓰기, 1~4인 (docs/specs/dictation-battle.md).
 
-타자 레이스와 같은 진행 모델: 전원 동일 문장, 전원 완성(또는 제한시간) 시
-다음 문장. 입력만 다르다 — 타이핑 대신 섞인 단어 칩을 올바른 어순으로 탭.
+어순 레이스와 같은 동기 진행 모델. 차이: 정답 문장을 클라이언트에 내리지
+않고 **서버가 채점**한다 (단어 단위 유사도). 라운드 종료 시 정답 공개.
 """
 
 import asyncio
+import difflib
 import logging
-import random
+import re
 import secrets
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from sqlalchemy import select
+
 from app.core.db import get_session_factory
-from app.models import ScrambleRace
+from app.models import Content, DictationRace, ItemOccurrence, LearningItem, TranscriptSegment
 from app.services.game.manager import WordPoolError
-from app.services.game.typing_race import load_sentence_pool, pick_sentences
+from app.services.game.typing_race import pick_sentences
+from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
 
 Sender = Callable[[dict], Awaitable[None]]
 
-SENTENCE_COUNT = 8
-SENTENCE_SECONDS = 40.0  # 어순 판단은 타이핑보다 사고 시간이 필요
+SENTENCE_COUNT = 6
+SENTENCE_SECONDS = 45.0  # 듣기 반복 + 타이핑 시간
+REVEAL_SECONDS = 4.0  # 라운드 사이 정답 공개 시간
 COUNTDOWN_SECONDS = 3.0
 TICK = 0.1
 MAX_PLAYERS = 4
 MIN_SENTENCES = 5
-MIN_CHIPS = 4  # 너무 짧은 문장은 퍼즐이 안 됨
-MAX_CHIPS = 12  # 너무 길면 칩이 화면을 넘침
+MAX_SENTENCE_CHARS = 120
 
-BASE_SCORE = 100
-TIME_BONUS_MAX = 100
-MISTAKE_PENALTY = 10
-PERFECT_BONUS = 30  # 무실수 완성 — "PERFECT!" 연출과 세트 (게임다움 기획 2026-07-15)
-MIN_SENTENCE_SCORE = 30  # 실수 많아도 완성하면 최소 보장 — 포기 방지
+BASE_MAX = 100  # 정확도 100% = 100
+TIME_BONUS_MAX = 50  # 정확도 90%+ 만 시간 보너스
+BONUS_MIN_ACCURACY = 0.9
 
 
-def scramble_chips(words: list[str], rng: random.Random) -> list[str]:
-    """정답 어순과 다르게 섞는다 (전 단어 동일 등 불가능한 경우만 그대로)."""
-    chips = list(words)
-    if len(set(words)) < 2:
-        return chips
-    for _ in range(10):
-        rng.shuffle(chips)
-        if chips != words:
-            return chips
-    return chips
+def normalize_words(text: str) -> list[str]:
+    return [w for w in re.sub(r"[^a-z0-9' ]", " ", text.lower()).split() if w]
 
 
-def sentence_score(elapsed: float, mistakes: int) -> int:
-    """완성 = 기본 100 + 시간 보너스(최대 100) - 실수 10/개 + 무실수 30, 최소 30 보장."""
-    bonus = max(0.0, 1.0 - elapsed / SENTENCE_SECONDS)
-    raw = BASE_SCORE + int(TIME_BONUS_MAX * bonus) - mistakes * MISTAKE_PENALTY
-    if mistakes == 0:
-        raw += PERFECT_BONUS
-    return max(MIN_SENTENCE_SCORE, raw)
+def word_accuracy(answer: str, attempt: str) -> float:
+    """단어 단위 유사도 (0~1) — 대소문자·문장부호 무시."""
+    target, got = normalize_words(answer), normalize_words(attempt)
+    if not target:
+        return 0.0
+    return round(difflib.SequenceMatcher(None, target, got).ratio(), 3)
 
 
-def rank_players(players: list["ScramblerState"]) -> tuple[str | None, int | None]:
-    """승자 = 점수 多 → 실수 少 → 누적 시간 少. 전 기준 동률이면 무승부."""
+def sentence_score(accuracy: float, elapsed: float) -> int:
+    base = int(round(accuracy * BASE_MAX))
+    if accuracy < BONUS_MIN_ACCURACY:
+        return base
+    ratio = max(0.0, 1.0 - elapsed / SENTENCE_SECONDS)
+    return base + int(TIME_BONUS_MAX * ratio)
+
+
+def rank_players(players: list["DictatorState"]) -> tuple[str | None, int | None]:
+    """승자 = 점수 多 → 평균 정확도 高 → 누적 시간 少."""
     if len(players) < 2:
         return None, None
-    ordered = sorted(players, key=lambda p: (-p.score, p.mistakes, p.total_ms))
+    ordered = sorted(players, key=lambda p: (-p.score, -p.accuracy_sum, p.total_ms))
     top, second = ordered[0], ordered[1]
-    if (top.score, top.mistakes, top.total_ms) == (
+    if (top.score, top.accuracy_sum, top.total_ms) == (
         second.score,
-        second.mistakes,
+        second.accuracy_sum,
         second.total_ms,
     ):
         return None, None
     return top.name, top.user_id
 
 
-def build_rounds(pool: list[dict], count: int, seed: int) -> list[dict]:
-    """문장 → {answer(정답 어순), chips(섞임), ko}. 칩 수 범위 밖 문장은 제외."""
-    rng = random.Random(seed)
-    fits = [s for s in pool if MIN_CHIPS <= len(s["en"].split()) <= MAX_CHIPS]
-    picked = pick_sentences(fits, count, seed)
-    rounds = []
-    for sentence in picked:
-        words = sentence["en"].split()
-        rounds.append(
-            {
-                "answer": words,
-                "chips": scramble_chips(words, rng),
-                "ko": sentence.get("ko", ""),
-            }
-        )
-    return rounds
+async def load_dictation_pool(user_id: int) -> list[dict]:
+    """유튜브 구간이 있는 문장만 — {en, video_id, start_ms, end_ms}."""
+    async with get_session_factory()() as db:
+        rows = (
+            await db.execute(
+                select(
+                    LearningItem.en_text,
+                    Content.youtube_video_id,
+                    TranscriptSegment.start_ms,
+                    TranscriptSegment.end_ms,
+                )
+                .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+                .join(Content, Content.id == ItemOccurrence.content_id)
+                .join(TranscriptSegment, TranscriptSegment.id == ItemOccurrence.segment_id)
+                .where(
+                    LearningItem.item_type == "sentence",
+                    visible_item_clause(user_id),
+                    Content.youtube_video_id.is_not(None),
+                    TranscriptSegment.start_ms.is_not(None),
+                )
+                .distinct()
+                .limit(300)
+            )
+        ).all()
+    pool = []
+    for en, video_id, start_ms, end_ms in rows:
+        en = (en or "").strip()
+        if en and len(en) <= MAX_SENTENCE_CHARS:
+            pool.append(
+                {
+                    "en": en,
+                    "video_id": video_id,
+                    "start_ms": start_ms,
+                    "end_ms": end_ms or start_ms + 5000,
+                }
+            )
+    return pool
 
 
 @dataclass
-class ScramblerState:
+class DictatorState:
     user_id: int
     name: str
     send: Sender | None = None
     sentences: int = 0
-    mistakes: int = 0
+    accuracy_sum: float = 0.0
     score: int = 0
     total_ms: int = 0
-    placed: int = 0  # 현재 문장에서 맞춘 칩 수 — 상대 진행 표시
     done_current: bool = False
 
 
 @dataclass
-class ScrambleSession:
+class DictationSession:
     match_id: int
     code: str | None
     host_id: int
     mode: str  # solo | race
-    players: list[ScramblerState]
+    players: list[DictatorState]
     rounds: list[dict] = field(default_factory=list)
     started: bool = False
     round_no: int = -1
@@ -119,15 +140,15 @@ class ScrambleSession:
     task: asyncio.Task | None = None
 
 
-class ScrambleManager:
+class DictationManager:
     def __init__(self) -> None:
-        self.sessions: dict[int, ScrambleSession] = {}
+        self.sessions: dict[int, DictationSession] = {}
         self.rooms: dict[str, int] = {}
         self.by_user: dict[int, int] = {}
 
-    # --- 진입 ---
+    # --- 진입 (어순 레이스와 동일 패턴) ---
 
-    async def solo(self, user_id: int, name: str, send: Sender) -> ScrambleSession:
+    async def solo(self, user_id: int, name: str, send: Sender) -> DictationSession:
         self._leave_if_idle(user_id)
         pool = await self._pool(user_id)
         session = await self._new_session(user_id, name, send, "solo", None)
@@ -136,7 +157,7 @@ class ScrambleManager:
 
     async def create(self, user_id: int, name: str, send: Sender) -> str:
         self._leave_if_idle(user_id)
-        await self._pool(user_id)  # 시작 전에 문장 부족을 미리 알림
+        await self._pool(user_id)
         code = secrets.token_hex(3).upper()
         session = await self._new_session(user_id, name, send, "race", code)
         self.rooms[code] = session.match_id
@@ -152,7 +173,7 @@ class ScrambleManager:
             await send({"t": "error", "code": "room_full"})
             return
         self._leave_if_idle(user_id)
-        session.players.append(ScramblerState(user_id=user_id, name=name, send=send))
+        session.players.append(DictatorState(user_id=user_id, name=name, send=send))
         self.by_user[user_id] = session.match_id
         await self._broadcast_room(session)
 
@@ -172,44 +193,30 @@ class ScrambleManager:
 
     # --- 플레이 ---
 
-    async def progress(self, user_id: int, idx: int, placed: int) -> None:
-        """맞춘 칩 수 보고 — 상대 진행 바에 표시."""
+    async def submit(self, user_id: int, idx: int, text: str) -> None:
+        """받아쓰기 제출 — 서버 채점 (정답은 클라이언트에 없음)."""
         session = self._session_of(user_id)
         if session is None or not session.started or idx != session.round_no:
             return
         player = next((p for p in session.players if p.user_id == user_id), None)
         if player is None or player.done_current:
             return
-        limit = len(session.rounds[idx]["answer"])
-        player.placed = min(max(placed, 0), limit)
-        await self._broadcast(
-            session,
-            {"t": "sc.progress", "name": player.name, "placed": player.placed, "total": limit},
-            exclude=user_id,
-        )
-
-    async def done(self, user_id: int, idx: int, mistakes: int) -> None:
-        """문장 완성 — 점수는 서버 시계 기준으로 계산."""
-        session = self._session_of(user_id)
-        if session is None or not session.started or idx != session.round_no:
-            return
-        player = next((p for p in session.players if p.user_id == user_id), None)
-        if player is None or player.done_current:
-            return
+        answer = session.rounds[idx]["en"]
         elapsed = time.monotonic() - session.round_started
-        gained = sentence_score(elapsed, max(0, mistakes))
+        accuracy = word_accuracy(answer, text[:300])
+        gained = sentence_score(accuracy, elapsed)
         player.done_current = True
-        player.placed = len(session.rounds[idx]["answer"])
         player.sentences += 1
-        player.mistakes += max(0, mistakes)
+        player.accuracy_sum += accuracy
         player.score += gained
         player.total_ms += int(elapsed * 1000)
         await self._broadcast(
             session,
             {
-                "t": "sc.done_mark",
+                "t": "dt.done_mark",
                 "name": player.name,
                 "idx": idx,
+                "accuracy": accuracy,
                 "gained": gained,
                 "score": player.score,
             },
@@ -230,7 +237,7 @@ class ScrambleManager:
         player = next((p for p in session.players if p.user_id == user_id), None)
         if player is not None:
             player.send = None
-            player.done_current = True  # 이탈자가 진행을 막지 않게
+            player.done_current = True
         if all(p.send is None for p in session.players):
             if session.task:
                 session.task.cancel()
@@ -238,15 +245,23 @@ class ScrambleManager:
 
     # --- 루프 ---
 
-    async def _start(self, session: ScrambleSession, pool: list[dict]) -> None:
-        session.rounds = build_rounds(pool, SENTENCE_COUNT, secrets.randbits(32))
+    async def _start(self, session: DictationSession, pool: list[dict]) -> None:
+        session.rounds = pick_sentences(pool, SENTENCE_COUNT, secrets.randbits(32))
         session.started = True
         await self._save(session, status="playing")
         await self._broadcast(
             session,
             {
-                "t": "sc.start",
-                "rounds": session.rounds,
+                "t": "dt.start",
+                # 정답(en)은 내리지 않는다 — 클립 정보만
+                "clips": [
+                    {
+                        "video_id": r["video_id"],
+                        "start_ms": r["start_ms"],
+                        "end_ms": r["end_ms"],
+                    }
+                    for r in session.rounds
+                ],
                 "total": len(session.rounds),
                 "sentence_seconds": SENTENCE_SECONDS,
                 "countdown": COUNTDOWN_SECONDS,
@@ -255,35 +270,40 @@ class ScrambleManager:
         )
         session.task = asyncio.create_task(self._run(session))
 
-    async def _run(self, session: ScrambleSession) -> None:
+    async def _run(self, session: DictationSession) -> None:
         try:
             await asyncio.sleep(COUNTDOWN_SECONDS)
             for round_no in range(len(session.rounds)):
                 session.round_no = round_no
                 session.round_started = time.monotonic()
                 for p in session.players:
-                    p.done_current = p.send is None  # 이탈자는 자동 통과
-                    p.placed = 0
-                await self._broadcast(session, {"t": "sc.sentence", "idx": round_no})
+                    p.done_current = p.send is None
+                await self._broadcast(session, {"t": "dt.sentence", "idx": round_no})
                 deadline = session.round_started + SENTENCE_SECONDS
                 while time.monotonic() < deadline and not all(
                     p.done_current for p in session.players
                 ):
                     await asyncio.sleep(TICK)
-                # 시간 초과자는 점수 없음 — 다음 문장에서 재도전
+                # 정답 공개 — 학습 순간 (미제출자는 0점 통과)
+                session.round_no = -1  # 공개 중 제출 차단
+                await self._broadcast(
+                    session,
+                    {"t": "dt.reveal", "idx": round_no, "en": session.rounds[round_no]["en"]},
+                )
+                await asyncio.sleep(REVEAL_SECONDS)
             await self._finish(session, aborted=False)
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("scramble race crashed match=%s", session.match_id)
+            logger.exception("dictation battle crashed match=%s", session.match_id)
             await self._finish(session, aborted=True)
 
-    async def _finish(self, session: ScrambleSession, aborted: bool) -> None:
+    async def _finish(self, session: DictationSession, aborted: bool) -> None:
         results = [
             {
                 "name": p.name,
                 "sentences": p.sentences,
-                "mistakes": p.mistakes,
+                "accuracy": round(p.accuracy_sum / max(1, p.sentences), 3),
                 "score": p.score,
             }
             for p in session.players
@@ -292,33 +312,32 @@ class ScrambleManager:
         await self._save(session, "aborted" if aborted else "finished", winner_id, results)
         await self._broadcast(
             session,
-            {"t": "sc.end", "results": results, "winner": winner, "aborted": aborted},
+            {"t": "dt.end", "results": results, "winner": winner, "aborted": aborted},
         )
         self._cleanup(session)
 
     # --- 헬퍼 ---
 
     async def _pool(self, user_id: int) -> list[dict]:
-        pool = await load_sentence_pool(user_id)
-        fits = [s for s in pool if MIN_CHIPS <= len(s["en"].split()) <= MAX_CHIPS]
-        if len(fits) < MIN_SENTENCES:
+        pool = await load_dictation_pool(user_id)
+        if len(pool) < MIN_SENTENCES:
             raise WordPoolError("sentences_insufficient")
-        return fits
+        return pool
 
     async def _new_session(
         self, user_id: int, name: str, send: Sender, mode: str, code: str | None
-    ) -> ScrambleSession:
+    ) -> DictationSession:
         async with get_session_factory()() as db:
-            row = ScrambleRace(mode=mode, status="waiting", player1_id=user_id)
+            row = DictationRace(mode=mode, status="waiting", player1_id=user_id)
             db.add(row)
             await db.commit()
             match_id = row.id
-        session = ScrambleSession(
+        session = DictationSession(
             match_id=match_id,
             code=code,
             host_id=user_id,
             mode=mode,
-            players=[ScramblerState(user_id=user_id, name=name, send=send)],
+            players=[DictatorState(user_id=user_id, name=name, send=send)],
         )
         self.sessions[match_id] = session
         self.by_user[user_id] = match_id
@@ -326,14 +345,14 @@ class ScrambleManager:
 
     async def _save(
         self,
-        session: ScrambleSession,
+        session: DictationSession,
         status: str,
         winner_id: int | None = None,
         results: list[dict] | None = None,
     ) -> None:
         try:
             async with get_session_factory()() as db:
-                row = await db.get(ScrambleRace, session.match_id)
+                row = await db.get(DictationRace, session.match_id)
                 if row is None:
                     return
                 row.status = status
@@ -348,13 +367,13 @@ class ScrambleManager:
                     row.ended_at = datetime.now(UTC)
                 await db.commit()
         except Exception:
-            logger.exception("failed to save scramble race %s", session.match_id)
+            logger.exception("failed to save dictation battle %s", session.match_id)
 
-    async def _broadcast_room(self, session: ScrambleSession) -> None:
+    async def _broadcast_room(self, session: DictationSession) -> None:
         await self._broadcast(
             session,
             {
-                "t": "sc.room",
+                "t": "dt.room",
                 "code": session.code,
                 "host": session.players[0].name if session.players else "",
                 "players": [p.name for p in session.players],
@@ -362,7 +381,7 @@ class ScrambleManager:
         )
 
     async def _broadcast(
-        self, session: ScrambleSession, message: dict, exclude: int | None = None
+        self, session: DictationSession, message: dict, exclude: int | None = None
     ) -> None:
         for player in session.players:
             if player.user_id == exclude:
@@ -370,15 +389,15 @@ class ScrambleManager:
             await self._safe_send(player, message)
 
     @staticmethod
-    async def _safe_send(player: ScramblerState, message: dict) -> None:
+    async def _safe_send(player: DictatorState, message: dict) -> None:
         if player.send is None:
             return
         try:
             await player.send(message)
         except Exception:
-            player.send = None  # 전송 실패 = 이탈 간주, 레이스는 계속
+            player.send = None
 
-    def _cleanup(self, session: ScrambleSession) -> None:
+    def _cleanup(self, session: DictationSession) -> None:
         for player in session.players:
             if self.by_user.get(player.user_id) == session.match_id:
                 del self.by_user[player.user_id]
@@ -386,7 +405,7 @@ class ScrambleManager:
             self.rooms.pop(session.code, None)
         self.sessions.pop(session.match_id, None)
 
-    def _session_of(self, user_id: int) -> ScrambleSession | None:
+    def _session_of(self, user_id: int) -> DictationSession | None:
         match_id = self.by_user.get(user_id)
         return self.sessions.get(match_id) if match_id is not None else None
 
@@ -396,4 +415,4 @@ class ScrambleManager:
             self.detach(user_id)
 
 
-scrambler = ScrambleManager()
+dictator = DictationManager()

@@ -48,6 +48,18 @@ const GAMES: {
     color: "border-brick-yellow/50",
   },
   {
+    href: "/game/dictation",
+    name: "받아쓰기 배틀",
+    tagline: "원어민 음성을 듣고 그대로 받아쓰는 리스닝 대결",
+    players: "1인(기록 도전) · 2~4인(방 초대)",
+    how: [
+      "유튜브 원음 구간을 듣고 (반복 가능) 문장을 영어로 받아쓰기",
+      "서버가 단어 단위로 채점 — 정확도 90% 이상이면 시간 보너스",
+      "총 6문장, 라운드마다 정답 공개 — 점수 합산 1위가 승리",
+    ],
+    color: "border-brick-blue/40",
+  },
+  {
     href: "/game/typing",
     name: "영문 타자연습",
     tagline: "같은 문장을 동시에 치는 타이핑 레이스",
@@ -104,6 +116,25 @@ export default function GameHubPage() {
           </Link>
         ))}
       </div>
+
+      {/* 데일리 퍼즐 — 하루 1판 리텐션 훅 */}
+      <Link
+        href="/game/puzzle"
+        className="group mt-5 flex max-w-4xl flex-col rounded-xl border-2 border-ink/20 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md sm:flex-row sm:items-center sm:gap-6"
+      >
+        <div className="flex-1">
+          <h2 className="font-hand text-2xl font-bold group-hover:underline group-hover:decoration-highlight group-hover:decoration-4 group-hover:underline-offset-4">
+            데일리 단어 퍼즐
+          </h2>
+          <p className="mt-1 text-sm opacity-80">
+            하루 한 단어, 모두에게 같은 문제 — 6번 안에 맞혀보세요. 친구와
+            &ldquo;몇 번 만에 맞혔나&rdquo; 자랑 대결!
+          </p>
+        </div>
+        <span className="mt-3 text-sm font-bold text-brick-blue sm:mt-0">
+          오늘의 퍼즐 풀기 →
+        </span>
+      </Link>
 
       {/* 게임별 주간 최고 기록 — 매주 리셋되는 경쟁 루프 (P3) */}
       <WeeklyLeaderboardsCard />

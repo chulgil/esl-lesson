@@ -59,6 +59,8 @@ function ScrambleInner() {
   const [doneRound, setDoneRound] = useState(false);
   const [myScore, setMyScore] = useState(0);
   const [lastGain, setLastGain] = useState<number | null>(null);
+  const [streak, setStreak] = useState(0); // 라운드 내 연속 정답 칩 — 콤보 연출
+  const [countLeft, setCountLeft] = useState(3);
   const [rivals, setRivals] = useState<Record<string, RivalRow>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [end, setEnd] = useState<{
@@ -92,6 +94,7 @@ function ScrambleInner() {
     setMistakes(0);
     setDoneRound(false);
     setLastGain(null);
+    setStreak(0);
     setRivals((prev) => {
       const reset: Record<string, RivalRow> = {};
       for (const [name, row] of Object.entries(prev)) {
@@ -124,6 +127,7 @@ function ScrambleInner() {
                 ]),
             ),
           );
+          setCountLeft(Math.ceil(msg.countdown));
           setPhase("countdown");
           break;
         case "sc.sentence":
@@ -173,6 +177,16 @@ function ScrambleInner() {
     [startRound],
   );
 
+  // 시작 카운트다운 3-2-1
+  useEffect(() => {
+    if (phase !== "countdown") return;
+    const timer = setInterval(
+      () => setCountLeft((v) => Math.max(0, v - 1)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [phase]);
+
   // 남은 시간 게이지 (라운드별 카운트다운)
   useEffect(() => {
     if (phase !== "racing") return;
@@ -216,6 +230,7 @@ function ScrambleInner() {
       setChips((prev) =>
         prev.map((c) => (c.id === chip.id ? { ...c, used: true } : c)),
       );
+      setStreak((v) => v + 1);
       setPlaced(nextPlaced);
       socketRef.current?.scProgress(roundIdxRef.current, nextPlaced);
       if (nextPlaced === round.answer.length) {
@@ -224,6 +239,7 @@ function ScrambleInner() {
       }
     } else {
       setMistakes((m) => m + 1);
+      setStreak(0);
       setWrongId(chip.id);
       setTimeout(() => setWrongId(null), 400);
     }
@@ -239,11 +255,7 @@ function ScrambleInner() {
         <h1 className="font-hand text-2xl font-bold whitespace-nowrap sm:text-3xl">
           <span className="hl">어순 조립 레이스</span>
         </h1>
-        {phase === "racing" && (
-          <span className="ml-auto rounded-full bg-white px-3 py-1 text-sm font-bold whitespace-nowrap shadow-sm">
-            {Math.min(roundIdx + 1, total)}/{total} · {myScore}점
-          </span>
-        )}
+
       </header>
 
       {error && <p className="mb-4 text-sm text-brick-red">{error}</p>}
@@ -314,66 +326,111 @@ function ScrambleInner() {
       )}
 
       {phase === "countdown" && (
-        <p className="animate-pulse py-16 text-center font-hand text-4xl font-bold">
-          곧 시작해요!
-        </p>
+        <div className="py-16 text-center">
+          <p
+            key={countLeft}
+            className="word-pop font-hand text-8xl font-bold text-brick-blue"
+          >
+            {countLeft > 0 ? countLeft : "GO!"}
+          </p>
+          <p className="mt-2 text-sm opacity-60">
+            한글 뜻을 보고 영어 어순으로 조립하세요
+          </p>
+        </div>
       )}
 
       {phase === "racing" && round && (
         <section className="flex max-w-2xl flex-col gap-4">
-          {/* 남은 시간 게이지 */}
-          <div className="h-2 overflow-hidden rounded-full bg-ink/10">
-            <div
-              className={`h-full rounded-full transition-[width] duration-100 ${
-                timeRatio < 0.25 ? "bg-brick-red" : "bg-brick-blue"
-              }`}
-              style={{ width: `${timeRatio * 100}%` }}
-            />
+          {/* 진행·점수 — 크게, 조립창 바로 위 (시인성 개선 2026-07-15) */}
+          <div className="flex items-center gap-3">
+            <span className="rounded-lg bg-ink px-3 py-1 font-hand text-xl font-bold text-white">
+              {Math.min(roundIdx + 1, total)}
+              <span className="opacity-50">/{total}</span>
+            </span>
+            <span className="rounded-lg bg-brick-yellow px-3 py-1 font-hand text-xl font-bold text-ink">
+              {myScore}점
+            </span>
+            {streak >= 3 && !doneRound && (
+              <span
+                key={streak}
+                className="combo-pulse rounded-full bg-brick-red px-3 py-1 text-sm font-bold text-brick-label"
+              >
+                x{streak} 콤보!
+              </span>
+            )}
           </div>
 
-          <div className="rounded-lg border-2 border-ink/10 bg-white p-5">
-            <p className="text-sm opacity-60">이 뜻이 되도록 조립하세요</p>
-            <p className="mt-1 text-lg font-bold">{round.ko || "..."}</p>
+          {/* 조립창 — 물이 차오르며 시간 압박 (남으면 파랑, 촉박하면 빨강) */}
+          <div className="relative overflow-hidden rounded-lg border-2 border-ink/10 bg-white p-5">
+            <div
+              className={`water-fill ${timeRatio < 0.25 ? "low" : ""}`}
+              style={{ height: `${(1 - timeRatio) * 100}%` }}
+              aria-hidden
+            />
+            <div className="relative">
+              <p className="text-sm opacity-60">이 뜻이 되도록 조립하세요</p>
+              <p className="mt-1 text-lg font-bold">{round.ko || "..."}</p>
 
-            {/* 조립 영역 */}
-            <p className="mt-4 min-h-8 text-lg font-medium">
-              {round.answer.slice(0, placed).join(" ")}
-              <span className="opacity-30">
-                {placed > 0 && placed < round.answer.length ? " " : ""}
-                {Array.from(
-                  { length: round.answer.length - placed },
-                  () => "___",
-                ).join(" ")}
-              </span>
-            </p>
-
-            {doneRound ? (
-              <p className="mt-4 font-bold text-brick-green">
-                완성!{lastGain != null && ` +${lastGain}점`} — 다른 플레이어를
-                기다려요
+              {/* 조립 영역 — 방금 붙인 단어는 팝인 */}
+              <p className="mt-4 min-h-8 text-lg font-medium">
+                {round.answer.slice(0, Math.max(0, placed - 1)).join(" ")}
+                {placed > 0 && (
+                  <span key={placed} className="word-pop">
+                    {placed > 1 ? " " : ""}
+                    {round.answer[placed - 1]}
+                  </span>
+                )}
+                <span className="opacity-30">
+                  {placed > 0 && placed < round.answer.length ? " " : ""}
+                  {Array.from(
+                    { length: round.answer.length - placed },
+                    () => "___",
+                  ).join(" ")}
+                </span>
               </p>
-            ) : (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {chips.map((chip) => (
-                  <button
-                    key={chip.id}
-                    type="button"
-                    disabled={chip.used}
-                    onClick={() => tapChip(chip)}
-                    className={`min-h-11 rounded-md border-2 px-3 text-sm font-bold transition ${
-                      chip.used
-                        ? "border-ink/5 bg-ink/5 text-ink/25"
-                        : "cursor-pointer border-ink/20 bg-white hover:-translate-y-0.5 hover:border-brick-blue"
-                    } ${wrongId === chip.id ? "miss-shake border-brick-red" : ""}`}
+
+              {doneRound ? (
+                <div className="relative mt-4">
+                  <p
+                    className={`font-hand text-3xl font-bold ${
+                      mistakes === 0 ? "text-brick-yellow" : "text-brick-green"
+                    }`}
                   >
-                    {chip.word}
-                  </button>
-                ))}
-              </div>
-            )}
-            {mistakes > 0 && !doneRound && (
-              <p className="mt-2 text-xs text-brick-red">실수 {mistakes}회</p>
-            )}
+                    {mistakes === 0 ? "PERFECT!" : "완성!"}
+                  </p>
+                  {lastGain != null && (
+                    <span className="score-pop absolute -top-1 left-32 font-hand text-2xl font-bold text-brick-green">
+                      +{lastGain}
+                    </span>
+                  )}
+                  <Burst seed={roundIdx} />
+                  <p className="mt-1 text-xs opacity-60">
+                    다른 플레이어를 기다려요...
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {chips.map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      disabled={chip.used}
+                      onClick={() => tapChip(chip)}
+                      className={`min-h-11 rounded-md border-2 px-3 text-sm font-bold transition ${
+                        chip.used
+                          ? "border-ink/5 bg-ink/5 text-ink/25"
+                          : "cursor-pointer border-ink/20 bg-white hover:-translate-y-0.5 hover:border-brick-blue"
+                      } ${wrongId === chip.id ? "miss-shake border-brick-red" : ""}`}
+                    >
+                      {chip.word}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {mistakes > 0 && !doneRound && (
+                <p className="mt-2 text-xs text-brick-red">실수 {mistakes}회</p>
+              )}
+            </div>
           </div>
 
           {/* 상대 진행 */}
@@ -465,5 +522,35 @@ function ScrambleInner() {
         </section>
       )}
     </main>
+  );
+}
+
+/** 완성 파티클 — CSS 버스트, 각도는 결정적 (게임다움 기획) */
+function Burst({ seed }: { seed: number }) {
+  const colors = [
+    "bg-brick-red",
+    "bg-brick-yellow",
+    "bg-brick-blue",
+    "bg-brick-green",
+  ];
+  return (
+    <span aria-hidden className="pointer-events-none absolute top-2 left-16">
+      {Array.from({ length: 10 }, (_, i) => {
+        const angle = ((seed * 37 + i * 36) % 360) * (Math.PI / 180);
+        const dist = 34 + ((seed + i) % 3) * 14;
+        return (
+          <span
+            key={i}
+            className={`burst-dot absolute h-2 w-2 rounded-full ${colors[i % 4]}`}
+            style={
+              {
+                "--dx": `${Math.cos(angle) * dist}px`,
+                "--dy": `${Math.sin(angle) * dist}px`,
+              } as React.CSSProperties
+            }
+          />
+        );
+      })}
+    </span>
   );
 }

@@ -5,13 +5,17 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import jwt as pyjwt
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from pydantic import BaseModel
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db, get_session_factory
 from app.core.security import SESSION_COOKIE, decode_session_token, get_current_user
 from app.models import (
+    DailyPuzzlePlay,
+    DictationRace,
     GameMatch,
     QuizRoyaleMatch,
     QuizRoyalePlayer,
@@ -19,7 +23,9 @@ from app.models import (
     TypingRace,
     User,
 )
+from app.services import daily_puzzle
 from app.services.game import records
+from app.services.game.dictation import dictator
 from app.services.game.invites import invite_hub
 from app.services.game.manager import WordPoolError, manager
 from app.services.game.quiz_royale import royale
@@ -159,11 +165,31 @@ async def game_bests(
         )
     ).scalar_one()
 
+    dictation_best = (
+        await db.execute(
+            select(
+                func.coalesce(
+                    func.max(
+                        case(
+                            (DictationRace.player1_id == user.id, DictationRace.p1_score),
+                            else_=DictationRace.p2_score,
+                        )
+                    ),
+                    0,
+                )
+            ).where(
+                (DictationRace.player1_id == user.id) | (DictationRace.player2_id == user.id),
+                DictationRace.status == "finished",
+            )
+        )
+    ).scalar_one()
+
     return {
         "tetris_best_score": tetris or 0,
         "quiz_best_score": quiz_best,
         "typing_best_cpm": typing_best,
         "scramble_best_score": scramble_best,
+        "dictation_best_score": dictation_best,
     }
 
 
@@ -268,7 +294,30 @@ async def weekly_leaderboards(
         if p2_id is not None:
             scramble_best[p2_id] = max(scramble_best.get(p2_id, 0), s2 or 0)
 
-    all_ids = set(tetris_best) | set(quiz_best) | set(typing_best) | set(scramble_best)
+    # 받아쓰기: 유저별 주간 최고 점수
+    dictation_best: dict[int, int] = {}
+    for p1_id, p2_id, s1, s2 in (
+        await db.execute(
+            select(
+                DictationRace.player1_id,
+                DictationRace.player2_id,
+                DictationRace.p1_score,
+                DictationRace.p2_score,
+            ).where(DictationRace.status == "finished", DictationRace.ended_at >= since)
+        )
+    ).all():
+        if p1_id is not None:
+            dictation_best[p1_id] = max(dictation_best.get(p1_id, 0), s1 or 0)
+        if p2_id is not None:
+            dictation_best[p2_id] = max(dictation_best.get(p2_id, 0), s2 or 0)
+
+    all_ids = (
+        set(tetris_best)
+        | set(quiz_best)
+        | set(typing_best)
+        | set(scramble_best)
+        | set(dictation_best)
+    )
     names: dict[int, str] = {}
     if all_ids:
         names = dict(
@@ -288,7 +337,102 @@ async def weekly_leaderboards(
         "quiz": top(quiz_best),
         "typing": top(typing_best),
         "scramble": top(scramble_best),
+        "dictation": top(dictation_best),
     }
+
+
+# --- 데일리 단어 퍼즐 (docs/specs/daily-puzzle.md) ---
+
+
+def _puzzle_payload(answer: str, ko: str, guesses: list[str], solved: bool) -> dict:
+    finished = solved or len(guesses) >= daily_puzzle.MAX_TRIES
+    return {
+        "available": True,
+        "length": len(answer),
+        "max_tries": daily_puzzle.MAX_TRIES,
+        "guesses": [{"word": g, "marks": daily_puzzle.grade(answer, g)} for g in guesses],
+        "solved": solved,
+        "finished": finished,
+        # 정답·뜻은 끝났을 때만 공개 — 끝나면 학습 모먼트로 뜻까지 보여준다
+        "answer": answer if finished else None,
+        "answer_ko": ko if finished else None,
+    }
+
+
+async def _load_play(db: AsyncSession, user_id: int, day) -> DailyPuzzlePlay | None:
+    return (
+        await db.execute(
+            select(DailyPuzzlePlay).where(
+                DailyPuzzlePlay.user_id == user_id, DailyPuzzlePlay.day == day
+            )
+        )
+    ).scalar_one_or_none()
+
+
+@router.get("/puzzle")
+async def daily_puzzle_state(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    day = daily_puzzle.today_kst()
+    play = await _load_play(db, user.id, day)
+    if play is not None and play.answer:
+        answer = play.answer
+        ko = (await daily_puzzle.candidates(db)).get(answer, "")
+    else:
+        picked = await daily_puzzle.puzzle_of_day(db, day)
+        if picked is None:
+            return {"available": False}
+        answer, ko = picked
+    return {
+        "day": day.isoformat(),
+        **_puzzle_payload(
+            answer, ko, list(play.guesses or []) if play else [], play.solved if play else False
+        ),
+    }
+
+
+class PuzzleGuess(BaseModel):
+    word: str
+
+
+@router.post("/puzzle/guess")
+async def daily_puzzle_guess(
+    body: PuzzleGuess,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    day = daily_puzzle.today_kst()
+    play = await _load_play(db, user.id, day)
+    if play is None:
+        picked = await daily_puzzle.puzzle_of_day(db, day)
+        if picked is None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "puzzle_unavailable")
+        answer, ko = picked
+        play = DailyPuzzlePlay(user_id=user.id, day=day, answer=answer, guesses=[])
+        db.add(play)
+    else:
+        answer = play.answer
+        ko = (await daily_puzzle.candidates(db)).get(answer, "")
+
+    guesses = list(play.guesses or [])
+    if play.solved or len(guesses) >= daily_puzzle.MAX_TRIES:
+        raise HTTPException(status.HTTP_409_CONFLICT, "already_finished")
+    word = body.word.strip().lower()
+    if len(word) != len(answer) or not (word.isascii() and word.isalpha()):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_word")
+
+    guesses.append(word)
+    play.guesses = guesses
+    if word == answer:
+        play.solved = True
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 동시 첫 추측 경합 (uq_puzzle_user_day) — 새로고침 후 재시도 유도
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "retry") from None
+    return {"day": day.isoformat(), **_puzzle_payload(answer, ko, guesses, play.solved)}
 
 
 def _parse_content_ids(msg: dict) -> list[int] | None:
@@ -384,13 +528,18 @@ async def game_ws(websocket: WebSocket) -> None:
                         bot_level=int(msg.get("bot_level", 3)),
                         bots=int(msg.get("bots", 1)),
                         content_ids=_parse_content_ids(msg),
+                        variant=str(msg.get("variant", "meaning")),
                     )
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "qr.create":
                 try:
                     await royale.create(
-                        user_id, user.nickname, send, content_ids=_parse_content_ids(msg)
+                        user_id,
+                        user.nickname,
+                        send,
+                        content_ids=_parse_content_ids(msg),
+                        variant=str(msg.get("variant", "meaning")),
                     )
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
@@ -405,6 +554,33 @@ async def game_ws(websocket: WebSocket) -> None:
                 await royale.answer(user_id, str(msg.get("answer", "")))
             elif t == "qr.leave":
                 royale.detach(user_id)
+            # --- 받아쓰기 배틀 (docs/specs/dictation-battle.md) ---
+            elif t == "dt.solo":
+                try:
+                    await dictator.solo(user_id, user.nickname, send)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "dt.create":
+                try:
+                    await dictator.create(user_id, user.nickname, send)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "dt.join":
+                try:
+                    await dictator.join(user_id, user.nickname, send, str(msg.get("code", "")))
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "dt.begin":
+                try:
+                    await dictator.begin(user_id)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "dt.submit":
+                await dictator.submit(
+                    user_id, idx=int(msg.get("idx", -1)), text=str(msg.get("text", ""))
+                )
+            elif t == "dt.leave":
+                dictator.detach(user_id)
             # --- 어순 조립 레이스 (docs/specs/scramble-race.md) ---
             elif t == "sc.solo":
                 try:
@@ -508,6 +684,7 @@ async def game_ws(websocket: WebSocket) -> None:
         royale.detach(user_id)
         racer.detach(user_id)
         scrambler.detach(user_id)
+        dictator.detach(user_id)
         await spectate_hub.detach(user_id)
     except Exception:
         logger.exception("ws error user=%s", user_id)
@@ -516,4 +693,5 @@ async def game_ws(websocket: WebSocket) -> None:
         royale.detach(user_id)
         racer.detach(user_id)
         scrambler.detach(user_id)
+        dictator.detach(user_id)
         await spectate_hub.detach(user_id)

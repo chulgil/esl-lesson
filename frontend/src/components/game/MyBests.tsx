@@ -19,7 +19,8 @@ export function MyBests() {
     (bests.tetris_best_score === 0 &&
       bests.quiz_best_score === 0 &&
       bests.typing_best_cpm === 0 &&
-      bests.scramble_best_score === 0)
+      bests.scramble_best_score === 0 &&
+      bests.dictation_best_score === 0)
   ) {
     return null;
   }
@@ -29,6 +30,7 @@ export function MyBests() {
     { label: "퀴즈 최고", value: `${bests.quiz_best_score}점` },
     { label: "타자 최고", value: `${bests.typing_best_cpm}타` },
     { label: "어순 최고", value: `${bests.scramble_best_score}점` },
+    { label: "받아쓰기 최고", value: `${bests.dictation_best_score}점` },
   ].filter((e) => !e.value.startsWith("0"));
 
   return (

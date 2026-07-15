@@ -205,6 +205,42 @@ export type ScMsg =
       aborted: boolean;
     };
 
+/** 받아쓰기 배틀 (docs/specs/dictation-battle.md) */
+export interface DtClip {
+  video_id: string;
+  start_ms: number;
+  end_ms: number;
+}
+
+export interface DtResult {
+  name: string;
+  sentences: number;
+  accuracy: number;
+  score: number;
+}
+
+export type DtMsg =
+  | {
+      t: "dt.start";
+      clips: DtClip[];
+      total: number;
+      sentence_seconds: number;
+      countdown: number;
+      players: string[];
+    }
+  | { t: "dt.room"; code: string | null; host: string; players: string[] }
+  | { t: "dt.sentence"; idx: number }
+  | {
+      t: "dt.done_mark";
+      name: string;
+      idx: number;
+      accuracy: number;
+      gained: number;
+      score: number;
+    }
+  | { t: "dt.reveal"; idx: number; en: string }
+  | { t: "dt.end"; results: DtResult[]; winner: string | null; aborted: boolean };
+
 /** 학습 관전 — 승인제 릴레이 (docs/specs/study-spectate.md) */
 export interface StEventPayload {
   phase: string;
@@ -236,7 +272,7 @@ export type IvMsg =
   | {
       t: "iv.invited";
       from: string;
-      game: "tetris" | "quiz" | "typing" | "scramble";
+      game: "tetris" | "quiz" | "typing" | "scramble" | "dictation";
       code: string;
     }
   | { t: "iv.sent"; ok: boolean };
@@ -250,6 +286,7 @@ export type ServerMsg =
   | QrMsg
   | TpMsg
   | ScMsg
+  | DtMsg
   | StMsg
   | { t: "queue.waiting" }
   | { t: "room.created"; code: string }
@@ -322,16 +359,22 @@ export class GameSocket {
   useItem(item: string): void {
     this.send({ t: "item.use", item });
   }
-  qrSolo(botLevel: number, bots: number, contentIds?: number[]): void {
+  qrSolo(
+    botLevel: number,
+    bots: number,
+    contentIds?: number[],
+    variant: string = "meaning",
+  ): void {
     this.send({
       t: "qr.solo",
       bot_level: botLevel,
       bots,
       content_ids: contentIds,
+      variant,
     });
   }
-  qrCreate(contentIds?: number[]): void {
-    this.send({ t: "qr.create", content_ids: contentIds });
+  qrCreate(contentIds?: number[], variant: string = "meaning"): void {
+    this.send({ t: "qr.create", content_ids: contentIds, variant });
   }
   qrJoin(code: string): void {
     this.send({ t: "qr.join", code });
@@ -398,6 +441,24 @@ export class GameSocket {
   }
   scLeave(): void {
     this.send({ t: "sc.leave" });
+  }
+  dtSolo(): void {
+    this.send({ t: "dt.solo" });
+  }
+  dtCreate(): void {
+    this.send({ t: "dt.create" });
+  }
+  dtJoin(code: string): void {
+    this.send({ t: "dt.join", code });
+  }
+  dtBegin(): void {
+    this.send({ t: "dt.begin" });
+  }
+  dtSubmit(idx: number, text: string): void {
+    this.send({ t: "dt.submit", idx, text });
+  }
+  dtLeave(): void {
+    this.send({ t: "dt.leave" });
   }
   stChat(text: string): void {
     this.send({ t: "st.chat", text });

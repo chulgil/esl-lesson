@@ -10,6 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    DictationRace,
     GameMatch,
     LearningItem,
     QuizRoyaleMatch,
@@ -138,6 +139,19 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
     ).one()
     scramble_played, scramble_wins = int(scramble_rows[0]), int(scramble_rows[1])
 
+    dictation_rows = (
+        await db.execute(
+            select(
+                func.count(DictationRace.id),
+                func.count().filter(DictationRace.winner_id == user_id),
+            ).where(
+                or_(DictationRace.player1_id == user_id, DictationRace.player2_id == user_id),
+                DictationRace.status == "finished",
+            )
+        )
+    ).one()
+    dictation_played, dictation_wins = int(dictation_rows[0]), int(dictation_rows[1])
+
     friends = await _count(
         db,
         select(func.count(Friendship.id)).where(
@@ -152,8 +166,12 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
         "reviews_1000": total_reviews,
         "streak_7": streak,
         "streak_30": streak,
-        "first_win": tetris_wins + typing_wins + quiz_wins + scramble_wins,
-        "games_10": tetris_played + len(typing_rows) + quiz_played + scramble_played,
+        "first_win": tetris_wins + typing_wins + quiz_wins + scramble_wins + dictation_wins,
+        "games_10": tetris_played
+        + len(typing_rows)
+        + quiz_played
+        + scramble_played
+        + dictation_played,
         "typing_300": peak_cpm,
         "first_friend": friends,
     }

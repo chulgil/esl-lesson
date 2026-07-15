@@ -20,8 +20,8 @@ def test_scramble_chips_differs_from_answer_but_same_words():
 def test_sentence_score_bonus_penalty_floor():
     fast = sc.sentence_score(elapsed=0.0, mistakes=0)
     slow = sc.sentence_score(elapsed=sc.SENTENCE_SECONDS, mistakes=0)
-    assert fast == sc.BASE_SCORE + sc.TIME_BONUS_MAX  # 즉답 = 보너스 최대
-    assert slow == sc.BASE_SCORE  # 제한시간 직전 = 보너스 0
+    assert fast == sc.BASE_SCORE + sc.TIME_BONUS_MAX + sc.PERFECT_BONUS  # 즉답+무실수
+    assert slow == sc.BASE_SCORE + sc.PERFECT_BONUS  # 보너스 0 이어도 퍼펙트는 인정
     assert sc.sentence_score(10.0, mistakes=2) < sc.sentence_score(10.0, mistakes=0)
     # 실수가 아무리 많아도 완성하면 최소 점수 보장 (포기 방지)
     assert sc.sentence_score(30.0, mistakes=50) == sc.MIN_SENTENCE_SCORE

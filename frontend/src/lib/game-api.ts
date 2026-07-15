@@ -25,6 +25,7 @@ export interface GameBests {
   quiz_best_score: number;
   typing_best_cpm: number;
   scramble_best_score: number;
+  dictation_best_score: number;
 }
 
 /** 게임별 주간 최고 기록 랭킹 (P3) */
@@ -39,6 +40,7 @@ export interface WeeklyLeaderboards {
   quiz: WeeklyRank[];
   typing: WeeklyRank[];
   scramble: WeeklyRank[];
+  dictation: WeeklyRank[];
 }
 
 export const gameApi = {
