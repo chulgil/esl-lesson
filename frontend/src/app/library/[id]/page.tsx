@@ -19,6 +19,8 @@ export default function LibraryDetailPage() {
   const rangeRef = useRef<{ start: number; end: number } | null>(null);
   const loopRef = useRef(false);
   const detailRef = useRef<LibraryDetail | null>(null);
+  // 수동 이동 직후 시킹이 끝나기 전에 동기 타이머가 이전 위치로 덮어쓰는 레이스 방지
+  const pendingSeekRef = useRef<{ seq: number; until: number } | null>(null);
   loopRef.current = loop;
   detailRef.current = detail;
 
@@ -70,7 +72,19 @@ export default function LibraryDetailPage() {
             now >= s.start_ms &&
             now < (s.end_ms ?? s.start_ms + 5000),
         );
-        setCurrentSeq(active ? active.seq : null);
+        // 문장 사이 공백에서 null 로 리셋하면 이전/다음의 기준점이 사라져
+        // 1번 문장으로 튀는 버그 — 활성 구간이 있을 때만 갱신 (문장은 잔류 표시)
+        if (active) {
+          const pending = pendingSeekRef.current;
+          if (
+            !pending ||
+            active.seq === pending.seq ||
+            Date.now() > pending.until
+          ) {
+            pendingSeekRef.current = null;
+            setCurrentSeq(active.seq);
+          }
+        }
 
         const range = rangeRef.current;
         if (range && now >= range.end * 1000) {
@@ -111,6 +125,9 @@ export default function LibraryDetailPage() {
       idx === -1
         ? playable[0]
         : playable[Math.min(playable.length - 1, Math.max(0, idx + direction))];
+    // 즉시 커서 확정 — 연타 시 다음 클릭의 기준점이 되고, 화면도 바로 전환
+    pendingSeekRef.current = { seq: next.seq, until: Date.now() + 1500 };
+    setCurrentSeq(next.seq);
     playSegment(next.start_ms, next.end_ms);
   }
 
