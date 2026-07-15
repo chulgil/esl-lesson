@@ -145,7 +145,7 @@ async def list_friends(
             friends.append(
                 {
                     "user_id": other.id,
-                    "name": other.name,
+                    "name": other.nickname,
                     "avatar_url": other.avatar_url,
                     "studying": code is not None,
                     "watch_code": code,
@@ -153,7 +153,7 @@ async def list_friends(
                 }
             )
         elif r.addressee_id == user.id:
-            incoming.append({"id": r.id, "name": other.name})
+            incoming.append({"id": r.id, "name": other.nickname})
         else:
-            outgoing.append({"id": r.id, "name": other.name})
+            outgoing.append({"id": r.id, "name": other.nickname})
     return {"friends": friends, "incoming": incoming, "outgoing": outgoing}

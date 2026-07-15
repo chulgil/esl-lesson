@@ -158,9 +158,9 @@ async def leaderboard(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
     union = p1.union_all(p2).subquery()
     rows = (
         await db.execute(
-            select(User.name, func.sum(union.c.score).label("total"))
+            select(User.nickname, func.sum(union.c.score).label("total"))
             .join(User, User.id == union.c.uid)
-            .group_by(User.id, User.name)
+            .group_by(User.id, User.nickname)
             .order_by(func.sum(union.c.score).desc())
             .limit(10)
         )
@@ -235,7 +235,7 @@ async def weekly_leaderboards(
     names: dict[int, str] = {}
     if all_ids:
         names = dict(
-            (await db.execute(select(User.id, User.name).where(User.id.in_(all_ids)))).all()
+            (await db.execute(select(User.id, User.nickname).where(User.id.in_(all_ids)))).all()
         )
 
     def top(best: dict[int, int]) -> list[dict]:
@@ -283,7 +283,7 @@ async def game_ws(websocket: WebSocket) -> None:
         await websocket.send_json(message)
 
     # 프레즌스 등록 (친구 초대 수신용) + 진행 중이던 매치 자동 복귀
-    invite_hub.attach(user_id, user.name, send)
+    invite_hub.attach(user_id, user.nickname, send)
     await manager.attach(user_id, send)
 
     try:
@@ -298,7 +298,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     try:
                         await manager.join_pve(
                             user_id,
-                            user.name,
+                            user.nickname,
                             quiz,
                             int(msg.get("bot_level", 3)),
                             send,
@@ -307,14 +307,14 @@ async def game_ws(websocket: WebSocket) -> None:
                     except WordPoolError as exc:
                         await send({"t": "error", "code": str(exc)})
                 else:
-                    await manager.join_pvp_queue(user_id, user.name, quiz, send)
+                    await manager.join_pvp_queue(user_id, user.nickname, quiz, send)
             elif t == "queue.leave":
                 manager.leave_queue(user_id)
             elif t == "room.create":
                 try:
                     await manager.create_room(
                         user_id,
-                        user.name,
+                        user.nickname,
                         msg.get("quiz", "en"),
                         send,
                         content_ids=_parse_content_ids(msg),
@@ -323,7 +323,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     await send({"t": "error", "code": str(exc)})
             elif t == "room.join":
                 try:
-                    await manager.join_room(user_id, user.name, str(msg.get("code", "")), send)
+                    await manager.join_room(user_id, user.nickname, str(msg.get("code", "")), send)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "input.submit":
@@ -337,7 +337,7 @@ async def game_ws(websocket: WebSocket) -> None:
                 try:
                     await royale.solo(
                         user_id,
-                        user.name,
+                        user.nickname,
                         send,
                         bot_level=int(msg.get("bot_level", 3)),
                         bots=int(msg.get("bots", 1)),
@@ -348,12 +348,12 @@ async def game_ws(websocket: WebSocket) -> None:
             elif t == "qr.create":
                 try:
                     await royale.create(
-                        user_id, user.name, send, content_ids=_parse_content_ids(msg)
+                        user_id, user.nickname, send, content_ids=_parse_content_ids(msg)
                     )
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "qr.join":
-                await royale.join(user_id, user.name, send, str(msg.get("code", "")))
+                await royale.join(user_id, user.nickname, send, str(msg.get("code", "")))
             elif t == "qr.start":
                 try:
                     await royale.start(user_id)
@@ -366,17 +366,17 @@ async def game_ws(websocket: WebSocket) -> None:
             # --- 영문 타자연습 (docs/specs/typing-race.md) ---
             elif t == "tp.solo":
                 try:
-                    await racer.solo(user_id, user.name, send)
+                    await racer.solo(user_id, user.nickname, send)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "tp.create":
                 try:
-                    await racer.create(user_id, user.name, send)
+                    await racer.create(user_id, user.nickname, send)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "tp.join":
                 try:
-                    await racer.join(user_id, user.name, send, str(msg.get("code", "")))
+                    await racer.join(user_id, user.nickname, send, str(msg.get("code", "")))
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "tp.begin":
@@ -399,9 +399,9 @@ async def game_ws(websocket: WebSocket) -> None:
                 racer.detach(user_id)
             # --- 학습 관전 (승인제 릴레이 — docs/specs/study-spectate.md) ---
             elif t == "st.host":
-                await spectate_hub.host(user_id, user.name, send)
+                await spectate_hub.host(user_id, user.nickname, send)
             elif t == "st.request":
-                await spectate_hub.request(user_id, user.name, send, str(msg.get("code", "")))
+                await spectate_hub.request(user_id, user.nickname, send, str(msg.get("code", "")))
             elif t == "st.allow":
                 await spectate_hub.allow(
                     user_id,

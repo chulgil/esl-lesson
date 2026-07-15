@@ -47,8 +47,8 @@ async def _log_reviews(db, user_id, count, days_ago=0):
 async def test_study_leaderboard_ranks_me_and_friends(client, db_session):
     """주간(7일) 복습 수로 나+수락된 친구만 랭킹 — 남남은 제외."""
     me = await login(client, db_session)
-    friend = User(google_sub="g-lb1", email="lb1@example.com", name="친구")
-    stranger = User(google_sub="g-lb2", email="lb2@example.com", name="남남")
+    friend = User(google_sub="g-lb1", email="lb1@example.com", name="친구", nickname="친구")
+    stranger = User(google_sub="g-lb2", email="lb2@example.com", name="남남", nickname="남남")
     db_session.add_all([friend, stranger])
     await db_session.flush()
     db_session.add(Friendship(requester_id=me.id, addressee_id=friend.id, status="accepted"))
@@ -63,7 +63,7 @@ async def test_study_leaderboard_ranks_me_and_friends(client, db_session):
     rows = res.json()["items"]
     assert [(r["name"], r["reviews"], r["me"]) for r in rows] == [
         ("친구", 9, False),
-        (me.name, 5, True),
+        (me.nickname, 5, True),  # 표시는 닉네임 — 구글 이름 비노출
     ]
     assert rows[0]["rank"] == 1 and rows[1]["rank"] == 2
 

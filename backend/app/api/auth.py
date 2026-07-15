@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,7 @@ from app.core.security import (
 from app.models import Content, ContentSubscription, PushSubscription, ReviewCard, ReviewLog
 from app.models.user import ROLE_ADMIN, User, UserSettings
 from app.services.content_service import delete_content_row
+from app.services.nicknames import normalize_nickname, random_nickname
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -147,11 +149,15 @@ async def upsert_google_user(db: AsyncSession, info: dict, settings: Settings) -
             google_sub=info["sub"],
             email=info["email"],
             name=info.get("name") or info["email"],
+            # 타인에게 보이는 이름은 랜덤 닉네임 — 구글 이름을 초기값으로 쓰지 않는다
+            nickname=random_nickname(),
             avatar_url=info.get("picture"),
         )
         db.add(user)
         await db.flush()
         db.add(UserSettings(user_id=user.id))
+    if not user.nickname:  # 마이그레이션 이전 세션 등 방어적 채움
+        user.nickname = random_nickname()
     if user.email.lower() in settings.admin_email_set:
         user.role = ROLE_ADMIN
     user.last_login_at = datetime.now(UTC)
@@ -171,15 +177,39 @@ async def logout() -> RedirectResponse:
 me_router = APIRouter(tags=["auth"])
 
 
-@me_router.get("/me")
-async def me(user: Annotated[User, Depends(get_current_user)]) -> dict:
+def _me_dict(user: User) -> dict:
     return {
         "id": user.id,
         "email": user.email,
         "name": user.name,
+        "nickname": user.nickname,
         "avatar_url": user.avatar_url,
         "role": user.role,
     }
+
+
+@me_router.get("/me")
+async def me(user: Annotated[User, Depends(get_current_user)]) -> dict:
+    return _me_dict(user)
+
+
+class MePatch(BaseModel):
+    nickname: str
+
+
+@me_router.patch("/me")
+async def update_me(
+    body: MePatch,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """닉네임 변경 — 다른 사용자에게 보이는 유일한 이름."""
+    try:
+        user.nickname = normalize_nickname(body.nickname)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    await db.commit()
+    return _me_dict(user)
 
 
 @me_router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

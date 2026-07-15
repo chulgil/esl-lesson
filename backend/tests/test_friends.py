@@ -8,7 +8,8 @@ from tests.test_study import login
 async def make_user(db, email, name):
     from app.models import User
 
-    user = User(google_sub=f"g-{email}", email=email, name=name)
+    # 표시 이름은 닉네임 — 테스트 편의상 이름과 동일하게 부여
+    user = User(google_sub=f"g-{email}", email=email, name=name, nickname=name)
     db.add(user)
     await db.flush()
     return user
@@ -33,13 +34,13 @@ async def test_friend_request_accept_flow(client, db_session):
 
     client.cookies.set(SESSION_COOKIE, create_session_token(friend))
     incoming = (await client.get("/api/friends")).json()
-    assert [i["name"] for i in incoming["incoming"]] == [me.name]
+    assert [i["name"] for i in incoming["incoming"]] == [me.nickname]
     accept = await client.post(f"/api/friends/requests/{req_id}/accept")
     assert accept.status_code == 200
 
     # 양쪽 모두 친구 목록에 등장
     mine = (await client.get("/api/friends")).json()
-    assert [f["name"] for f in mine["friends"]] == [me.name]
+    assert [f["name"] for f in mine["friends"]] == [me.nickname]
 
     client.cookies.set(SESSION_COOKIE, create_session_token(me))
     theirs = (await client.get("/api/friends")).json()

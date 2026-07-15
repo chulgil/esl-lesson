@@ -10,7 +10,7 @@ NOW = datetime.now(UTC)
 
 async def test_leaderboards_rank_per_game_and_mark_me(client, db_session):
     me = await login(client, db_session)
-    rival = User(google_sub="g-lbx", email="lbx@example.com", name="라이벌")
+    rival = User(google_sub="g-lbx", email="lbx@example.com", name="라이벌", nickname="라이벌")
     db_session.add(rival)
     await db_session.flush()
 
@@ -71,14 +71,14 @@ async def test_leaderboards_rank_per_game_and_mark_me(client, db_session):
 
     assert [(r["name"], r["value"], r["me"]) for r in body["tetris"]] == [
         ("라이벌", 500, False),
-        (me.name, 300, True),
+        (me.nickname, 300, True),
     ]
     assert [(r["name"], r["value"], r["me"]) for r in body["quiz"]] == [
-        (me.name, 470, True),
+        (me.nickname, 470, True),
     ]
     assert [(r["name"], r["value"], r["me"]) for r in body["typing"]] == [
         ("라이벌", 310, False),
-        (me.name, 280, True),
+        (me.nickname, 280, True),
     ]
 
 

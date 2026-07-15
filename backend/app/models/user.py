@@ -17,6 +17,8 @@ class User(Base, PkMixin, CreatedAtMixin):
     google_sub: Mapped[str] = mapped_column(Text, unique=True)
     email: Mapped[str] = mapped_column(Text, unique=True)
     name: Mapped[str] = mapped_column(Text)
+    # 다른 사용자에게 보이는 유일한 이름 — 구글 이름(name)은 본인 외 비노출
+    nickname: Mapped[str] = mapped_column(Text, default="", server_default="")
     avatar_url: Mapped[str | None] = mapped_column(Text)
     role: Mapped[str] = mapped_column(Text, default=ROLE_LEARNER, server_default=ROLE_LEARNER)
     last_login_at: Mapped[datetime | None]
@@ -36,6 +38,4 @@ class UserSettings(Base):
     # 학습 난이도: 1 입문(단어) 2 초급(+숙어) 3 중급(+패턴) 4 고급(+문장 타이핑)
     # (docs/specs/learning.md 레벨별 학습 설계 — 저레벨은 선택식, 문장은 고급)
     study_level: Mapped[int] = mapped_column(Integer, default=2, server_default="2")
-    levels_enabled: Mapped[list[int]] = mapped_column(
-        IntList, default=lambda: [1, 2]
-    )
+    levels_enabled: Mapped[list[int]] = mapped_column(IntList, default=lambda: [1, 2])

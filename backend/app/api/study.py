@@ -576,15 +576,15 @@ async def study_leaderboard(
     since = datetime.now(UTC) - timedelta(days=7)
     rows = (
         await db.execute(
-            select(User.id, User.name, func.count(ReviewLog.id))
+            select(User.id, User.nickname, func.count(ReviewLog.id))
             .join(
                 ReviewLog,
                 and_(ReviewLog.user_id == User.id, ReviewLog.reviewed_at >= since),
                 isouter=True,
             )
             .where(User.id.in_(ids))
-            .group_by(User.id, User.name)
-            .order_by(func.count(ReviewLog.id).desc(), User.name)
+            .group_by(User.id, User.nickname)
+            .order_by(func.count(ReviewLog.id).desc(), User.nickname)
         )
     ).all()
 

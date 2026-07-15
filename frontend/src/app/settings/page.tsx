@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { NicknameCard } from "@/components/settings/NicknameCard";
 import { PushReminderCard } from "@/components/settings/PushReminderCard";
 import { deleteMe } from "@/lib/api";
 import { APP_THEMES, setAppTheme, useAppTheme } from "@/lib/theme";
@@ -15,7 +16,9 @@ export default function SettingsPage() {
         <span className="hl">설정</span>
       </h1>
 
-      <section className="max-w-lg">
+      <NicknameCard />
+
+      <section className="mt-10 max-w-lg">
         <p className="mb-1 text-sm font-bold">테마</p>
         <p className="mb-3 text-xs opacity-60">
           앱 전체(배경·버튼·게임 보드)의 디자인 컨셉이 함께 바뀝니다

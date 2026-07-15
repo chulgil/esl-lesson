@@ -97,7 +97,7 @@ export function AppNav() {
               백오피스
             </Link>
           )}
-          <span className="text-sm opacity-60">{me?.name}</span>
+          <span className="text-sm opacity-60">{me?.nickname}</span>
         </div>
       </header>
 

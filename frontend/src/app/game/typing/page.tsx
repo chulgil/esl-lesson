@@ -62,8 +62,8 @@ function TypingRaceInner() {
   useEffect(() => {
     fetchMe().then((me) => {
       if (me) {
-        setMyName(me.name);
-        myNameRef.current = me.name;
+        setMyName(me.nickname);
+        myNameRef.current = me.nickname;
       }
     });
   }, []);

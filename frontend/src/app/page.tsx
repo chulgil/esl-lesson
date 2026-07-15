@@ -61,7 +61,8 @@ function Dashboard({ me }: { me: Me }) {
       {/* 인사 = 페이지 제목 — 랜딩용 대형 타이틀은 AppNav 로고와 중복이라 제거 (2026-07-15 UX 검토) */}
       <header>
         <h1 className="font-hand text-3xl font-bold sm:text-4xl">
-          <span className="hl">{me.name}</span> 님, 오늘도 한 브릭 쌓아볼까요?
+          <span className="hl">{me.nickname}</span> 님, 오늘도 한 브릭
+          쌓아볼까요?
         </h1>
         <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
           {stats && (
