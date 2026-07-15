@@ -82,8 +82,14 @@ async def _run_step(db: AsyncSession, content: Content, step: str, func) -> None
             job.finished_at = datetime.now(UTC)
             await db.commit()
             return
-        except youtube.TranscriptNotFoundError:
-            raise  # 자막 없음은 재시도 무의미 — 즉시 실패
+        except youtube.TranscriptNotFoundError as exc:
+            # 자막 없음/차단은 재시도 무의미 — 즉시 실패. 잡을 failed 로 기록해야
+            # 수집기 대기 목록(failed 잡 필터)에 잡힌다. running 방치 = 영구 교착
+            job.status = "failed"
+            job.error = str(exc)[:2000]
+            job.finished_at = datetime.now(UTC)
+            await db.commit()
+            raise
         except Exception as exc:
             last_error = exc
             job.status = "failed"

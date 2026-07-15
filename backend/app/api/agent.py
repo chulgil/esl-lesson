@@ -49,8 +49,11 @@ async def pending_transcripts(db: Annotated[AsyncSession, Depends(get_db)]) -> d
             await db.execute(
                 select(Content)
                 .where(
+                    # pending 전용 — failed 는 자막 없음이 확정된 콘텐츠(수집기 보고
+                    # 또는 서버 직접 확인)라 재수집 대상이 아니다. 재시도 시 파이프
+                    # 라인이 다시 pending 으로 되돌리므로 그때 재노출된다.
                     Content.source == "youtube",
-                    Content.status.in_(("pending", "failed")),
+                    Content.status == "pending",
                     ~has_segments,
                     transcript_failed,
                 )
@@ -62,6 +65,51 @@ async def pending_transcripts(db: Annotated[AsyncSession, Depends(get_db)]) -> d
         .all()
     )
     return {"items": [{"content_id": c.id, "youtube_video_id": c.youtube_video_id} for c in rows]}
+
+
+NO_TRANSCRIPT_MESSAGE = "영어 자막이 없는 영상입니다 — 자막이 있는 영상으로 다시 등록해 주세요"
+
+
+@router.post("/transcripts/{content_id}/missing", dependencies=[Depends(require_agent_token)])
+async def report_transcript_missing(
+    content_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """수집기가 확인한 '영어 자막 없음' 확정 보고 → 실패 종결, 대기 목록에서 제거.
+
+    보고 없이는 자막 없는 영상이 '자막 준비 중'으로 영원히 남고 수집기가
+    같은 영상을 30초마다 재조회한다. 재시도 엔드포인트로 재수집 가능.
+    """
+    content = await db.get(Content, content_id)
+    if content is None or content.source != "youtube":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
+    existing = (
+        await db.execute(
+            select(TranscriptSegment.id).where(TranscriptSegment.content_id == content_id).limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        # 다른 경로로 이미 자막이 들어옴 — 뒤늦은 보고로 덮어쓰지 않는다
+        return {"content_id": content_id, "status": content.status, "skipped": True}
+
+    job = (
+        await db.execute(
+            select(ExtractionJob).where(
+                ExtractionJob.content_id == content_id, ExtractionJob.step == "transcript"
+            )
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        job = ExtractionJob(content_id=content_id, step="transcript")
+        db.add(job)
+    job.status = "failed"
+    job.error = NO_TRANSCRIPT_MESSAGE
+    job.payload = {"source": "local_agent", "reason": "no_transcript"}
+
+    content.status = "failed"
+    content.error_message = NO_TRANSCRIPT_MESSAGE
+    await db.commit()
+    return {"content_id": content_id, "status": "failed"}
 
 
 class SnippetBody(BaseModel):

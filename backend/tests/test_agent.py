@@ -72,6 +72,75 @@ async def test_blocked_pipeline_holds_content_in_waiting(wired_db, monkeypatch):
     assert "자막 준비 중" in (content.error_message or "")
 
 
+async def test_blocked_pipeline_exposes_content_to_agent(client, wired_db, monkeypatch):
+    """차단 시 transcript 잡이 failed 로 남아야 수집기 대기 목록에 잡힌다 (교착 회귀 방지).
+
+    잡이 running 으로 방치되면 pending-transcripts 필터(failed 잡)에 영원히
+    안 걸려 수집기가 콘텐츠를 못 본다 — 2026-07-15 프로덕션 실측 교착.
+    """
+
+    def blocked(*args, **kwargs):
+        raise TranscriptBlockedError("blocked")
+
+    monkeypatch.setattr(pipeline.youtube, "fetch_transcript", blocked)
+
+    async def fake_title(video_id):
+        return "제목"
+
+    monkeypatch.setattr(pipeline.youtube, "fetch_title", fake_title)
+
+    content = Content(source="youtube", youtube_video_id="dQw4w9WgXcQ", title="T")
+    wired_db.add(content)
+    await wired_db.commit()
+
+    await pipeline.run_pipeline(content.id)
+
+    job = (
+        await wired_db.execute(
+            select(ExtractionJob).where(
+                ExtractionJob.content_id == content.id, ExtractionJob.step == "transcript"
+            )
+        )
+    ).scalar_one()
+    assert job.status == "failed"  # running 방치 금지 — 수집기 노출 조건
+    assert job.error
+
+    listed = (await client.get("/api/agent/pending-transcripts", headers=AGENT_HEADERS)).json()
+    assert listed["items"] == [{"content_id": content.id, "youtube_video_id": "dQw4w9WgXcQ"}]
+
+
+async def test_missing_report_finalizes_content_and_leaves_list(client, db_session):
+    """수집기가 '영어 자막 없음'을 확정 보고하면 실패 종결 + 대기 목록 제거."""
+    content = await make_blocked_content(db_session)
+
+    res = await client.post(f"/api/agent/transcripts/{content.id}/missing", headers=AGENT_HEADERS)
+    assert res.status_code == 200
+    assert res.json()["status"] == "failed"
+
+    await db_session.refresh(content)
+    assert content.status == "failed"
+    assert "자막" in (content.error_message or "")
+
+    listed = (await client.get("/api/agent/pending-transcripts", headers=AGENT_HEADERS)).json()
+    assert listed["items"] == []
+
+
+async def test_missing_report_skipped_when_segments_exist(client, db_session):
+    """이미 자막이 제출된 콘텐츠에 대한 뒤늦은 '없음' 보고는 무시 (경합 보호)."""
+    content = await make_blocked_content(db_session)
+    db_session.add(
+        TranscriptSegment(content_id=content.id, seq=0, start_ms=0, end_ms=1000, en_text="Hi.")
+    )
+    await db_session.commit()
+
+    res = await client.post(f"/api/agent/transcripts/{content.id}/missing", headers=AGENT_HEADERS)
+    assert res.status_code == 200
+    assert res.json().get("skipped") is True
+
+    await db_session.refresh(content)
+    assert content.status == "pending"  # 실패로 덮어쓰지 않음
+
+
 async def test_agent_endpoints_require_token(client, db_session):
     assert (await client.get("/api/agent/pending-transcripts")).status_code == 401
     bad = await client.get("/api/agent/pending-transcripts", headers={"X-Agent-Token": "wrong"})

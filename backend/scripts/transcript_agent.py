@@ -29,7 +29,11 @@ def log(msg: str) -> None:
 
 
 def fetch_snippets(video_id: str, languages: tuple[str, ...]) -> list[dict] | None:
-    """로컬 IP 로 자막 조회. 없으면 None."""
+    """로컬 IP 로 자막 조회.
+
+    None = 조회 실패(일시적일 수 있음 — 다음 주기에 재시도),
+    []   = 자막 목록은 조회됐으나 해당 언어 자막이 확정적으로 없음.
+    """
     from youtube_transcript_api import YouTubeTranscriptApi
 
     api = YouTubeTranscriptApi()
@@ -46,7 +50,7 @@ def fetch_snippets(video_id: str, languages: tuple[str, ...]) -> list[dict] | No
         except Exception:
             continue
     if transcript is None:
-        return None
+        return []
     return [
         {
             "text": s.text.replace("\n", " ").strip(),
@@ -69,8 +73,12 @@ def process_once(client: httpx.Client) -> int:
     for item in items:
         video_id = item["youtube_video_id"]
         en = fetch_snippets(video_id, ("en",))
+        if en is None:
+            continue  # 일시 오류 — 다음 주기에 재시도 (fetch_snippets 가 로그)
         if not en:
-            log(f"  [x] {video_id}: 영어 자막 없음/실패 — 건너뜀")
+            # 영어 자막 없음 확정 — 서버에 보고해 대기 목록에서 종결시킨다
+            report = client.post(f"{SERVER}/api/agent/transcripts/{item['content_id']}/missing")
+            log(f"  [-] {video_id}: 영어 자막 없음 확정 — 서버 보고 {report.status_code}")
             continue
         ko = fetch_snippets(video_id, ("ko",)) or []
         submit = client.post(
