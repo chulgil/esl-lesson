@@ -107,7 +107,8 @@ export interface Stats {
     level: number;
     item_type: string;
     cards: number;
-    approved_items: number;
+    /** 내가 만날 수 있는 항목 수 — 공용 승인 ∪ 내 개인 (전역 승인 아님) */
+    available_items: number;
   }[];
   daily: Record<string, number>;
 }

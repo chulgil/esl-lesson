@@ -433,23 +433,26 @@ async def get_stats(
         )
     ).scalar_one()
 
+    # 분자 = 학습 중 카드 (suspended 제외 — 사용자가 뺀 항목은 세지 않는다)
     level_rows = (
         await db.execute(
             select(LearningItem.item_type, func.count(ReviewCard.id))
             .join(ReviewCard, ReviewCard.item_id == LearningItem.id)
-            .where(ReviewCard.user_id == user.id)
+            .where(ReviewCard.user_id == user.id, ReviewCard.suspended.is_(False))
             .group_by(LearningItem.item_type)
         )
     ).all()
     cards_by_type = dict(level_rows)
-    approved_rows = (
+    # 분모 = 내가 만날 수 있는 항목 — 큐 도입 규칙(visible_item_clause)과 동일.
+    # 전역 approved 카운트는 내 개인 pending 누락/타인 개인 포함으로 부정확 (2026-07-15 검증)
+    available_rows = (
         await db.execute(
             select(LearningItem.item_type, func.count(LearningItem.id))
-            .where(LearningItem.review_status == "approved")
+            .where(visible_item_clause(user.id))
             .group_by(LearningItem.item_type)
         )
     ).all()
-    approved_by_type = dict(approved_rows)
+    available_by_type = dict(available_rows)
 
     recent = (
         await db.execute(
@@ -525,7 +528,7 @@ async def get_stats(
                 "level": level,
                 "item_type": item_type,
                 "cards": cards_by_type.get(item_type, 0),
-                "approved_items": approved_by_type.get(item_type, 0),
+                "available_items": available_by_type.get(item_type, 0),
             }
             for item_type, level in ITEM_TYPE_LEVEL.items()
         ],

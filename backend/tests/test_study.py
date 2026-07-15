@@ -298,3 +298,76 @@ async def test_default_new_user_is_beginner(client, db_session):
     settings = (await client.get("/api/settings")).json()
     assert settings["study_level"] == 2
     assert settings["levels_enabled"] == [1, 2]
+
+
+async def test_stats_levels_use_my_visibility_not_global_approved(client, db_session):
+    """레벨 분모=내 가시성(공용 승인 ∪ 내 개인 비거부), 분자=suspended 제외 (2026-07-15 검증)."""
+    from datetime import UTC, datetime
+
+    from app.models import ReviewCard
+
+    me = await login(client, db_session)
+    pub = await seed_items(db_session, count=2)  # 공용 approved 2개
+    mine = await seed_items(
+        db_session, count=1, status="pending", visibility="private", owner=me.id
+    )  # 내 개인 pending — 큐 도입 대상이므로 분모 포함이 맞다
+    from app.models import User
+
+    other = User(google_sub="g-vis", email="vis@example.com", name="남", nickname="남")
+    db_session.add(other)
+    await db_session.flush()
+    await seed_items(
+        db_session, count=1, status="pending", visibility="private", owner=other.id
+    )  # 타인 개인 — 내 화면 분모에서 제외
+
+    now = datetime.now(UTC)
+    db_session.add_all(
+        [
+            ReviewCard(user_id=me.id, item_id=pub[0].id, state="review", due_at=now),
+            ReviewCard(
+                user_id=me.id, item_id=pub[1].id, state="review", due_at=now, suspended=True
+            ),
+            ReviewCard(user_id=me.id, item_id=mine[0].id, state="new", due_at=now),
+        ]
+    )
+    await db_session.commit()
+
+    stats = (await client.get("/api/study/stats")).json()
+    word = next(lv for lv in stats["levels"] if lv["item_type"] == "word")
+    assert word["available_items"] == 3  # 공용 2 + 내 개인 1 (타인 개인 제외)
+    assert word["cards"] == 2  # suspended 제외
+
+
+async def test_reviews_today_uses_kst_day_boundary(client, db_session):
+    """오늘 복습 카운트는 KST 자정 기준 — 어제 23:59 KST 는 제외."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.api.study import KST
+    from app.models import ReviewCard, ReviewLog
+
+    me = await login(client, db_session)
+    items = await seed_items(db_session, count=1)
+    card = ReviewCard(
+        user_id=me.id, item_id=items[0].id, state="review", due_at=datetime.now(UTC)
+    )
+    db_session.add(card)
+    await db_session.flush()
+
+    today_kst = datetime.now(UTC).astimezone(KST).replace(hour=0, minute=1, second=0)
+    yesterday_kst = today_kst - timedelta(minutes=2)  # 어제 23:59 KST
+    for when in (today_kst, yesterday_kst):
+        db_session.add(
+            ReviewLog(
+                card_id=card.id,
+                user_id=me.id,
+                rating=3,
+                correct=True,
+                quiz_mode="choice_en2ko",
+                state_before="review",
+                reviewed_at=when.astimezone(UTC),
+            )
+        )
+    await db_session.commit()
+
+    stats = (await client.get("/api/study/stats")).json()
+    assert stats["reviews_today"] == 1

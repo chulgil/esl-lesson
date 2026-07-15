@@ -156,7 +156,7 @@ function Dashboard({ me }: { me: Me }) {
                 )}
               </div>
               <p className="text-xs opacity-60">
-                레벨 {lv.level} · {lv.cards}/{lv.approved_items}
+                레벨 {lv.level} · {lv.cards}/{lv.available_items}
               </p>
             </div>
           ))}
