@@ -23,7 +23,7 @@ from app.models import (
     UserSettings,
 )
 from app.models.item import ITEM_TYPE_LEVEL
-from app.services import embeddings, fsrs_service, insights, quiz, vocab_network
+from app.services import achievements, embeddings, fsrs_service, insights, quiz, vocab_network
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -506,11 +506,7 @@ async def get_stats(
     ):
         if any(p.get("user_id") == user.id for p in (payload or {}).get("players", [])):
             quiz_played += 1
-    xp = (
-        total_reviews * 10
-        + (tetris_played + typing_played + quiz_played) * 20
-        + tetris_wins * 30
-    )
+    xp = total_reviews * 10 + (tetris_played + typing_played + quiz_played) * 20 + tetris_wins * 30
 
     return {
         "xp": xp,
@@ -529,6 +525,20 @@ async def get_stats(
             for item_type, level in ITEM_TYPE_LEVEL.items()
         ],
         "daily": daily,
+    }
+
+
+@router.get("/achievements")
+async def get_achievements(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """업적 배지 — 로그 실시간 집계, 소급 반영 (P3 리텐션)."""
+    items = await achievements.compute(db, user.id)
+    return {
+        "items": items,
+        "achieved_count": sum(1 for a in items if a["achieved"]),
+        "total": len(items),
     }
 
 

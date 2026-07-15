@@ -3,8 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
+import { AchievementBadges } from "@/components/study/AchievementBadges";
 import { friendsApi } from "@/lib/friends-api";
-import { studyApi, type Stats, type StudyRank } from "@/lib/study-api";
+import {
+  type Achievement,
+  studyApi,
+  type Stats,
+  type StudyRank,
+} from "@/lib/study-api";
 
 /** 학습 허브 — 학습 관련 기능을 한눈에 (게임 허브와 동일 패턴, 2026-07-14 IA 정리) */
 export default function StudyHubPage() {
@@ -14,6 +20,7 @@ export default function StudyHubPage() {
     incoming: number;
   } | null>(null);
   const [ranks, setRanks] = useState<StudyRank[]>([]);
+  const [badges, setBadges] = useState<Achievement[]>([]);
 
   useEffect(() => {
     studyApi
@@ -23,6 +30,10 @@ export default function StudyHubPage() {
     studyApi
       .leaderboard()
       .then((res) => setRanks(res.items))
+      .catch(() => undefined);
+    studyApi
+      .achievements()
+      .then((res) => setBadges(res.items))
       .catch(() => undefined);
     friendsApi
       .list()
@@ -152,6 +163,22 @@ export default function StudyHubPage() {
               아직 나 혼자예요 — 친구를 추가하면 함께 순위가 매겨져요!
             </p>
           )}
+        </section>
+      )}
+
+      {/* 업적 스티커 — 소급 반영, 진행률 표시 (P3) */}
+      {badges.length > 0 && (
+        <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-green/40 bg-white p-5 shadow-sm">
+          <h2 className="font-hand text-2xl font-bold">
+            업적 스티커
+            <span className="ml-2 align-middle text-sm font-normal opacity-60">
+              {badges.filter((b) => b.achieved).length}/{badges.length} 달성
+            </span>
+          </h2>
+          <p className="mt-1 mb-3 text-xs opacity-60">
+            공부하고 게임하다 보면 하나씩 붙어요
+          </p>
+          <AchievementBadges items={badges} />
         </section>
       )}
     </main>
