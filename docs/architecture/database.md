@@ -201,3 +201,35 @@ CREATE DATABASE englesson OWNER englesson ENCODING 'UTF8';
 - 모든 스키마 변경은 Alembic 리비전으로만 (수동 DDL 금지, 위 초기화 1회 제외)
 - 배포 파이프라인에서 컨테이너 기동 전 `alembic upgrade head` 실행
 - 파괴적 변경(컬럼 삭제 등)은 2단계 배포 (구버전 호환 유지 → 다음 릴리스에서 제거)
+
+## DB 설계 감사 (2026-07-15)
+
+### 패러다임 매핑 — 현행 유지 판정
+
+| 요구 | 채택 | 근거 |
+|---|---|---|
+| 핵심 도메인 (사용자·카드·로그·콘텐츠) | RDB (정규화 + FK + CHECK) | 정합성·조인이 본질인 데이터 |
+| 결과 스냅샷 (게임 stats, FSRS 상태, 인사이트) | JSONB 컬럼 | 스키마 유동적·행 단위 조회 전용. 단, **집계는 JSONB 금지** (아래) |
+| 단어 임베딩 유사도 | pgvector halfvec(1024) + HNSW | 전용 VectorDB 불필요 — 데이터 수만 건 규모, 코사인 top-k 는 HNSW 로 충분 |
+| 어휘망 그래프 | SQL(LATERAL top-k) + 앱 조립 | 노드 300 캡·1-hop 조회뿐 — GraphDB 는 운영 비용만 추가 |
+
+별도 NoSQL/GraphDB/VectorDB 인스턴스를 두지 않는 것이 **의도된 결정** —
+2GB 단일 서버에서 PostgreSQL 확장(JSONB/pgvector)으로 전 요구를 충족한다.
+
+### 감사에서 고친 것 (리비전 b4c5d6e7f8a9)
+
+- **인덱스 보강 11개**: PG 는 FK 자동 인덱스가 없다 — 쿼리 근거 있는 컬럼만 선별
+  (occurrences.content_id 는 모든 학습 쿼리의 가시성 서브쿼리에 포함되어 최우선).
+- **quiz_royale_players 정규화**: XP·최고기록·업적·리더보드가 players JSONB 를
+  파이썬에서 풀스캔(매 페이지뷰 O(전체 매치)) → 인덱스 집계로 전환. JSONB 는
+  결과 화면 스냅샷으로만 유지. 기존 데이터 백필 포함.
+- **경합 방어**: SELECT-후-INSERT 경로(큐 신규 카드 도입·유사단어 추가·푸시 구독)에
+  IntegrityError → rollback → 승자 채택 폴백. UNIQUE 제약이 최종 심판.
+
+### 스케일 노트 (재검토 트리거)
+
+- 커넥션: 단일 api 프로세스, SQLAlchemy 기본 풀(5+10) + pre_ping — PG max_connections 여유.
+- review_logs 는 append-only 로 최대 성장 — (user_id, reviewed_at) 인덱스로 통계는
+  유저 범위 스캔. **월 100만 행 초과 시** 일별 집계 테이블(materialized) 검토.
+- 주간 리더보드는 요청마다 7일 창 집계 — **DAU 수백 초과 시** 캐시(60s) 또는
+  집계 테이블 검토. 현재 규모(수십 명)에서는 과설계.

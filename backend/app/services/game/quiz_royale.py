@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.core.db import get_session_factory
-from app.models import QuizRoyaleMatch
+from app.models import QuizRoyaleMatch, QuizRoyalePlayer
 from app.services.game.manager import WordPoolError, select_word_pool
 
 logger = logging.getLogger(__name__)
@@ -350,6 +350,18 @@ class QuizRoyaleManager:
                 if ranking_ is not None:
                     row.players = {"players": ranking_}
                     row.ended_at = datetime.now(UTC)
+                    # 집계용 정규 행 — JSONB 풀스캔 대체 (봇 제외, DB 감사 2026-07-15)
+                    for p in ranking_:
+                        if p.get("user_id") is None:
+                            continue
+                        db.add(
+                            QuizRoyalePlayer(
+                                match_id=row.id,
+                                user_id=p["user_id"],
+                                score=int(p.get("score") or 0),
+                                rank=p.get("rank"),
+                            )
+                        )
                 await db.commit()
         except Exception:
             logger.exception("failed to save quiz royale %s", session.match_id)

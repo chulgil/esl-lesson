@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -63,7 +64,20 @@ async def subscribe(
                 auth=body.keys.auth,
             )
         )
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 동시 구독 경합 (endpoint UNIQUE) — 먼저 저장된 행을 현재 값으로 갱신
+        await db.rollback()
+        winner = (
+            await db.execute(
+                select(PushSubscription).where(PushSubscription.endpoint == body.endpoint)
+            )
+        ).scalar_one()
+        winner.user_id = user.id
+        winner.p256dh = body.keys.p256dh
+        winner.auth = body.keys.auth
+        await db.commit()
     return {"saved": True}
 
 

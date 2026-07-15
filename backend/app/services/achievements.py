@@ -13,6 +13,7 @@ from app.models import (
     GameMatch,
     LearningItem,
     QuizRoyaleMatch,
+    QuizRoyalePlayer,
     ReviewCard,
     ReviewLog,
     TypingRace,
@@ -111,23 +112,17 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
         stats = (row.stats or {}).get(slot) or {}
         peak_cpm = max(peak_cpm, int(stats.get("peak_cpm") or 0))
 
-    quiz_played = 0
-    quiz_wins = 0
-    for payload in (
-        (
-            await db.execute(
-                select(QuizRoyaleMatch.players).where(QuizRoyaleMatch.status == "finished")
+    quiz_rows = (
+        await db.execute(
+            select(func.count(QuizRoyalePlayer.id), func.count().filter(QuizRoyalePlayer.rank == 1))
+            .join(QuizRoyaleMatch, QuizRoyaleMatch.id == QuizRoyalePlayer.match_id)
+            .where(
+                QuizRoyalePlayer.user_id == user_id,
+                QuizRoyaleMatch.status == "finished",
             )
         )
-        .scalars()
-        .all()
-    ):
-        for p in (payload or {}).get("players", []):
-            if p.get("user_id") == user_id:
-                quiz_played += 1
-                if p.get("rank") == 1:
-                    quiz_wins += 1
-                break
+    ).one()
+    quiz_played, quiz_wins = int(quiz_rows[0]), int(quiz_rows[1])
 
     friends = await _count(
         db,

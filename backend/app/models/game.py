@@ -87,6 +87,25 @@ class QuizRoyaleMatch(Base, PkMixin, CreatedAtMixin):
     )
     mode: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, default="waiting", server_default="waiting")
-    # {"players": [{user_id,name,score,rank,is_bot}]} — 종료 시 확정
+    # {"players": [{user_id,name,score,rank,is_bot}]} — 결과 화면 스냅샷 (표시 전용)
     players: Mapped[dict] = mapped_column(JsonDict, default=dict)
     ended_at: Mapped[datetime | None]
+
+
+class QuizRoyalePlayer(Base, PkMixin, CreatedAtMixin):
+    """퀴즈 로얄 참가 기록(정규화) — 집계 전용, 봇 제외 (DB 감사 2026-07-15).
+
+    players JSONB 파이썬 풀스캔(XP·최고기록·업적·리더보드)을 인덱스 집계로 대체한다.
+    표시용 스냅샷은 QuizRoyaleMatch.players 유지.
+    """
+
+    __tablename__ = "quiz_royale_players"
+
+    match_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("quiz_royale_matches.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    score: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    rank: Mapped[int | None] = mapped_column(SmallInteger)

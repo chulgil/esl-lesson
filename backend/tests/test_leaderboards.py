@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from app.models import GameMatch, QuizRoyaleMatch, TypingRace, User
+from app.models import GameMatch, QuizRoyaleMatch, QuizRoyalePlayer, TypingRace, User
 from tests.test_study import login
 
 NOW = datetime.now(UTC)
@@ -36,8 +36,9 @@ async def test_leaderboards_rank_per_game_and_mark_me(client, db_session):
                 stats={},
                 ended_at=NOW - timedelta(days=8),
             ),
-            # 퀴즈: 나 470 — 봇(user_id None)은 제외
+            # 퀴즈: 나 470 — 집계는 정규 참가 기록(봇은 저장 시 제외)
             QuizRoyaleMatch(
+                id=902,
                 host_id=me.id,
                 mode="solo",
                 status="finished",
@@ -49,6 +50,7 @@ async def test_leaderboards_rank_per_game_and_mark_me(client, db_session):
                 },
                 ended_at=NOW - timedelta(hours=2),
             ),
+            QuizRoyalePlayer(match_id=902, user_id=me.id, score=470, rank=1),
             # 타자: 나 280 vs 라이벌 310
             TypingRace(
                 mode="race",

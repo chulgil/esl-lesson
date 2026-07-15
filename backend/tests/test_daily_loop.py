@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from app.models import (
     GameMatch,
     QuizRoyaleMatch,
+    QuizRoyalePlayer,
     ReviewLog,
     TypingRace,
     User,
@@ -84,6 +85,7 @@ async def test_game_bests_across_three_games(client, db_session):
                 stats={},
             ),
             QuizRoyaleMatch(
+                id=901,
                 host_id=me.id,
                 mode="solo",
                 status="finished",
@@ -94,6 +96,8 @@ async def test_game_bests_across_three_games(client, db_session):
                     ]
                 },
             ),
+            # 집계는 정규 참가 기록에서 (players JSONB 는 표시 스냅샷)
+            QuizRoyalePlayer(match_id=901, user_id=me.id, score=470, rank=1),
             TypingRace(
                 mode="solo",
                 status="finished",

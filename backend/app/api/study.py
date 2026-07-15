@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -127,7 +128,13 @@ async def get_queue(
             card = ReviewCard(user_id=user.id, item_id=item.id, state="new", due_at=now)
             db.add(card)
             new_cards.append(card)
-        await db.flush()
+        try:
+            await db.flush()
+        except IntegrityError:
+            # 동시 요청(중복 탭)이 같은 항목을 먼저 도입 (uq_cards_user_item)
+            # — 이번 응답은 due 카드만 반환, 신규는 승자 쪽 응답에 실림
+            await db.rollback()
+            new_cards = []
 
     ordered = due_cards + new_cards
     page = ordered[:QUEUE_PAGE_SIZE]
@@ -466,7 +473,7 @@ async def get_stats(
         cursor -= timedelta(days=1)
 
     # XP·레벨 (P2) — 복습 10 + 게임 참여 20 + 테트리스 승리 보너스 30, 레벨=500XP 단위
-    from app.models import GameMatch, QuizRoyaleMatch, TypingRace
+    from app.models import GameMatch, QuizRoyaleMatch, QuizRoyalePlayer, TypingRace
 
     total_reviews = (
         await db.execute(select(func.count(ReviewLog.id)).where(ReviewLog.user_id == user.id))
@@ -494,18 +501,16 @@ async def get_stats(
             )
         )
     ).scalar_one()
-    quiz_played = 0
-    for payload in (
-        (
-            await db.execute(
-                select(QuizRoyaleMatch.players).where(QuizRoyaleMatch.status == "finished")
+    quiz_played = (
+        await db.execute(
+            select(func.count(QuizRoyalePlayer.id))
+            .join(QuizRoyaleMatch, QuizRoyaleMatch.id == QuizRoyalePlayer.match_id)
+            .where(
+                QuizRoyalePlayer.user_id == user.id,
+                QuizRoyaleMatch.status == "finished",
             )
         )
-        .scalars()
-        .all()
-    ):
-        if any(p.get("user_id") == user.id for p in (payload or {}).get("players", [])):
-            quiz_played += 1
+    ).scalar_one()
     xp = total_reviews * 10 + (tetris_played + typing_played + quiz_played) * 20 + tetris_wins * 30
 
     return {
@@ -717,7 +722,19 @@ async def add_card(
         return {"added": False, "card_id": existing.id}
     card = ReviewCard(user_id=user.id, item_id=body.item_id, state="new", due_at=datetime.now(UTC))
     db.add(card)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 동시 추가 경합 (uq_cards_user_item) — 먼저 저장된 카드를 채택
+        await db.rollback()
+        winner = (
+            await db.execute(
+                select(ReviewCard).where(
+                    ReviewCard.user_id == user.id, ReviewCard.item_id == body.item_id
+                )
+            )
+        ).scalar_one()
+        return {"added": False, "card_id": winner.id}
     return {"added": True, "card_id": card.id}
 
 

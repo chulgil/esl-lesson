@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db, get_session_factory
 from app.core.security import SESSION_COOKIE, decode_session_token, get_current_user
-from app.models import GameMatch, QuizRoyaleMatch, TypingRace, User
+from app.models import GameMatch, QuizRoyaleMatch, QuizRoyalePlayer, TypingRace, User
 from app.services.game import records
 from app.services.game.invites import invite_hub
 from app.services.game.manager import WordPoolError, manager
@@ -103,20 +103,16 @@ async def game_bests(
         )
     ).scalar_one()
 
-    quiz_best = 0
-    quiz_rows = (
-        (
-            await db.execute(
-                select(QuizRoyaleMatch.players).where(QuizRoyaleMatch.status == "finished")
+    quiz_best = (
+        await db.execute(
+            select(func.coalesce(func.max(QuizRoyalePlayer.score), 0))
+            .join(QuizRoyaleMatch, QuizRoyaleMatch.id == QuizRoyalePlayer.match_id)
+            .where(
+                QuizRoyalePlayer.user_id == user.id,
+                QuizRoyaleMatch.status == "finished",
             )
         )
-        .scalars()
-        .all()
-    )
-    for payload in quiz_rows:
-        for p in (payload or {}).get("players", []):
-            if p.get("user_id") == user.id:
-                quiz_best = max(quiz_best, int(p.get("score") or 0))
+    ).scalar_one()
 
     typing_best = 0
     typing_rows = (
@@ -193,24 +189,20 @@ async def weekly_leaderboards(
         if p2_id is not None:
             tetris_best[p2_id] = max(tetris_best.get(p2_id, 0), s2 or 0)
 
-    # 퀴즈 로얄: players JSON 에서 유저별 최고 점수 (봇=user_id None 제외)
-    quiz_best: dict[int, int] = {}
-    for payload in (
+    # 퀴즈 로얄: 정규 참가 기록 집계 (봇 없음 — 저장 시 제외)
+    quiz_best = dict(
         (
             await db.execute(
-                select(QuizRoyaleMatch.players).where(
-                    QuizRoyaleMatch.status == "finished", QuizRoyaleMatch.ended_at >= since
+                select(QuizRoyalePlayer.user_id, func.max(QuizRoyalePlayer.score))
+                .join(QuizRoyaleMatch, QuizRoyaleMatch.id == QuizRoyalePlayer.match_id)
+                .where(
+                    QuizRoyaleMatch.status == "finished",
+                    QuizRoyaleMatch.ended_at >= since,
                 )
+                .group_by(QuizRoyalePlayer.user_id)
             )
-        )
-        .scalars()
-        .all()
-    ):
-        for p in (payload or {}).get("players", []):
-            uid = p.get("user_id")
-            if uid is None:
-                continue
-            quiz_best[uid] = max(quiz_best.get(uid, 0), int(p.get("score") or 0))
+        ).all()
+    )
 
     # 타자연습: 유저별 주간 최고 타 (peak_cpm)
     typing_best: dict[int, int] = {}
