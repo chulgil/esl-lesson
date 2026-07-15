@@ -168,6 +168,87 @@ async def leaderboard(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
     return {"items": [{"name": name, "score": int(total)} for name, total in rows]}
 
 
+LEADERBOARD_TOP = 5
+
+
+@router.get("/leaderboards")
+async def weekly_leaderboards(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """게임별 주간 최고 기록 top5 — 게임 허브 표시 (P3). 봇 제외."""
+    since = datetime.now(UTC) - timedelta(days=7)
+
+    # 테트리스: 유저별 주간 최고 점수
+    tetris_best: dict[int, int] = {}
+    rows = (
+        await db.execute(
+            select(
+                GameMatch.player1_id, GameMatch.player2_id, GameMatch.p1_score, GameMatch.p2_score
+            ).where(GameMatch.status == "finished", GameMatch.ended_at >= since)
+        )
+    ).all()
+    for p1_id, p2_id, s1, s2 in rows:
+        tetris_best[p1_id] = max(tetris_best.get(p1_id, 0), s1 or 0)
+        if p2_id is not None:
+            tetris_best[p2_id] = max(tetris_best.get(p2_id, 0), s2 or 0)
+
+    # 퀴즈 로얄: players JSON 에서 유저별 최고 점수 (봇=user_id None 제외)
+    quiz_best: dict[int, int] = {}
+    for payload in (
+        (
+            await db.execute(
+                select(QuizRoyaleMatch.players).where(
+                    QuizRoyaleMatch.status == "finished", QuizRoyaleMatch.ended_at >= since
+                )
+            )
+        )
+        .scalars()
+        .all()
+    ):
+        for p in (payload or {}).get("players", []):
+            uid = p.get("user_id")
+            if uid is None:
+                continue
+            quiz_best[uid] = max(quiz_best.get(uid, 0), int(p.get("score") or 0))
+
+    # 타자연습: 유저별 주간 최고 타 (peak_cpm)
+    typing_best: dict[int, int] = {}
+    for race in (
+        (
+            await db.execute(
+                select(TypingRace).where(
+                    TypingRace.status == "finished", TypingRace.ended_at >= since
+                )
+            )
+        )
+        .scalars()
+        .all()
+    ):
+        for uid, slot in ((race.player1_id, "p1"), (race.player2_id, "p2")):
+            if uid is None:
+                continue
+            peak = int(((race.stats or {}).get(slot) or {}).get("peak_cpm") or 0)
+            typing_best[uid] = max(typing_best.get(uid, 0), peak)
+
+    all_ids = set(tetris_best) | set(quiz_best) | set(typing_best)
+    names: dict[int, str] = {}
+    if all_ids:
+        names = dict(
+            (await db.execute(select(User.id, User.name).where(User.id.in_(all_ids)))).all()
+        )
+
+    def top(best: dict[int, int]) -> list[dict]:
+        ranked = sorted(best.items(), key=lambda kv: (-kv[1], names.get(kv[0], "")))
+        return [
+            {"name": names.get(uid, "?"), "value": value, "me": uid == user.id}
+            for uid, value in ranked[:LEADERBOARD_TOP]
+            if value > 0
+        ]
+
+    return {"tetris": top(tetris_best), "quiz": top(quiz_best), "typing": top(typing_best)}
+
+
 def _parse_content_ids(msg: dict) -> list[int] | None:
     raw = msg.get("content_ids")
     if not raw or not isinstance(raw, list):

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MyBests } from "@/components/game/MyBests";
+import { WeeklyLeaderboardsCard } from "@/components/game/WeeklyLeaderboardsCard";
 
 /** 게임 허브 — 종류별 카테고리 메뉴 + 게임 설명 (2026-07-14 개편) */
 const GAMES: {
@@ -91,6 +92,9 @@ export default function GameHubPage() {
           </Link>
         ))}
       </div>
+
+      {/* 게임별 주간 최고 기록 — 매주 리셋되는 경쟁 루프 (P3) */}
+      <WeeklyLeaderboardsCard />
     </main>
   );
 }

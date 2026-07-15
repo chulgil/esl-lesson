@@ -26,9 +26,23 @@ export interface GameBests {
   typing_best_cpm: number;
 }
 
+/** 게임별 주간 최고 기록 랭킹 (P3) */
+export interface WeeklyRank {
+  name: string;
+  value: number;
+  me: boolean;
+}
+
+export interface WeeklyLeaderboards {
+  tetris: WeeklyRank[];
+  quiz: WeeklyRank[];
+  typing: WeeklyRank[];
+}
+
 export const gameApi = {
   profile: () => request<GameProfile>("/api/game/profile"),
   leaderboard: () =>
     request<{ items: LeaderboardEntry[] }>("/api/game/leaderboard"),
+  leaderboards: () => request<WeeklyLeaderboards>("/api/game/leaderboards"),
   bests: () => request<GameBests>("/api/game/bests"),
 };
