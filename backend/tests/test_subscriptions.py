@@ -79,6 +79,61 @@ async def test_last_unsubscribe_deletes_private_content(client, db_session):
     assert await db_session.get(Content, content_id) is None
 
 
+async def test_delete_preserves_practice_records(client, db_session):
+    """삭제 기획: 향후 학습 목록에서만 빠지고, 연습한 기록(카드·로그)은 남는다.
+
+    목표 — 관심 콘텐츠로 학습하되, 콘텐츠를 정리해도 그간의 실력 기록은 유지.
+    """
+    from datetime import UTC, datetime
+
+    from app.models import ItemOccurrence, ReviewCard, ReviewLog
+    from app.services.visibility import visible_item_clause
+
+    user = await login_as(client, db_session, "a@example.com")
+    items = await seed_items(db_session, count=2, visibility="private", owner=user.id)
+    content_id = (
+        await db_session.execute(
+            select(ItemOccurrence.content_id).where(ItemOccurrence.item_id == items[0].id)
+        )
+    ).scalar_one()
+
+    # 첫 항목만 연습 이력 존재
+    now = datetime.now(UTC)
+    card = ReviewCard(user_id=user.id, item_id=items[0].id, due_at=now)
+    db_session.add(card)
+    await db_session.flush()
+    db_session.add(
+        ReviewLog(
+            card_id=card.id,
+            user_id=user.id,
+            rating=3,
+            correct=True,
+            quiz_mode="meaning",
+            state_before="new",
+            reviewed_at=now,
+        )
+    )
+    await db_session.commit()
+
+    assert (await client.delete(f"/api/my/contents/{content_id}")).status_code == 204
+
+    # 콘텐츠는 삭제, 연습 기록이 있는 항목·카드·로그는 보존
+    assert await db_session.get(Content, content_id) is None
+    assert await db_session.get(LearningItem, items[0].id) is not None
+    assert await db_session.get(LearningItem, items[1].id) is None  # 기록 없는 고아만 정리
+    assert await db_session.get(ReviewCard, card.id) is not None
+    logs = (await db_session.execute(select(func.count(ReviewLog.id)))).scalar_one()
+    assert logs == 1
+
+    # 출처가 사라진 항목은 가시성 규칙에 따라 향후 학습 목록에서 제외
+    visible = (
+        (await db_session.execute(select(LearningItem.id).where(visible_item_clause(user.id))))
+        .scalars()
+        .all()
+    )
+    assert items[0].id not in visible
+
+
 async def test_admin_registering_existing_private_promotes_to_public(admin_client, db_session):
     # 일반 사용자가 먼저 등록한 영상
     content = Content(

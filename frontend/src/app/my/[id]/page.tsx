@@ -52,7 +52,7 @@ export default function MyContentDetailPage() {
   async function remove() {
     if (
       !confirm(
-        "내 목록에서 삭제할까요? (다른 구독자가 있으면 콘텐츠는 유지됩니다)",
+        "이 콘텐츠를 내 학습에서 뺄까요?\n지금까지의 연습 기록은 그대로 남아요.",
       )
     )
       return;

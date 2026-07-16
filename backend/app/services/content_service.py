@@ -8,7 +8,14 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Content, ExtractionJob, ItemOccurrence, LearningItem, TranscriptSegment
+from app.models import (
+    Content,
+    ExtractionJob,
+    ItemOccurrence,
+    LearningItem,
+    ReviewCard,
+    TranscriptSegment,
+)
 from app.services.youtube import parse_video_id
 
 
@@ -167,13 +174,23 @@ def retry_content_row(content: Content) -> None:
 
 
 async def delete_content_row(db: AsyncSession, content: Content) -> None:
-    """콘텐츠 삭제 + 다른 출처가 없는 고아 항목 정리 (커밋 포함)."""
-    await db.delete(content)
-    orphans = await db.execute(
-        select(LearningItem).where(
-            ~select(ItemOccurrence.id).where(ItemOccurrence.item_id == LearningItem.id).exists()
-        )
+    """콘텐츠 삭제 + 다른 출처가 없는 고아 항목 정리 (커밋 포함).
+
+    연습 기록(review_cards)이 있는 항목은 남긴다 — 출처가 사라져 향후 학습
+    목록에서는 빠지지만(가시성 규칙) 기록·통계는 보존되고, 같은 항목을
+    재등록하면 FSRS 진행 상태가 그대로 이어진다.
+    """
+    # occurrence 는 명시 삭제 — DB cascade(postgres)에만 맡기면 sqlite 테스트와
+    # 프로덕션의 고아 판정이 달라진다
+    await db.execute(
+        ItemOccurrence.__table__.delete().where(ItemOccurrence.content_id == content.id)
     )
+    await db.delete(content)
+    has_occurrence = (
+        select(ItemOccurrence.id).where(ItemOccurrence.item_id == LearningItem.id).exists()
+    )
+    has_card = select(ReviewCard.id).where(ReviewCard.item_id == LearningItem.id).exists()
+    orphans = await db.execute(select(LearningItem).where(~has_occurrence, ~has_card))
     for item in orphans.scalars():
         await db.delete(item)
     await db.commit()
