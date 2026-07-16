@@ -19,7 +19,9 @@ from app.models import LearningItem
 KST = timezone(timedelta(hours=9))
 MAX_TRIES = 6
 MIN_LEN, MAX_LEN = 4, 8
-HINT_AFTER_TRIES = 2  # 뜻 힌트 해금 — 막힌 사람 구제, 정답 단어는 계속 비공개
+# 뜻 힌트는 처음부터 opt-in(버튼) — 능동 회상 학습에 부합 (2026-07-16 기획 확정).
+# 첫 글자 힌트만 시도 횟수로 잠금 — 정답 단어는 종료 전 비공개 유지.
+FIRST_LETTER_AFTER_TRIES = 4
 
 
 def today_kst() -> date:

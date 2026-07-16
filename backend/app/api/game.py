@@ -359,8 +359,13 @@ def _puzzle_payload(answer: str, ko: str, guesses: list[str], solved: bool) -> d
         # 정답·뜻은 끝났을 때만 공개 — 끝나면 학습 모먼트로 뜻까지 보여준다
         "answer": answer if finished else None,
         "answer_ko": ko if finished else None,
-        # 뜻 힌트는 2번 시도부터 해금 (정답 단어는 비공개 유지)
-        "hint_ko": ko if (finished or len(guesses) >= daily_puzzle.HINT_AFTER_TRIES) else None,
+        # 뜻 힌트는 처음부터 opt-in(버튼), 첫 글자는 4번 시도부터 (정답 단어는 비공개 유지)
+        "hint_ko": ko,
+        "hint_first": (
+            answer[0]
+            if (finished or len(guesses) >= daily_puzzle.FIRST_LETTER_AFTER_TRIES)
+            else None
+        ),
     }
 
 
@@ -460,6 +465,8 @@ async def puzzle_practice_start(
         "length": len(answer),
         "max_tries": daily_puzzle.MAX_TRIES,
         "hint_ko": words.get(answer, ""),
+        # 무상태라 시작 응답에 포함 — 노출 시점(4번 시도)은 클라이언트 게이트 (무보상이라 충분)
+        "hint_first": answer[0],
         "token": daily_puzzle.practice_token(answer, words.get(answer, "")),
     }
 

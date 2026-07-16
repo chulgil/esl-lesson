@@ -41,7 +41,8 @@ async def test_puzzle_api_flow(client, db_session):
     assert state["available"] is True and state["max_tries"] == 6
     length = state["length"]
     assert state["answer"] is None  # 진행 중엔 정답 비공개
-    assert state["hint_ko"] is None  # 힌트는 2번 시도 전엔 잠금
+    assert state["hint_ko"].endswith("뜻")  # 뜻 힌트는 처음부터 (열람은 UI 버튼 opt-in)
+    assert state["hint_first"] is None  # 첫 글자 힌트는 4번 시도부터
 
     # 길이 불일치 → 422
     bad = await client.post("/api/game/puzzle/guess", json={"word": "a" * (length + 1)})
@@ -53,13 +54,17 @@ async def test_puzzle_api_flow(client, db_session):
         res = await client.post("/api/game/puzzle/guess", json={"word": wrong})
         assert res.status_code == 200
         body = res.json()
-        # 뜻 힌트는 2번 시도부터 열림 (정답 단어는 여전히 비공개)
-        assert (body["hint_ko"] is not None) == (n + 1 >= dp.HINT_AFTER_TRIES)
+        assert body["hint_ko"] is not None
+        # 첫 글자 힌트는 4번 시도부터 열림 (정답 단어는 여전히 비공개)
+        assert (body["hint_first"] is not None) == (
+            body["finished"] or n + 1 >= dp.FIRST_LETTER_AFTER_TRIES
+        )
         if not body["finished"]:
             assert body["answer"] is None
     final = res.json()
     assert final["finished"] is True and final["solved"] is False
     assert final["answer"] is not None and final["answer_ko"].endswith("뜻")
+    assert final["hint_first"] == final["answer"][0]
     assert len(final["guesses"]) == 6
 
     # 끝난 뒤 추가 추측 → 409
@@ -87,6 +92,8 @@ async def test_practice_mode_flow(client, db_session):
     start = (await client.get("/api/game/puzzle/practice")).json()
     assert start["available"] is True and start["max_tries"] == 6
     assert start["token"] and start["hint_ko"].endswith("뜻")
+    # 첫 글자 힌트 — 무상태라 시작 응답에 포함, 노출 시점은 클라이언트 게이트
+    assert len(start["hint_first"]) == 1
     length = start["length"]
     token = start["token"]
 
@@ -105,6 +112,7 @@ async def test_practice_mode_flow(client, db_session):
     )
     final = res.json()
     assert final["answer"] is not None and final["answer_ko"].endswith("뜻")
+    assert final["answer"].startswith(start["hint_first"])
 
     # 정답 제출 → correct + 공개
     res = await client.post(
