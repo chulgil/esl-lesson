@@ -193,6 +193,13 @@ def merge_into_sentences(snippets: list[Snippet]) -> list[Snippet]:
         start_ms = _time_at(offsets, start_off)
         end_ms = max(start_ms, _time_at(offsets, end_off))
         sentences.append(Snippet(text=sentence, start_ms=start_ms, end_ms=end_ms))
+
+    # 원본 조각끼리 겹치는 자막(2줄 롤링 표시)은 보간 후에도 조각 경계에서
+    # 구간이 겹친다 — 시작은 단조 증가로, 이전 끝은 다음 시작까지로 자른다
+    for prev, cur in zip(sentences, sentences[1:], strict=False):
+        cur.start_ms = max(cur.start_ms, prev.start_ms)
+        cur.end_ms = max(cur.end_ms, cur.start_ms)
+        prev.end_ms = max(prev.start_ms, min(prev.end_ms, cur.start_ms))
     return sentences
 
 

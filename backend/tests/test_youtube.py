@@ -60,6 +60,27 @@ def test_merge_interpolates_within_shared_snippet_no_overlap():
         assert prev.end_ms <= nxt.start_ms
 
 
+def test_merge_clamps_overlapping_rolling_snippets():
+    """원본 조각끼리 겹치는(2줄 롤링 표시) 자막도 문장 구간은 겹치지 않는다.
+
+    보간은 조각 내부에서만 단조 — 조각 경계의 겹침은 클램프로 잘라야 한다
+    (2026-07-16 재수집 후에도 overlap 잔존 실측).
+    """
+    snippets = [
+        Snippet("First sentence ends here.", 0, 8000),
+        Snippet("Second sentence starts now.", 5000, 12000),  # 원본부터 3초 겹침
+    ]
+    merged = merge_into_sentences(snippets)
+    assert [s.text for s in merged] == [
+        "First sentence ends here.",
+        "Second sentence starts now.",
+    ]
+    assert merged[1].start_ms == 5000  # 시작은 원본 유지 (표시 전환 기준)
+    assert merged[0].end_ms <= merged[1].start_ms  # 이전 문장 끝은 다음 시작까지
+    starts = [s.start_ms for s in merged]
+    assert starts == sorted(starts)  # 시작 시각 단조 증가
+
+
 def test_merge_keeps_snippets_when_no_punctuation():
     """자동 생성 자막(문장부호 없음)은 조각 그대로."""
     snippets = [Snippet("hello everyone today", 0, 2000), Snippet("we talk about", 2000, 4000)]

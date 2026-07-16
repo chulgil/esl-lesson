@@ -8,12 +8,32 @@ import { studyApi, type LibraryDetail } from "@/lib/study-api";
 
 /** 라이브러리 상세 — 전문(全文) 나열 대신 재생 중 문장만 동기 표시.
  *  전체 스크립트 노출은 저작권 리스크 상위라 제거 (2026-07-14 저작권 검토). */
+
+// 자막 선행 표시 — 발화보다 먼저 읽을 준비가 되도록 (기기별 설정, localStorage)
+const LEAD_STORAGE_KEY = "esl:library:subtitle-lead-ms";
+const DEFAULT_LEAD_MS = 1000;
+const LEAD_OPTIONS = [
+  { value: 0, label: "정시" },
+  { value: 500, label: "0.5초 먼저" },
+  { value: 1000, label: "1초 먼저" },
+  { value: 1500, label: "1.5초 먼저" },
+  { value: 2000, label: "2초 먼저" },
+];
+
 export default function LibraryDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<LibraryDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentSeq, setCurrentSeq] = useState<number | null>(null);
   const [loop, setLoop] = useState(false);
+  const [subtitleLead, setSubtitleLead] = useState(DEFAULT_LEAD_MS);
+  const leadRef = useRef(DEFAULT_LEAD_MS);
+  leadRef.current = subtitleLead;
+
+  useEffect(() => {
+    const saved = Number(localStorage.getItem(LEAD_STORAGE_KEY));
+    if (LEAD_OPTIONS.some((o) => o.value === saved)) setSubtitleLead(saved);
+  }, []);
 
   const playerRef = useRef<YTPlayer | null>(null);
   const rangeRef = useRef<{ start: number; end: number } | null>(null);
@@ -58,17 +78,18 @@ export default function LibraryDetailPage() {
   }, [detail]);
 
   // 재생 감시: 현재 구간 자막 동기 + A-B 루프 (docs/specs/learning.md)
-  // 폴링은 구간 시작을 항상 늦게만 감지 — 유튜브 자막처럼 정시에 전환되도록
-  // 촘촘한 틱 + 선행 매칭(문장 표시만, 루프 판정은 실시간 기준)
+  // 폴링은 구간 시작을 항상 늦게만 감지 — 150ms 는 틱 보정, 그 위에
+  // 사용자 설정 선행(기본 1초)을 더해 발화 전에 자막이 준비된다
+  // (문장 표시만 선행, 루프 판정은 실시간 기준)
   useEffect(() => {
     const SYNC_TICK_MS = 100;
-    const LOOKAHEAD_MS = 150;
+    const POLL_COMPENSATION_MS = 150;
     const timer = setInterval(() => {
       const player = playerRef.current;
       if (!player) return;
       try {
         const now = player.getCurrentTime() * 1000;
-        const ahead = now + LOOKAHEAD_MS;
+        const ahead = now + POLL_COMPENSATION_MS + leadRef.current;
 
         const segments = detailRef.current?.segments ?? [];
         // "마지막으로 시작한 문장" 매칭 — 범위 포함(find) 방식은 이전 문장의
@@ -210,6 +231,24 @@ export default function LibraryDetailPage() {
                   onChange={(e) => setLoop(e.target.checked)}
                 />
                 이 문장 반복 (A-B 루프)
+              </label>
+              <label className="flex min-h-11 items-center gap-2 rounded-md border-2 border-ink/15 bg-white px-3 text-sm">
+                자막 표시
+                <select
+                  value={subtitleLead}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setSubtitleLead(value);
+                    localStorage.setItem(LEAD_STORAGE_KEY, String(value));
+                  }}
+                  className="cursor-pointer bg-transparent font-bold"
+                >
+                  {LEAD_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
 
