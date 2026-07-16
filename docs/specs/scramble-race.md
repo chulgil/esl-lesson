@@ -19,8 +19,10 @@
 
 - **서버**: `services/game/scramble.py` — 타자 레이스와 동일 진행 모델 (칩 셔플은 정답 어순 회피 재시도)
 - **저장**: `scramble_races` (d6e7f8a9b0c1) — p1/p2_score, stats JSONB, 조회 인덱스 3종 선제 생성
-- **WS**: `sc.solo/create/join/begin/progress/done/leave` → `sc.room/start/sentence/progress/done_mark/end`
+- **WS**: `sc.solo/create/join/begin/progress/done/leave` → `sc.room/start/sentence/progress/done_mark/review/end`
   - 점수는 **서버 시계**로 계산 (클라이언트는 mistakes 만 보고)
+  - `sc.review{items[]}` (개인, 2026-07-16): 실수(`mistakes>0`)·시간초과 문장의
+    학습 항목 — 결과 화면 `ReviewPanel` 원탭 학습 추가 (규칙: quiz-royale.md)
 - **연동**: 게임 허브 카드, 내 최고 기록(`scramble_best_score`), 주간 명예의 전당, XP(참여 20),
   업적(첫 승리·게임 단골 포함), 친구 초대(`iv.invite game=scramble` → `/game/scramble?join=`)
 

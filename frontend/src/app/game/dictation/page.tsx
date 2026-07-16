@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { SegmentPlayer } from "@/components/media/SegmentPlayer";
 import { BackLink } from "@/components/nav/BackLink";
@@ -12,6 +13,7 @@ import {
   type DtClip,
   type DtResult,
   GameSocket,
+  type GameReviewItem,
   type ServerMsg,
 } from "@/lib/game-ws";
 
@@ -55,6 +57,7 @@ function DictationInner() {
     results: DtResult[];
     winner: string | null;
   } | null>(null);
+  const [review, setReview] = useState<GameReviewItem[]>([]);
 
   const socketRef = useRef<GameSocket | null>(null);
   const clipsRef = useRef<DtClip[]>([]);
@@ -83,6 +86,7 @@ function DictationInner() {
         secondsRef.current = msg.sentence_seconds;
         setTotal(msg.total);
         setCountLeft(Math.ceil(msg.countdown));
+        setReview([]);
         setPhase("countdown");
         break;
       case "dt.sentence":
@@ -106,6 +110,9 @@ function DictationInner() {
         break;
       case "dt.reveal":
         setReveal(msg.en);
+        break;
+      case "dt.review":
+        setReview(msg.items);
         break;
       case "dt.end":
         setEnd({ results: msg.results, winner: msg.winner });
@@ -390,6 +397,11 @@ function DictationInner() {
                 </p>
               </div>
             ))}
+          <ReviewPanel
+            items={review}
+            noun="문장"
+            hint="추가한 문장은 학습 큐에 들어가요 — 문장 카드는 학습 레벨 '고급'에서 출제돼요"
+          />
           <div className="flex flex-wrap items-center gap-3">
             <Brick
               color="green"

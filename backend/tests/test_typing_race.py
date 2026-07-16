@@ -6,8 +6,21 @@ import pytest
 
 from app.models import TypingRace, User
 from app.services.game import typing_race as tr
-from app.services.game.manager import WordPoolError
+from app.services.game.manager import WordPoolError, review_items
 from tests.test_game_manager import Collector, seed_user_and_words, wired_db  # noqa: F401
+
+
+def test_review_items_dedupes_and_drops_missing_ids():
+    entries = [
+        {"item_id": 1, "en": "a", "ko": "가"},
+        {"item_id": 1, "en": "a", "ko": "가"},  # 순환 풀에서 같은 문장 반복
+        {"item_id": 2, "en": "b", "ko": "나"},
+        {"en": "no id", "ko": "제외"},
+    ]
+    assert review_items(entries) == [
+        {"item_id": 1, "en": "a", "ko": "가"},
+        {"item_id": 2, "en": "b", "ko": "나"},
+    ]
 
 
 def test_wpm_and_accuracy():
@@ -135,6 +148,48 @@ async def test_race_four_players_sync_and_winner(wired_db, fast_race):  # noqa: 
     await wired_db.refresh(row)
     assert row.winner_id == host.id and row.status == "finished"
     assert host.id not in manager.by_user
+
+
+async def test_typo_and_timeout_sentences_sent_as_review(wired_db, fast_race):  # noqa: F811
+    """오타 완성·시간초과 문장은 종료 시 tp.review 로 본인에게 전달."""
+    user = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db)
+    manager = tr.TypingRaceManager()
+    sender = Collector()
+
+    session = await manager.solo(user.id, user.name, sender)
+    start = next(m for m in sender.messages if m["t"] == "tp.start")
+    assert all("item_id" in s for s in start["sentences"])  # 풀에 학습 항목 연결
+
+    await _wait_for(sender, "tp.sentence")
+    first = session.sentences[0]["en"]
+    await manager.done(user.id, idx=0, chars=len(first), errors=2)  # 오타 있는 완성
+    await asyncio.wait_for(session.task, timeout=5)  # 2번째 문장은 시간초과
+
+    review = next(m for m in sender.messages if m["t"] == "tp.review")
+    assert review["items"] == review_items(session.sentences)
+    types = [m["t"] for m in sender.messages]
+    assert types.index("tp.review") < types.index("tp.end")
+
+
+async def test_clean_race_sends_no_review(wired_db, fast_race):  # noqa: F811
+    """무오타로 전부 완성하면 tp.review 를 보내지 않는다."""
+    user = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db)
+    manager = tr.TypingRaceManager()
+    sender = Collector()
+
+    session = await manager.solo(user.id, user.name, sender)
+    for idx in range(2):
+        for _ in range(100):
+            if sum(1 for m in sender.messages if m["t"] == "tp.sentence") >= idx + 1:
+                break
+            await asyncio.sleep(0.02)
+        await manager.done(user.id, idx=idx, chars=len(session.sentences[idx]["en"]), errors=0)
+    await asyncio.wait_for(session.task, timeout=5)
+
+    assert not any(m["t"] == "tp.review" for m in sender.messages)
+    assert any(m["t"] == "tp.end" for m in sender.messages)
 
 
 async def test_room_full_and_missing(wired_db):  # noqa: F811

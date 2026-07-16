@@ -54,3 +54,99 @@ def test_rank_players_score_then_mistakes_then_time():
     name, uid = sc.rank_players([player("a", 1, 900, 2, 5000), player("b", 2, 900, 2, 5000)])
     assert (name, uid) == (None, None)  # 완전 동률 = 무승부
     assert sc.rank_players([player("솔로", 1, 900, 0, 100)]) == (None, None)
+
+
+# --- 오답 → 원탭 학습 (플로우) ---
+
+import asyncio  # noqa: E402
+
+import pytest  # noqa: E402
+
+from tests.test_game_manager import Collector, seed_user_and_words, wired_db  # noqa: E402, F401
+
+_seed_batch = 0
+
+
+async def seed_scramble_sentences(db, count=6):
+    """seed_items 는 단어 1개짜리 en_text — 칩 범위(4~12단어)용 문장을 별도 시딩."""
+    from app.models import Content, ItemOccurrence, LearningItem
+
+    global _seed_batch
+    _seed_batch += 1
+    content = Content(source="manual", title="sc-seed", status="ready", visibility="public")
+    db.add(content)
+    await db.flush()
+    items = []
+    for i in range(count):
+        item = LearningItem(
+            item_type="sentence",
+            en_text=f"this is scramble sentence number {_seed_batch}{i}",
+            ko_text=f"어순 문장 {_seed_batch}{i}",
+            normalized_key=f"sc-sent-{_seed_batch}-{i}",
+            review_status="approved",
+        )
+        db.add(item)
+        await db.flush()
+        db.add(ItemOccurrence(item_id=item.id, content_id=content.id))
+        items.append(item)
+    await db.commit()
+    return items
+
+
+@pytest.fixture
+def fast_scramble(monkeypatch):
+    monkeypatch.setattr(sc, "SENTENCE_COUNT", 2)
+    monkeypatch.setattr(sc, "SENTENCE_SECONDS", 0.5)
+    monkeypatch.setattr(sc, "COUNTDOWN_SECONDS", 0.0)
+    monkeypatch.setattr(sc, "TICK", 0.02)
+
+
+async def _wait_for(collector, msg_type, timeout=3.0):
+    for _ in range(int(timeout / 0.02)):
+        found = [m for m in collector.messages if m["t"] == msg_type]
+        if found:
+            return found
+        await asyncio.sleep(0.02)
+    raise AssertionError(f"{msg_type} not received")
+
+
+async def test_mistake_and_timeout_rounds_sent_as_review(wired_db, fast_scramble):  # noqa: F811
+    """실수 있는 완성·시간초과 문장은 종료 시 sc.review 로 본인에게 전달."""
+    user = await seed_user_and_words(wired_db)
+    await seed_scramble_sentences(wired_db)
+    manager = sc.ScrambleManager()
+    sender = Collector()
+
+    session = await manager.solo(user.id, user.name, sender)
+    start = next(m for m in sender.messages if m["t"] == "sc.start")
+    assert all("item_id" in r for r in start["rounds"])  # 라운드에 학습 항목 연결
+
+    await _wait_for(sender, "sc.sentence")
+    await manager.done(user.id, idx=0, mistakes=1)  # 실수 있는 완성
+    await asyncio.wait_for(session.task, timeout=5)  # 2번째 문장은 시간초과
+
+    review = next(m for m in sender.messages if m["t"] == "sc.review")
+    assert [i["item_id"] for i in review["items"]] == [r["item_id"] for r in session.rounds]
+    assert all(i["en"] and i["ko"] for i in review["items"])
+    types = [m["t"] for m in sender.messages]
+    assert types.index("sc.review") < types.index("sc.end")
+
+
+async def test_perfect_race_sends_no_review(wired_db, fast_scramble):  # noqa: F811
+    """무실수로 전부 완성하면 sc.review 를 보내지 않는다."""
+    user = await seed_user_and_words(wired_db)
+    await seed_scramble_sentences(wired_db)
+    manager = sc.ScrambleManager()
+    sender = Collector()
+
+    session = await manager.solo(user.id, user.name, sender)
+    for idx in range(2):
+        for _ in range(100):
+            if sum(1 for m in sender.messages if m["t"] == "sc.sentence") >= idx + 1:
+                break
+            await asyncio.sleep(0.02)
+        await manager.done(user.id, idx=idx, mistakes=0)
+    await asyncio.wait_for(session.task, timeout=5)
+
+    assert not any(m["t"] == "sc.review" for m in sender.messages)
+    assert any(m["t"] == "sc.end" for m in sender.messages)

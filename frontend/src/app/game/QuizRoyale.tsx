@@ -3,16 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import type {
+  GameReviewItem,
   QrEndMsg,
   QrMsg,
   QrRank,
-  QrReviewItem,
   QrRoomMsg,
   QrRoundMsg,
 } from "@/lib/game-ws";
-import { studyApi } from "@/lib/study-api";
 
 type Phase = "waiting" | "round" | "reveal" | "ended";
 
@@ -41,8 +41,7 @@ export function QuizRoyale({
     scores: QrRank[];
   } | null>(null);
   const [end, setEnd] = useState<QrEndMsg | null>(null);
-  const [review, setReview] = useState<QrReviewItem[]>([]);
-  const [added, setAdded] = useState<Record<number, boolean>>({});
+  const [review, setReview] = useState<GameReviewItem[]>([]);
   const [timeLeft, setTimeLeft] = useState(0);
   const deadlineRef = useRef(0);
 
@@ -58,10 +57,7 @@ export function QuizRoyale({
           setPicked(null);
           setAnswered([]);
           setReveal(null);
-          if (msg.no === 1) {
-            setReview([]);
-            setAdded({});
-          }
+          if (msg.no === 1) setReview([]);
           deadlineRef.current = Date.now() + msg.seconds * 1000;
           setPhase("round");
           break;
@@ -98,21 +94,6 @@ export function QuizRoyale({
     if (picked !== null || phase !== "round") return;
     setPicked(choice);
     onAnswer(choice);
-  }
-
-  async function addToStudy(itemId: number) {
-    try {
-      await studyApi.addCard(itemId);
-      setAdded((prev) => ({ ...prev, [itemId]: true }));
-    } catch {
-      // 실패 시 버튼 유지 — 다시 탭해 재시도
-    }
-  }
-
-  async function addAllToStudy() {
-    for (const item of review) {
-      if (!added[item.item_id]) await addToStudy(item.item_id);
-    }
   }
 
   const seconds = round?.seconds ?? 10;
@@ -292,59 +273,7 @@ export function QuizRoyale({
               </li>
             ))}
           </ol>
-          {review.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-lg border-2 border-brick-red/30 bg-brick-red/5 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-bold">
-                  이번 판에서 틀린 단어 {review.length}개
-                </h3>
-                {review.some((i) => !added[i.item_id]) ? (
-                  <button
-                    type="button"
-                    onClick={addAllToStudy}
-                    className="rounded-md border-2 border-brick-blue bg-brick-blue/10 px-3 py-1.5 text-sm font-bold transition hover:-translate-y-0.5"
-                  >
-                    모두 학습 추가
-                  </button>
-                ) : (
-                  <span className="text-sm font-bold text-brick-green">
-                    복습 큐에 담김
-                  </span>
-                )}
-              </div>
-              <ul className="flex flex-col gap-1.5">
-                {review.map((item) => (
-                  <li
-                    key={item.item_id}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <span>
-                      <b>{item.en}</b>
-                      {item.ko && (
-                        <span className="ml-2 opacity-60">{item.ko}</span>
-                      )}
-                    </span>
-                    {added[item.item_id] ? (
-                      <span className="text-xs font-bold text-brick-green">
-                        추가됨
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => addToStudy(item.item_id)}
-                        className="rounded-md border-2 border-brick-blue/40 px-2.5 py-1 text-xs font-bold transition hover:bg-brick-blue/10"
-                      >
-                        학습 추가
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-xs opacity-60">
-                추가한 단어는 오늘의 학습 큐에 새 카드로 들어가요
-              </p>
-            </div>
-          )}
+          <ReviewPanel items={review} />
           <div className="flex flex-wrap items-center gap-3">
             <Brick color="blue" onClick={onExit}>
               로비로

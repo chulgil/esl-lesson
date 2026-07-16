@@ -12,3 +12,8 @@
 | 문장 풀 | 유튜브 구간(video_id+start/end)이 있는 sentence 항목, 가시성 규칙 |
 
 구성: services/game/dictation.py (타자 레이스 모델), dictation_races(e7f8a9b0c1d2, 인덱스 선제), WS dt.*, SegmentPlayer 재사용. bests/명예의전당/XP/업적/초대 연동.
+
+**오답 → 원탭 학습** (2026-07-16): 정확도 100% 미만 제출·미제출 문장을 기록해
+정상 종료 시 `dt.review{items:[{item_id,en,ko}]}` 를 본인에게만 전송 —
+결과 화면 `ReviewPanel` 원탭 학습 추가 (규칙: quiz-royale.md "오답 → 원탭 학습").
+정답 비전송 원칙과 충돌 없음 — review 는 정답 공개(dt.reveal) 후의 종료 시점 전달.

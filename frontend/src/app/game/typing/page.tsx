@@ -5,10 +5,12 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { fetchMe } from "@/lib/api";
 import {
   GameSocket,
+  type GameReviewItem,
   type ServerMsg,
   type TpResult,
   type TpStartMsg,
@@ -51,6 +53,7 @@ function TypingRaceInner() {
     results: TpResult[];
     winner: string | null;
   } | null>(null);
+  const [review, setReview] = useState<GameReviewItem[]>([]);
   const [myName, setMyName] = useState("나");
   const socketRef = useRef<GameSocket | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -77,6 +80,7 @@ function TypingRaceInner() {
       case "tp.start": {
         setStart(msg);
         setEnd(null);
+        setReview([]);
         setRows(
           Object.fromEntries(
             msg.players.map((name) => [
@@ -126,6 +130,9 @@ function TypingRaceInner() {
             done: true,
           },
         }));
+        break;
+      case "tp.review":
+        setReview(msg.items);
         break;
       case "tp.end":
         setEnd({ results: msg.results, winner: msg.winner });
@@ -519,6 +526,11 @@ function TypingRaceInner() {
               </p>
             </div>
           ))}
+          <ReviewPanel
+            items={review}
+            noun="문장"
+            hint="추가한 문장은 학습 큐에 들어가요 — 문장 카드는 학습 레벨 '고급'에서 출제돼요"
+          />
           <div className="flex gap-3">
             <Brick
               color="green"

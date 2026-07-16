@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from app.core.db import get_session_factory
 from app.models import Content, DictationRace, ItemOccurrence, LearningItem, TranscriptSegment
-from app.services.game.manager import WordPoolError
+from app.services.game.manager import WordPoolError, review_items
 from app.services.game.typing_race import pick_sentences
 from app.services.visibility import visible_item_clause
 
@@ -81,7 +81,9 @@ async def load_dictation_pool(user_id: int) -> list[dict]:
         rows = (
             await db.execute(
                 select(
+                    LearningItem.id,
                     LearningItem.en_text,
+                    LearningItem.ko_text,
                     Content.youtube_video_id,
                     TranscriptSegment.start_ms,
                     TranscriptSegment.end_ms,
@@ -100,12 +102,14 @@ async def load_dictation_pool(user_id: int) -> list[dict]:
             )
         ).all()
     pool = []
-    for en, video_id, start_ms, end_ms in rows:
+    for item_id, en, ko, video_id, start_ms, end_ms in rows:
         en = (en or "").strip()
         if en and len(en) <= MAX_SENTENCE_CHARS:
             pool.append(
                 {
+                    "item_id": item_id,
                     "en": en,
+                    "ko": (ko or "").strip(),
                     "video_id": video_id,
                     "start_ms": start_ms,
                     "end_ms": end_ms or start_ms + 5000,
@@ -124,6 +128,7 @@ class DictatorState:
     score: int = 0
     total_ms: int = 0
     done_current: bool = False
+    wrong: list[int] = field(default_factory=list)  # 부정확·미제출 문장 인덱스
 
 
 @dataclass
@@ -208,6 +213,8 @@ class DictationManager:
         player.done_current = True
         player.sentences += 1
         player.accuracy_sum += accuracy
+        if accuracy < 1.0:
+            player.wrong.append(idx)
         player.score += gained
         player.total_ms += int(elapsed * 1000)
         await self._broadcast(
@@ -284,6 +291,9 @@ class DictationManager:
                     p.done_current for p in session.players
                 ):
                     await asyncio.sleep(TICK)
+                for p in session.players:
+                    if not p.done_current:
+                        p.wrong.append(round_no)
                 # 정답 공개 — 학습 순간 (미제출자는 0점 통과)
                 session.round_no = -1  # 공개 중 제출 차단
                 await self._broadcast(
@@ -310,6 +320,12 @@ class DictationManager:
         ]
         winner, winner_id = rank_players(session.players)
         await self._save(session, "aborted" if aborted else "finished", winner_id, results)
+        if not aborted:
+            # 오답 복습은 본인에게만 — 결과 화면 원탭 학습 추가용
+            for p in session.players:
+                items = review_items([session.rounds[i] for i in p.wrong])
+                if items:
+                    await self._safe_send(p, {"t": "dt.review", "items": items})
         await self._broadcast(
             session,
             {"t": "dt.end", "results": results, "winner": winner, "aborted": aborted},

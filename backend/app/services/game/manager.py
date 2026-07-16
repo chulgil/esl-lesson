@@ -528,6 +528,22 @@ async def select_word_pool(
     return pool
 
 
+def review_items(entries: list[dict]) -> list[dict]:
+    """오답 복습 항목 목록 — item_id 중복 제거(순환 풀 대응), {item_id,en,ko} 만 유지.
+
+    게임 종료 시 *.review 개인 메시지의 items 페이로드 (quiz-royale.md 오답 → 원탭 학습).
+    """
+    seen: set[int] = set()
+    items: list[dict] = []
+    for entry in entries:
+        item_id = entry.get("item_id") or 0
+        if not item_id or item_id in seen:
+            continue
+        seen.add(item_id)
+        items.append({"item_id": item_id, "en": entry.get("en", ""), "ko": entry.get("ko", "")})
+    return items
+
+
 async def load_word_pool_from_contents(
     user_id: int, content_ids: list[int]
 ) -> list[tuple[int, str, str]]:

@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from app.core.db import get_session_factory
 from app.models import Content, ItemOccurrence, LearningItem, TypingRace
-from app.services.game.manager import WordPoolError
+from app.services.game.manager import WordPoolError, review_items
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ async def load_sentence_pool(user_id: int) -> list[dict]:
     async with get_session_factory()() as db:
         rows = (
             await db.execute(
-                select(LearningItem.en_text, LearningItem.ko_text)
+                select(LearningItem.id, LearningItem.en_text, LearningItem.ko_text)
                 .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
                 .join(Content, Content.id == ItemOccurrence.content_id)
                 .where(
@@ -90,8 +90,8 @@ async def load_sentence_pool(user_id: int) -> list[dict]:
             )
         ).all()
     return [
-        {"en": en.strip(), "ko": (ko or "").strip()}
-        for en, ko in rows
+        {"item_id": item_id, "en": en.strip(), "ko": (ko or "").strip()}
+        for item_id, en, ko in rows
         if en and len(en.strip()) <= MAX_SENTENCE_CHARS
     ]
 
@@ -109,6 +109,7 @@ class RacerState:
     live_chars: int = 0
     done_current: bool = False
     peak_cpm: float = 0.0  # 최고 타속 (타/분) — 결과 화면용
+    wrong: list[int] = field(default_factory=list)  # 오타·시간초과 문장 인덱스
 
 
 @dataclass
@@ -215,6 +216,8 @@ class TypingRaceManager:
         racer.live_chars = sentence_len
         racer.chars += min(max(chars, 0), sentence_len)
         racer.errors += max(errors, 0)
+        if errors > 0:
+            racer.wrong.append(idx)
         racer.sentences += 1
         racer.total_ms += int((time.monotonic() - session.round_started) * 1000)
         racer.peak_cpm = max(racer.peak_cpm, self._live_wpm(session, racer) * 5)
@@ -290,6 +293,7 @@ class TypingRaceManager:
                         # 시간 초과 — 부분 진행(정타 prefix)만 인정
                         p.chars += p.live_chars
                         p.total_ms += int(SENTENCE_SECONDS * 1000)
+                        p.wrong.append(round_no)
             await self._finish(session, aborted=False)
         except asyncio.CancelledError:
             raise
@@ -310,6 +314,12 @@ class TypingRaceManager:
         ]
         winner, winner_id = rank_players(session.players)
         await self._save(session, "aborted" if aborted else "finished", winner_id, results)
+        if not aborted:
+            # 오답 복습은 본인에게만 — 결과 화면 원탭 학습 추가용
+            for p in session.players:
+                items = review_items([session.sentences[i] for i in p.wrong])
+                if items:
+                    await self._safe_send(p, {"t": "tp.review", "items": items})
         await self._broadcast(
             session,
             {"t": "tp.end", "results": results, "winner": winner, "aborted": aborted},

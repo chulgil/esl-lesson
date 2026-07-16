@@ -4,11 +4,13 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { BackLink } from "@/components/nav/BackLink";
 import { fetchMe } from "@/lib/api";
 import {
   GameSocket,
+  type GameReviewItem,
   type ScResult,
   type ScRound,
   type ServerMsg,
@@ -67,6 +69,7 @@ function ScrambleInner() {
     results: ScResult[];
     winner: string | null;
   } | null>(null);
+  const [review, setReview] = useState<GameReviewItem[]>([]);
 
   const socketRef = useRef<GameSocket | null>(null);
   const roundsRef = useRef<ScRound[]>([]);
@@ -128,6 +131,7 @@ function ScrambleInner() {
             ),
           );
           setCountLeft(Math.ceil(msg.countdown));
+          setReview([]);
           setPhase("countdown");
           break;
         case "sc.sentence":
@@ -157,6 +161,9 @@ function ScrambleInner() {
               },
             }));
           }
+          break;
+        case "sc.review":
+          setReview(msg.items);
           break;
         case "sc.end":
           setEnd({ results: msg.results, winner: msg.winner });
@@ -255,7 +262,6 @@ function ScrambleInner() {
         <h1 className="font-hand text-2xl font-bold whitespace-nowrap sm:text-3xl">
           <span className="hl">어순 조립 레이스</span>
         </h1>
-
       </header>
 
       {error && <p className="mb-4 text-sm text-brick-red">{error}</p>}
@@ -486,6 +492,11 @@ function ScrambleInner() {
                 </p>
               </div>
             ))}
+          <ReviewPanel
+            items={review}
+            noun="문장"
+            hint="추가한 문장은 학습 큐에 들어가요 — 문장 카드는 학습 레벨 '고급'에서 출제돼요"
+          />
           <div className="flex flex-wrap items-center gap-3">
             <Brick
               color="green"

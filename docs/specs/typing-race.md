@@ -1,6 +1,6 @@
 # 스펙: 영문 타자연습 — 문장 동기 레이스 (1~4인)
 
-> 최종 수정: 2026-07-14 · P1 구현 완료
+> 최종 수정: 2026-07-16 · P1 구현 완료
 
 샘플 문장 하나를 모두가 동시에 타이핑 — **전원이 완성하면 다음 문장**.
 문장은 내 학습 풀의 sentence 항목(가시성 규칙 준수)에서 나온다.
@@ -20,7 +20,7 @@
 |---|---|
 | `tp.solo` / `tp.create` / `tp.join{code}` / `tp.begin`(방장) | `tp.room{code,host,players}` / `tp.start{sentences,total,sentence_seconds,countdown,players}` |
 | `tp.typing{idx,chars}` (정타 prefix, 2자 단위 스로틀) | `tp.sentence{idx}` / `tp.typing{name,chars,wpm}` / `tp.done_mark{name,idx,wpm}` |
-| `tp.done{idx,chars,errors}` / `tp.leave` | `tp.end{results,winner,aborted}` |
+| `tp.done{idx,chars,errors}` / `tp.leave` | `tp.review{items[]}` (개인) / `tp.end{results,winner,aborted}` |
 
 ## 구현 위치
 
@@ -28,6 +28,14 @@
   저장 `typing_races` (마이그레이션 d0e1f2a3b4c5, mode solo|race)
 - 클라: `app/game/typing/page.tsx` — 로비/대기실/레이스(플레이어 줄)/결과
 
+## 오답 → 원탭 학습 (2026-07-16, P2)
+
+오타 완성(`errors>0`)·시간초과 문장을 기록해 정상 종료 시
+`tp.review{items:[{item_id,en,ko}]}` 를 본인에게만 전송 (item_id 중복 제거 —
+순환 풀 대응, aborted 미전송). 결과 화면 `ReviewPanel`(전 게임 공용 컴포넌트,
+규칙은 quiz-royale.md "오답 → 원탭 학습" 과 동일). 문장 카드는 학습 레벨
+'고급'에서 출제 — 패널 안내 문구로 고지.
+
 ## P2 후보
 
-개인 최고 WPM 기록 표시, 리더보드, 오타 문장 학습 큐 연계
+개인 최고 WPM 기록 표시, 리더보드

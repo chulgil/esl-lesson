@@ -116,8 +116,8 @@ export interface QrEndMsg {
   aborted: boolean;
 }
 
-/** 오답·미제출 문항의 학습 항목 — 본인에게만 전달 (원탭 학습 추가) */
-export interface QrReviewItem {
+/** 오답·미제출 문항의 학습 항목 — 본인에게만 전달 (원탭 학습 추가, 전 게임 공용) */
+export interface GameReviewItem {
   item_id: number;
   en: string;
   ko: string;
@@ -128,11 +128,12 @@ export type QrMsg =
   | QrRoundMsg
   | QrRevealMsg
   | QrEndMsg
-  | { t: "qr.review"; items: QrReviewItem[] }
+  | { t: "qr.review"; items: GameReviewItem[] }
   | { t: "qr.answered"; name: string };
 
 /** 영문 타자연습 — 문장 동기 레이스 1~4인 (docs/specs/typing-race.md) */
 export interface TpSentence {
+  item_id: number;
   en: string;
   ko: string;
 }
@@ -164,6 +165,7 @@ export type TpMsg =
   | { t: "tp.sentence"; idx: number }
   | { t: "tp.typing"; name: string; chars: number; wpm: number }
   | { t: "tp.done_mark"; name: string; idx: number; wpm: number }
+  | { t: "tp.review"; items: GameReviewItem[] }
   | {
       t: "tp.end";
       results: TpResult[];
@@ -176,6 +178,8 @@ export interface ScRound {
   answer: string[];
   chips: string[];
   ko: string;
+  item_id: number;
+  en: string;
 }
 
 export interface ScStartMsg {
@@ -206,6 +210,7 @@ export type ScMsg =
       gained: number;
       score: number;
     }
+  | { t: "sc.review"; items: GameReviewItem[] }
   | {
       t: "sc.end";
       results: ScResult[];
@@ -247,6 +252,7 @@ export type DtMsg =
       score: number;
     }
   | { t: "dt.reveal"; idx: number; en: string }
+  | { t: "dt.review"; items: GameReviewItem[] }
   | {
       t: "dt.end";
       results: DtResult[];

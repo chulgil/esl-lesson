@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 
 from app.core.db import get_session_factory
 from app.models import ScrambleRace
-from app.services.game.manager import WordPoolError
+from app.services.game.manager import WordPoolError, review_items
 from app.services.game.typing_race import load_sentence_pool, pick_sentences
 
 logger = logging.getLogger(__name__)
@@ -87,6 +87,9 @@ def build_rounds(pool: list[dict], count: int, seed: int) -> list[dict]:
                 "answer": words,
                 "chips": scramble_chips(words, rng),
                 "ko": sentence.get("ko", ""),
+                # 오답 복습용 학습 항목 — 정답 텍스트는 answer 로 이미 클라이언트에 있음
+                "item_id": sentence.get("item_id", 0),
+                "en": sentence["en"],
             }
         )
     return rounds
@@ -103,6 +106,7 @@ class ScramblerState:
     total_ms: int = 0
     placed: int = 0  # 현재 문장에서 맞춘 칩 수 — 상대 진행 표시
     done_current: bool = False
+    wrong: list[int] = field(default_factory=list)  # 실수·시간초과 문장 인덱스
 
 
 @dataclass
@@ -202,6 +206,8 @@ class ScrambleManager:
         player.placed = len(session.rounds[idx]["answer"])
         player.sentences += 1
         player.mistakes += max(0, mistakes)
+        if mistakes > 0:
+            player.wrong.append(idx)
         player.score += gained
         player.total_ms += int(elapsed * 1000)
         await self._broadcast(
@@ -271,6 +277,9 @@ class ScrambleManager:
                 ):
                     await asyncio.sleep(TICK)
                 # 시간 초과자는 점수 없음 — 다음 문장에서 재도전
+                for p in session.players:
+                    if not p.done_current:
+                        p.wrong.append(round_no)
             await self._finish(session, aborted=False)
         except asyncio.CancelledError:
             raise
@@ -290,6 +299,12 @@ class ScrambleManager:
         ]
         winner, winner_id = rank_players(session.players)
         await self._save(session, "aborted" if aborted else "finished", winner_id, results)
+        if not aborted:
+            # 오답 복습은 본인에게만 — 결과 화면 원탭 학습 추가용
+            for p in session.players:
+                items = review_items([session.rounds[i] for i in p.wrong])
+                if items:
+                    await self._safe_send(p, {"t": "sc.review", "items": items})
         await self._broadcast(
             session,
             {"t": "sc.end", "results": results, "winner": winner, "aborted": aborted},
