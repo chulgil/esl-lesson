@@ -105,6 +105,10 @@ export interface Stats {
   /** 오늘의 목표 — 밀린 양과 무관한 달성 가능 소량 (포기 방지 기획) */
   daily_goal: number;
   streak_days: number;
+  /** 책갈피(스트릭 보호) 보유 — 주 1회 목표 달성 시 지급 (retention-plan.md) */
+  streak_savers: number;
+  /** 책갈피로 지킨 날짜(ISO) — 잔디 표기용 */
+  streak_saved_days: string[];
   levels: {
     level: number;
     item_type: string;
@@ -113,6 +117,24 @@ export interface Stats {
     available_items: number;
   }[];
   daily: Record<string, number>;
+}
+
+/** 오늘의 미션 — 날짜 결정적 3종, 진행도는 로그 파생 (retention-plan.md) */
+export interface Quest {
+  key: string;
+  title: string;
+  desc: string;
+  target: number;
+  current: number;
+  done: boolean;
+  xp: number;
+}
+
+export interface QuestBoard {
+  date: string;
+  items: Quest[];
+  all_done: boolean;
+  all_done_xp: number;
 }
 
 export interface LibraryContent {
@@ -205,6 +227,7 @@ export const studyApi = {
       "/api/study/achievements",
     ),
   leaderboard: () => request<{ items: StudyRank[] }>("/api/study/leaderboard"),
+  quests: () => request<QuestBoard>("/api/study/quests"),
   stats: () => request<Stats>("/api/study/stats"),
   library: () => request<{ items: LibraryContent[] }>("/api/contents"),
   libraryDetail: (id: number) => request<LibraryDetail>(`/api/contents/${id}`),

@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { Showcase } from "@/components/landing/Showcase";
 import { DailyGoalCard } from "@/components/study/DailyGoalCard";
+import { DailyQuestsCard } from "@/components/study/DailyQuestsCard";
 import { OnboardingChecklist } from "@/components/study/OnboardingChecklist";
+import { StreakCelebration } from "@/components/study/StreakCelebration";
 import { fetchMe, type Me } from "@/lib/api";
 import { studyApi, type Stats } from "@/lib/study-api";
 
@@ -108,6 +110,12 @@ function Dashboard({ me }: { me: Me }) {
 
       {/* 오늘의 목표 — 밀린 전체가 아닌 목표 기준 진행 (포기 방지 기획 2026-07-15) */}
       {stats && <DailyGoalCard stats={stats} />}
+
+      {/* 오늘의 미션 — 매일 다른 3종 도장, 세션 다양화 (retention-plan.md) */}
+      <DailyQuestsCard />
+
+      {/* 스트릭 마일스톤 축하 — 7·14·30일... 도달 첫 진입 1회 */}
+      {stats && <StreakCelebration streakDays={stats.streak_days} />}
 
       {/* 시작 체크리스트 — 오늘 할 일보다 아래 (기존 사용자의 첫 시선은 데일리 루프) */}
       {stats && <OnboardingChecklist stats={stats} />}

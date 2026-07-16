@@ -24,7 +24,15 @@ from app.models import (
     UserSettings,
 )
 from app.models.item import ITEM_TYPE_LEVEL
-from app.services import achievements, embeddings, fsrs_service, insights, quiz, vocab_network
+from app.services import (
+    achievements,
+    embeddings,
+    fsrs_service,
+    insights,
+    quiz,
+    retention,
+    vocab_network,
+)
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -468,13 +476,13 @@ async def get_stats(
         key = reviewed_at.astimezone(KST).date().isoformat()
         daily[key] = daily.get(key, 0) + 1
 
-    streak = 0
-    cursor = now.astimezone(KST).date()
-    if daily.get(cursor.isoformat(), 0) == 0:
-        cursor -= timedelta(days=1)  # 오늘 아직 안 했으면 어제부터 계산
-    while daily.get(cursor.isoformat(), 0) > 0:
-        streak += 1
-        cursor -= timedelta(days=1)
+    # 책갈피(스트릭 보호) — 목표 달성 시 지급(주 1회), 공백은 자동 소모로 이어붙임
+    today = now.astimezone(KST).date()
+    if retention.try_award_saver(user_settings, reviews_today, today):
+        await db.commit()
+    streak, saved_days = await retention.streak_with_savers(
+        db, user.id, user_settings, daily, today
+    )
 
     # XP·레벨 (P2) — 복습 10 + 게임 참여 20 + 테트리스 승리 보너스 30, 레벨=500XP 단위
     from app.models import (
@@ -540,9 +548,9 @@ async def get_stats(
     ).scalar_one()
     xp = (
         total_reviews * 10
-        + (tetris_played + typing_played + quiz_played + scramble_played + dictation_played)
-        * 20
+        + (tetris_played + typing_played + quiz_played + scramble_played + dictation_played) * 20
         + tetris_wins * 30
+        + await retention.quest_bonus_xp(db, user.id)
     )
 
     return {
@@ -553,6 +561,8 @@ async def get_stats(
         "reviews_today": reviews_today,
         "daily_goal": user_settings.daily_goal,
         "streak_days": streak,
+        "streak_savers": user_settings.streak_savers,
+        "streak_saved_days": saved_days,
         "levels": [
             {
                 "level": level,
@@ -578,6 +588,18 @@ async def get_achievements(
         "achieved_count": sum(1 for a in items if a["achieved"]),
         "total": len(items),
     }
+
+
+@router.get("/quests")
+async def get_quests(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """오늘의 미션 3종 — 날짜 결정적 로테이션, 완료는 원장에 멱등 적립.
+
+    진행도는 기존 로그에서 파생 (docs/proposal/retention-plan.md).
+    """
+    return await retention.compute_quests(db, user.id)
 
 
 @router.get("/leaderboard")

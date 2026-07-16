@@ -15,6 +15,7 @@ from app.models.game import (
 )
 from app.models.item import ItemOccurrence, LearningItem, WordInsight
 from app.models.push import PushSubscription
+from app.models.retention import QuestCompletion, StreakSaverUse
 from app.models.user import User, UserSettings
 
 __all__ = [
@@ -33,8 +34,10 @@ __all__ = [
     "ItemOccurrence",
     "LearningItem",
     "PushSubscription",
+    "QuestCompletion",
     "ReviewCard",
     "ReviewLog",
+    "StreakSaverUse",
     "TranscriptSegment",
     "User",
     "UserSettings",

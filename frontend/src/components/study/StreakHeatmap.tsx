@@ -1,8 +1,16 @@
 "use client";
 
 /** 스트릭 캘린더 — 최근 8주 일별 학습량 잔디 (stats.daily 재활용, P1 데일리 루프) */
-export function StreakHeatmap({ daily }: { daily: Record<string, number> }) {
+export function StreakHeatmap({
+  daily,
+  savedDays = [],
+}: {
+  daily: Record<string, number>;
+  /** 책갈피로 지킨 날 — 학습 0회지만 스트릭이 유지된 날 (retention-plan.md) */
+  savedDays?: string[];
+}) {
   const WEEKS = 8;
+  const saved = new Set(savedDays);
   const today = new Date();
   // 이번 주 일요일 시작 — 열=주, 행=요일 (GitHub 잔디 방향)
   const end = new Date(today);
@@ -37,9 +45,17 @@ export function StreakHeatmap({ daily }: { daily: Record<string, number> }) {
           {col.map((cell) => (
             <span
               key={cell.key}
-              title={`${cell.key} — ${cell.count}회`}
+              title={
+                saved.has(cell.key)
+                  ? `${cell.key} — 책갈피로 지킨 날`
+                  : `${cell.key} — ${cell.count}회`
+              }
               className={`h-3 w-3 rounded-[3px] ${
-                cell.future ? "bg-transparent" : tone(cell.count)
+                cell.future
+                  ? "bg-transparent"
+                  : saved.has(cell.key)
+                    ? "bg-brick-yellow/70"
+                    : tone(cell.count)
               }`}
             />
           ))}

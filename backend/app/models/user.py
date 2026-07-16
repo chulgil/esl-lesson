@@ -41,3 +41,7 @@ class UserSettings(Base):
     # (docs/specs/learning.md 레벨별 학습 설계 — 저레벨은 선택식, 문장은 고급)
     study_level: Mapped[int] = mapped_column(Integer, default=2, server_default="2")
     levels_enabled: Mapped[list[int]] = mapped_column(IntList, default=lambda: [1, 2])
+    # 책갈피(스트릭 보호) 보유 — 주 1회 목표 달성 시 지급, 최대 2 (retention-plan.md)
+    streak_savers: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # 마지막 지급 ISO 주 ("2026-W29") — 주 1회 지급 가드
+    saver_award_week: Mapped[str | None] = mapped_column(Text)
