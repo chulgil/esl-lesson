@@ -134,15 +134,32 @@ export default function LibraryDetailPage() {
     (startMs: number | null, endMs: number | null) => {
       const player = playerRef.current;
       if (!player || startMs == null) return;
-      rangeRef.current = {
-        start: startMs / 1000,
-        end: (endMs ?? startMs + 5000) / 1000,
-      };
-      player.seekTo(startMs / 1000, true);
+      const start = startMs / 1000;
+      // 클램프된 데이터에 길이 0~0.5초 퇴화 구간이 존재 — 최소 1초를 보장해
+      // 재생 즉시 정지·루프 시킹 반복을 막는다
+      const end = Math.max((endMs ?? startMs + 5000) / 1000, start + 1);
+      rangeRef.current = { start, end };
+      player.seekTo(start, true);
       player.playVideo();
     },
     [],
   );
+
+  // 체크만으로 바로 반복 — 지금 화면에 보이는 문장을 반복 구간으로 설정.
+  // (기존엔 이전/다음 버튼으로 구간을 만든 뒤에만 동작해 "안 된다"고 느껴짐)
+  function toggleLoop(on: boolean) {
+    setLoop(on);
+    if (!on) {
+      rangeRef.current = null; // 해제 → 자연 재생 계속
+      return;
+    }
+    const seg = detailRef.current?.segments.find((s) => s.seq === currentSeq);
+    if (seg?.start_ms != null) {
+      pendingSeekRef.current = { seq: seg.seq, until: Date.now() + 1500 };
+      playSegment(seg.start_ms, seg.end_ms);
+    }
+    // 아직 재생 전(currentSeq 없음)이면 구간 없이 대기 — 이전/다음 버튼이 구간을 만든다
+  }
 
   function step(direction: -1 | 1) {
     const segments = detail?.segments ?? [];
@@ -178,15 +195,16 @@ export default function LibraryDetailPage() {
   const current = detail.segments.find((s) => s.seq === currentSeq) ?? null;
 
   return (
-    <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
-      <header className="mb-6 flex flex-wrap items-center gap-4">
+    <main className="notebook-lines notebook-margin min-h-screen px-6 py-5 sm:px-16 sm:py-10">
+      {/* 모바일: 플레이어+현재 문장+이동 버튼이 한 화면에 들어오도록 여백 압축 (375x667 기준) */}
+      <header className="mb-3 flex flex-wrap items-center gap-3 sm:mb-6 sm:gap-4">
         <BackLink href="/library" label="라이브러리" />
-        <h1 className="font-hand text-2xl font-bold">
+        <h1 className="font-hand text-xl leading-snug font-bold sm:text-2xl">
           <span className="hl">{detail.title}</span>
         </h1>
       </header>
 
-      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div className="mx-auto flex max-w-2xl flex-col gap-3 sm:gap-4">
         {hasPlayer ? (
           <>
             <div className="aspect-video overflow-hidden rounded-lg border-2 border-ink/10 bg-black">
@@ -194,7 +212,7 @@ export default function LibraryDetailPage() {
             </div>
 
             {/* 현재 문장 — 재생과 동기화, 전문은 표시하지 않음 */}
-            <div className="min-h-28 rounded-lg border-2 border-ink/10 bg-white p-5 text-center">
+            <div className="min-h-24 rounded-lg border-2 border-ink/10 bg-white p-4 text-center sm:min-h-28 sm:p-5">
               {current ? (
                 <>
                   <p className="text-lg font-medium">{current.en_text}</p>
@@ -209,7 +227,7 @@ export default function LibraryDetailPage() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-3">
               <button
                 type="button"
                 onClick={() => step(-1)}
@@ -224,16 +242,17 @@ export default function LibraryDetailPage() {
               >
                 다음 문장 →
               </button>
-              <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border-2 border-ink/15 bg-white px-3 text-sm">
+              <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border-2 border-ink/15 bg-white px-3 text-sm sm:justify-start">
                 <input
                   type="checkbox"
                   checked={loop}
-                  onChange={(e) => setLoop(e.target.checked)}
+                  onChange={(e) => toggleLoop(e.target.checked)}
                 />
-                이 문장 반복 (A-B 루프)
+                이 문장 반복
+                <span className="hidden sm:inline"> (A-B 루프)</span>
               </label>
-              <label className="flex min-h-11 items-center gap-2 rounded-md border-2 border-ink/15 bg-white px-3 text-sm">
-                자막 표시
+              <label className="flex min-h-11 items-center justify-center gap-2 rounded-md border-2 border-ink/15 bg-white px-3 text-sm sm:justify-start">
+                자막<span className="hidden sm:inline"> 표시</span>
                 <select
                   value={subtitleLead}
                   onChange={(e) => {
