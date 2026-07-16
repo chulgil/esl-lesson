@@ -40,6 +40,10 @@ class Question:
     prompt: str
     choices: list[str]
     answer: str
+    # 오답 복습용 학습 항목 — 의미 모드=출제 단어, 뉘앙스 모드=정답('다른 하나') 단어
+    item_id: int = 0
+    en: str = ""
+    ko: str = ""
 
 
 @dataclass
@@ -49,6 +53,7 @@ class QuizPlayer:
     send: Sender | None = None
     score: int = 0
     bot_level: int = 0
+    wrong: list[int] = field(default_factory=list)  # 오답·미제출 문항 인덱스
 
 
 @dataclass
@@ -90,7 +95,16 @@ def build_questions(
                 break
         choices = [answer, *distractors]
         rng.shuffle(choices)
-        questions.append(Question(prompt=en if en2ko else ko, choices=choices, answer=answer))
+        questions.append(
+            Question(
+                prompt=en if en2ko else ko,
+                choices=choices,
+                answer=answer,
+                item_id=item_id,
+                en=en,
+                ko=ko,
+            )
+        )
     return questions
 
 
@@ -105,7 +119,7 @@ async def build_nuance_questions(
         raise WordPoolError("nuance_unavailable")
     rows = (
         await db.execute(
-            select(LearningItem.id, LearningItem.en_text)
+            select(LearningItem.id, LearningItem.en_text, LearningItem.ko_text)
             .where(LearningItem.item_type == "word", visible_item_clause(user_id))
             .limit(300)
         )
@@ -115,7 +129,7 @@ async def build_nuance_questions(
     order = list(rows)
     rng.shuffle(order)
     questions: list[Question] = []
-    for item_id, en in order:
+    for item_id, en, _ko in order:
         try:
             sims = await embeddings.similar_items(db, item_id, k=2)
         except Exception:
@@ -132,7 +146,14 @@ async def build_nuance_questions(
         choices = [*similar, odd[1]]
         rng.shuffle(choices)
         questions.append(
-            Question(prompt="넷 중 뜻이 가장 다른 하나는?", choices=choices, answer=odd[1])
+            Question(
+                prompt="넷 중 뜻이 가장 다른 하나는?",
+                choices=choices,
+                answer=odd[1],
+                item_id=odd[0],
+                en=odd[1],
+                ko=odd[2] or "",
+            )
         )
         if len(questions) == rounds:
             break
@@ -345,6 +366,12 @@ class QuizRoyaleManager:
                     points = score_for(elapsed) if correct else 0
                     session.players[idx].score += points
                     gains[session.players[idx].name] = points
+                for idx, player in enumerate(session.players):
+                    if player.user_id is None:
+                        continue
+                    answered = session.answers.get(idx)
+                    if answered is None or not answered[0]:
+                        player.wrong.append(round_no)
                 await self._broadcast(
                     session,
                     {
@@ -366,8 +393,30 @@ class QuizRoyaleManager:
     async def _finish(self, session: QuizSession, aborted: bool) -> None:
         final = ranking(session.players)
         await self._save(session, status="aborted" if aborted else "finished", ranking_=final)
+        if not aborted:
+            await self._send_reviews(session)
         await self._broadcast(session, {"t": "qr.end", "ranking": final, "aborted": aborted})
         self._cleanup(session)
+
+    async def _send_reviews(self, session: QuizSession) -> None:
+        """오답·미제출 문항을 본인에게만 전달 — 결과 화면 원탭 학습 추가용 (P2)."""
+        for player in session.players:
+            if player.user_id is None or player.send is None or not player.wrong:
+                continue
+            seen: set[int] = set()
+            items: list[dict] = []
+            for q_idx in player.wrong:
+                q = session.questions[q_idx]
+                if not q.item_id or q.item_id in seen:
+                    continue
+                seen.add(q.item_id)
+                items.append({"item_id": q.item_id, "en": q.en, "ko": q.ko})
+            if not items:
+                continue
+            try:
+                await player.send({"t": "qr.review", "items": items})
+            except Exception:
+                player.send = None  # 전송 실패 = 이탈로 간주, 종료 흐름은 계속
 
     # --- 헬퍼 ---
 

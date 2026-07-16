@@ -25,6 +25,9 @@ def test_build_questions_choices_and_answer():
         assert len(q.choices) == 4
         assert q.answer in q.choices
         assert len(set(q.choices)) == 4  # 선지 중복 없음
+        # 오답 복습용 학습 항목 — 출제 단어와 일치 (프롬프트=한쪽, 정답=다른쪽)
+        assert {q.prompt, q.answer} == {q.en, q.ko}
+        assert q.item_id == int(q.en.removeprefix("word"))
 
 
 def test_score_for_speed_bonus():
@@ -120,6 +123,52 @@ async def test_room_create_join_start_and_wrong_answer(wired_db, fast_rounds):  
     end = next(m for m in s1.messages if m["t"] == "qr.end")
     scores = {r["name"]: r["score"] for r in end["ranking"]}
     assert scores[p1.name] >= 50 and scores[p2.name] == 0
+
+
+async def test_wrong_answers_sent_as_review(wired_db, fast_rounds):  # noqa: F811
+    """오답·미제출 문항은 종료 시 qr.review 로 본인에게만 전달 (원탭 학습 추가용)."""
+    user = await seed_user_and_words(wired_db)
+    manager = qr.QuizRoyaleManager()
+    sender = Collector()
+
+    session = await manager.solo(user.id, user.name, sender, bot_level=5, bots=1)
+    for _ in range(50):
+        if any(m["t"] == "qr.round" for m in sender.messages):
+            break
+        await asyncio.sleep(0.02)
+
+    # 1라운드 오답 제출, 2라운드 미제출
+    q0 = session.questions[0]
+    wrong = next(c for c in q0.choices if c != q0.answer)
+    await manager.answer(user.id, wrong)
+    await asyncio.wait_for(session.task, timeout=5)
+
+    review = next(m for m in sender.messages if m["t"] == "qr.review")
+    items = review["items"]
+    assert [i["item_id"] for i in items] == [q.item_id for q in session.questions]
+    assert all(i["en"] and i["ko"] for i in items)
+    # qr.end 이전에 도착 — 결과 화면에서 바로 사용 가능
+    types = [m["t"] for m in sender.messages]
+    assert types.index("qr.review") < types.index("qr.end")
+
+
+async def test_all_correct_sends_no_review(wired_db, fast_rounds):  # noqa: F811
+    """전부 정답이면 qr.review 를 보내지 않는다."""
+    user = await seed_user_and_words(wired_db)
+    manager = qr.QuizRoyaleManager()
+    sender = Collector()
+
+    session = await manager.solo(user.id, user.name, sender, bot_level=5, bots=1)
+    for round_no in (1, 2):
+        for _ in range(50):
+            if any(m["t"] == "qr.round" and m["no"] == round_no for m in sender.messages):
+                break
+            await asyncio.sleep(0.02)
+        await manager.answer(user.id, session.questions[round_no - 1].answer)
+    await asyncio.wait_for(session.task, timeout=5)
+
+    assert not any(m["t"] == "qr.review" for m in sender.messages)
+    assert any(m["t"] == "qr.end" for m in sender.messages)
 
 
 async def test_join_full_room_and_missing_room(wired_db):  # noqa: F811

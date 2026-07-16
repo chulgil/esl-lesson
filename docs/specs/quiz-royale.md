@@ -1,6 +1,6 @@
 # 스펙: 스피드 퀴즈 로얄 — 최대 4인 버저 퀴즈
 
-> 최종 수정: 2026-07-14 · P1 구현 완료 · 기획 배경: [proposal/quiz-royale.md](../proposal/quiz-royale.md)
+> 최종 수정: 2026-07-16 · P1 구현 완료 · 기획 배경: [proposal/quiz-royale.md](../proposal/quiz-royale.md)
 
 같은 4지선다를 최대 4명에게 동시 출제 — 빠르고 정확할수록 높은 점수.
 문제는 대전 소재(내 콘텐츠 선택 규칙 공유)의 단어 풀에서 생성.
@@ -23,7 +23,7 @@
 | `qr.solo{bot_level,bots,content_ids?}` | `qr.room{code,mode,host,players[]}` |
 | `qr.create{content_ids?}` / `qr.join{code}` | `qr.round{no,total,prompt,choices,seconds}` |
 | `qr.start` (호스트) / `qr.answer{answer}` | `qr.answered{name}` / `qr.reveal{no,answer,gains,scores}` |
-| `qr.leave` | `qr.end{ranking,aborted}` |
+| `qr.leave` | `qr.review{items[]}` (개인) / `qr.end{ranking,aborted}` |
 
 ## 구현 위치
 
@@ -33,9 +33,19 @@
 - 클라: `app/game/QuizRoyale.tsx` (대기실/라운드/공개/시상대),
   로비 `QuizRoyaleEntry` (봇 수 선택 + 방 만들기/입장, 소재 선택 공유)
 
+## 오답 → 원탭 학습 (2026-07-16, P2)
+
+- 라운드마다 오답·미제출 문항 인덱스를 사람 플레이어별로 기록,
+  정상 종료 시 `qr.review{items:[{item_id,en,ko}]}` 를 **본인에게만** 전송
+  (qr.end 직전, item_id 중복 제거, aborted 매치는 미전송)
+- 학습 대상: 의미 모드=출제 단어, 뉘앙스 모드=정답인 '다른 하나' 단어
+- 시상대 화면 "이번 판에서 틀린 단어" 패널 — 항목별 [학습 추가] +
+  [모두 학습 추가], 기존 `POST /api/cards` 재사용 (이미 덱에 있으면 no-op)
+- 휘발성: 결과 화면을 떠나면 사라짐 (저장 없음 — 세션 내 원탭 유도가 목적)
+
 ## P2 후보
 
-리더보드 합산, 오답 → 원탭 학습 추가, 라운드 수/시간 설정, 관전, 빠른대전 매칭
+리더보드 합산, 라운드 수/시간 설정, 관전, 빠른대전 매칭
 
 ## 뉘앙스 저격 변형 (2026-07-15)
 

@@ -116,11 +116,19 @@ export interface QrEndMsg {
   aborted: boolean;
 }
 
+/** 오답·미제출 문항의 학습 항목 — 본인에게만 전달 (원탭 학습 추가) */
+export interface QrReviewItem {
+  item_id: number;
+  en: string;
+  ko: string;
+}
+
 export type QrMsg =
   | QrRoomMsg
   | QrRoundMsg
   | QrRevealMsg
   | QrEndMsg
+  | { t: "qr.review"; items: QrReviewItem[] }
   | { t: "qr.answered"; name: string };
 
 /** 영문 타자연습 — 문장 동기 레이스 1~4인 (docs/specs/typing-race.md) */
@@ -239,7 +247,12 @@ export type DtMsg =
       score: number;
     }
   | { t: "dt.reveal"; idx: number; en: string }
-  | { t: "dt.end"; results: DtResult[]; winner: string | null; aborted: boolean };
+  | {
+      t: "dt.end";
+      results: DtResult[];
+      winner: string | null;
+      aborted: boolean;
+    };
 
 /** 학습 관전 — 승인제 릴레이 (docs/specs/study-spectate.md) */
 export interface StEventPayload {
