@@ -71,12 +71,14 @@ export default function LibraryDetailPage() {
         const ahead = now + LOOKAHEAD_MS;
 
         const segments = detailRef.current?.segments ?? [];
-        const active = segments.find(
-          (s) =>
-            s.start_ms != null &&
-            ahead >= s.start_ms &&
-            ahead < (s.end_ms ?? s.start_ms + 5000),
-        );
+        // "마지막으로 시작한 문장" 매칭 — 범위 포함(find) 방식은 이전 문장의
+        // end 가 부풀려진 과거 병합 데이터에서 3~4초 늦게 전환됐다
+        let active: (typeof segments)[number] | undefined;
+        for (const s of segments) {
+          if (s.start_ms == null) continue;
+          if (s.start_ms > ahead) break;
+          active = s;
+        }
         // 문장 사이 공백에서 null 로 리셋하면 이전/다음의 기준점이 사라져
         // 1번 문장으로 튀는 버그 — 활성 구간이 있을 때만 갱신 (문장은 잔류 표시)
         if (active) {

@@ -32,9 +32,32 @@ def test_merge_into_sentences_joins_across_snippets():
         "Today we talk about resilience.",
         "Let's start!",
     ]
-    # 두 번째 문장은 1번 조각에서 시작해 2번 조각에서 끝난다
-    assert merged[1].start_ms == 0
+    # 두 번째 문장은 1번 조각 중간에서 시작(문자 비례 보간)해 2번 조각에서 끝난다
+    assert 0 < merged[1].start_ms < 2000
     assert merged[1].end_ms == 4000
+
+
+def test_merge_interpolates_within_shared_snippet_no_overlap():
+    """한 조각에 여러 문장이 걸치면 문자 비례로 시각 배분 — 구간 겹침 금지.
+
+    조각 시작/끝을 그대로 쓰면 문장 구간이 3~5초씩 겹쳐 재생 문장 표시가
+    음성보다 늦어진다 (2026-07-16 라이브러리 딜레이 실측 데이터 근거).
+    """
+    snippets = [
+        Snippet("First sentence. Second one", 0, 4000),
+        Snippet("continues here.", 4000, 6000),
+    ]
+    merged = merge_into_sentences(snippets)
+    assert [s.text for s in merged] == ["First sentence.", "Second one continues here."]
+    first, second = merged
+    assert first.start_ms == 0
+    assert first.end_ms <= second.start_ms  # 겹침 없음
+    assert 1000 <= first.end_ms <= 3000  # "First sentence." ≈ 조각의 중간 지점
+    assert second.end_ms == 6000
+
+    # 전체 문장 구간은 항상 단조 증가 (표시 매칭이 첫 일치를 골라도 안전)
+    for prev, nxt in zip(merged, merged[1:], strict=False):
+        assert prev.end_ms <= nxt.start_ms
 
 
 def test_merge_keeps_snippets_when_no_punctuation():

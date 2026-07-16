@@ -190,16 +190,24 @@ def merge_into_sentences(snippets: list[Snippet]) -> list[Snippet]:
         start_off = full_text.find(sentence, cursor)
         cursor = start_off + len(sentence)
         end_off = cursor
-        first = _snippet_at(offsets, start_off)
-        last = _snippet_at(offsets, max(start_off, end_off - 1))
-        sentences.append(Snippet(text=sentence, start_ms=first.start_ms, end_ms=last.end_ms))
+        start_ms = _time_at(offsets, start_off)
+        end_ms = max(start_ms, _time_at(offsets, end_off))
+        sentences.append(Snippet(text=sentence, start_ms=start_ms, end_ms=end_ms))
     return sentences
 
 
-def _snippet_at(offsets: list[tuple[int, Snippet]], char_offset: int) -> Snippet:
-    current = offsets[0][1]
-    for off, snip in offsets:
+def _time_at(offsets: list[tuple[int, Snippet]], char_offset: int) -> int:
+    """전체 텍스트의 문자 위치 → 자막 시각 (조각 안 문자 비율 보간).
+
+    조각 시작/끝을 그대로 쓰면 한 조각에 걸친 문장들이 조각 전체 구간을
+    공유해 문장 구간이 3~5초씩 겹치고, 재생 문장 표시가 음성보다 늦어진다
+    (2026-07-16 라이브러리 딜레이 실측). 보간으로 경계가 단조 증가한다.
+    """
+    base, snip = offsets[0]
+    for off, s in offsets:
         if off > char_offset:
             break
-        current = snip
-    return current
+        base, snip = off, s
+    frac = (char_offset - base) / max(len(snip.text), 1)
+    frac = min(max(frac, 0.0), 1.0)
+    return round(snip.start_ms + (snip.end_ms - snip.start_ms) * frac)
