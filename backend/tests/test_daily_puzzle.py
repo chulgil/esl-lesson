@@ -65,3 +65,64 @@ async def test_puzzle_api_flow(client, db_session):
     # 끝난 뒤 추가 추측 → 409
     res = await client.post("/api/game/puzzle/guess", json={"word": wrong})
     assert res.status_code == 409
+
+
+async def test_practice_mode_flow(client, db_session):
+    """연습 모드 — 무상태 서명 토큰, 무제한, 기록 미저장 (하루 1판 가혹함 완화)."""
+    await login(client, db_session)
+    db_session.add_all(
+        [
+            LearningItem(
+                item_type="word",
+                en_text=w,
+                ko_text=f"{w}뜻",
+                normalized_key=w,
+                review_status="approved",
+            )
+            for w in ("apple", "brave", "chair", "dream")
+        ]
+    )
+    await db_session.commit()
+
+    start = (await client.get("/api/game/puzzle/practice")).json()
+    assert start["available"] is True and start["max_tries"] == 6
+    assert start["token"] and start["hint_ko"].endswith("뜻")
+    length = start["length"]
+    token = start["token"]
+
+    # 오답 — 채점만, 정답 비공개
+    wrong = "z" * length
+    res = await client.post("/api/game/puzzle/practice/guess", json={"token": token, "word": wrong})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["correct"] is False and len(body["marks"]) == length
+    assert body["answer"] is None
+
+    # 마지막 시도(final) → 정답·뜻 공개
+    res = await client.post(
+        "/api/game/puzzle/practice/guess",
+        json={"token": token, "word": wrong, "final": True},
+    )
+    final = res.json()
+    assert final["answer"] is not None and final["answer_ko"].endswith("뜻")
+
+    # 정답 제출 → correct + 공개
+    res = await client.post(
+        "/api/game/puzzle/practice/guess",
+        json={"token": token, "word": final["answer"]},
+    )
+    body = res.json()
+    assert body["correct"] is True and body["marks"] == ["g"] * length
+    assert body["answer"] == final["answer"]
+
+    # 길이 불일치 → 422, 토큰 위조 → 400
+    res = await client.post(
+        "/api/game/puzzle/practice/guess",
+        json={"token": token, "word": "a" * (length + 1)},
+    )
+    assert res.status_code == 422
+    res = await client.post(
+        "/api/game/puzzle/practice/guess",
+        json={"token": token + "x", "word": wrong},
+    )
+    assert res.status_code == 400

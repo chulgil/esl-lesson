@@ -4,12 +4,16 @@
 정답은 클라이언트에 내리지 않고 서버가 채점한다.
 """
 
+import base64
 import hashlib
+import hmac
+import json
 from datetime import UTC, date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models import LearningItem
 
 KST = timezone(timedelta(hours=9))
@@ -70,3 +74,27 @@ async def puzzle_of_day(db: AsyncSession, day: date) -> tuple[str, str] | None:
         return None
     word = pick_word(sorted(pool), day.isoformat())
     return word, pool[word]
+
+
+def _practice_sig(payload: str) -> str:
+    secret = get_settings().jwt_secret.encode()
+    return hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()[:24]
+
+
+def practice_token(answer: str, ko: str) -> str:
+    """연습 모드 무상태 토큰 — 정답을 서명해 왕복 (기록·보상 없음이라 난독 수준이면 충분)."""
+    raw = json.dumps({"a": answer, "k": ko}, ensure_ascii=False).encode()
+    payload = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    return f"{payload}.{_practice_sig(payload)}"
+
+
+def practice_payload(token: str) -> tuple[str, str] | None:
+    """(정답, 뜻) — 서명 불일치/손상이면 None."""
+    try:
+        payload, sig = token.rsplit(".", 1)
+        if not hmac.compare_digest(sig, _practice_sig(payload)):
+            return None
+        data = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        return str(data["a"]), str(data["k"])
+    except Exception:
+        return None

@@ -1,6 +1,7 @@
 """게임 API — WS 대전 + REST 전적 (docs/specs/word-tetris.md)."""
 
 import logging
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -437,6 +438,58 @@ async def daily_puzzle_guess(
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "retry") from None
     return {"day": day.isoformat(), **_puzzle_payload(answer, ko, guesses, play.solved)}
+
+
+# --- 연습 모드: 데일리와 별개, 무제한·무저장 (하루 1판 가혹함 완화 2026-07-16) ---
+
+
+@router.get("/puzzle/practice")
+async def puzzle_practice_start(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    words = await daily_puzzle.candidates(db)
+    if not words:
+        return {"available": False}
+    # 오늘의 단어는 연습에서 제외 — 데일리 스포일 방지
+    daily_word = daily_puzzle.pick_word(sorted(words), daily_puzzle.today_kst().isoformat())
+    pool = [w for w in words if w != daily_word] or sorted(words)
+    answer = secrets.choice(pool)
+    return {
+        "available": True,
+        "length": len(answer),
+        "max_tries": daily_puzzle.MAX_TRIES,
+        "hint_ko": words.get(answer, ""),
+        "token": daily_puzzle.practice_token(answer, words.get(answer, "")),
+    }
+
+
+class PracticeGuess(BaseModel):
+    token: str
+    word: str
+    final: bool = False  # 마지막 시도 — 오답이어도 정답 공개
+
+
+@router.post("/puzzle/practice/guess")
+async def puzzle_practice_guess(
+    body: PracticeGuess,
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    data = daily_puzzle.practice_payload(body.token)
+    if data is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "bad_token")
+    answer, ko = data
+    word = body.word.strip().lower()
+    if len(word) != len(answer) or not (word.isascii() and word.isalpha()):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_word")
+    correct = word == answer
+    reveal = correct or body.final
+    return {
+        "marks": daily_puzzle.grade(answer, word),
+        "correct": correct,
+        "answer": answer if reveal else None,
+        "answer_ko": ko if reveal else None,
+    }
 
 
 def _parse_content_ids(msg: dict) -> list[int] | None:

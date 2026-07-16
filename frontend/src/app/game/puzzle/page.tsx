@@ -20,6 +20,19 @@ interface PuzzleState {
 
 type Mark = "g" | "y" | "x";
 
+/** 연습 모드 — 데일리와 별개, 무제한·무저장. 정답은 서명 토큰으로 서버 채점 */
+interface PracticeState {
+  token: string;
+  length: number;
+  maxTries: number;
+  hintKo: string;
+  guesses: { word: string; marks: string[] }[];
+  solved: boolean;
+  finished: boolean;
+  answer: string | null;
+  answerKo: string | null;
+}
+
 const HOWTO_KEY = "esl:puzzle:howto-seen";
 const FLIP_MS = 250; // 타일당 뒤집기 스태거
 
@@ -41,11 +54,21 @@ export default function DailyPuzzlePage() {
   const [shake, setShake] = useState(0);
   const [hintOpen, setHintOpen] = useState(false);
   const [howtoOpen, setHowtoOpen] = useState(false);
+  const [practice, setPractice] = useState<PracticeState | null>(null);
 
-  const length = state?.length ?? 5;
-  const maxTries = state?.max_tries ?? 6;
-  const guesses = state?.guesses ?? [];
-  const playing = Boolean(state?.available && !state?.finished);
+  // 연습 모드가 켜져 있으면 보드·키보드·힌트가 전부 연습 상태를 본다
+  const length = practice?.length ?? state?.length ?? 5;
+  const maxTries = practice?.maxTries ?? state?.max_tries ?? 6;
+  const guesses = practice ? practice.guesses : (state?.guesses ?? []);
+  const solved = practice ? practice.solved : Boolean(state?.solved);
+  const playing = practice
+    ? !practice.finished
+    : Boolean(state?.available && !state?.finished);
+  const hintKo = practice
+    ? practice.guesses.length >= 2 && !practice.finished
+      ? practice.hintKo
+      : null
+    : state?.hint_ko;
 
   useEffect(() => {
     fetch("/api/game/puzzle", { credentials: "same-origin" })
@@ -76,23 +99,55 @@ export default function DailyPuzzlePage() {
   }
 
   const submit = useCallback(async () => {
-    if (!state?.length || busy) return;
+    if (!playing || busy) return;
     const word = input.trim().toLowerCase();
-    if (word.length !== state.length) {
-      rejectInput(`${state.length}글자를 모두 채워주세요`);
+    if (word.length !== length) {
+      rejectInput(`${length}글자를 모두 채워주세요`);
       return;
     }
     setBusy(true);
     setNote(null);
     try {
-      const res = await fetch("/api/game/puzzle/guess", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ word }),
-      });
+      const res = practice
+        ? await fetch("/api/game/puzzle/practice/guess", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: practice.token,
+              word,
+              final: practice.guesses.length + 1 >= practice.maxTries,
+            }),
+          })
+        : await fetch("/api/game/puzzle/guess", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ word }),
+          });
       if (res.status === 422) {
         rejectInput("영어 알파벳만 입력할 수 있어요");
+      } else if (res.ok && practice) {
+        const r: {
+          marks: string[];
+          correct: boolean;
+          answer: string | null;
+          answer_ko: string | null;
+        } = await res.json();
+        setPractice((prev) =>
+          prev
+            ? {
+                ...prev,
+                guesses: [...prev.guesses, { word, marks: r.marks }],
+                solved: r.correct,
+                finished: r.answer != null,
+                answer: r.answer,
+                answerKo: r.answer_ko,
+              }
+            : prev,
+        );
+        setRevealIdx(practice.guesses.length);
+        setInput("");
       } else if (res.ok) {
         const next: PuzzleState = await res.json();
         setState(next);
@@ -105,7 +160,48 @@ export default function DailyPuzzlePage() {
       setNote("잠시 후 다시 시도해주세요");
     }
     setBusy(false);
-  }, [busy, input, state?.length]);
+  }, [busy, input, length, playing, practice]);
+
+  async function startPractice() {
+    if (busy) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await fetch("/api/game/puzzle/practice", {
+        credentials: "same-origin",
+      });
+      const p = res.ok ? await res.json() : { available: false };
+      if (p.available) {
+        setPractice({
+          token: p.token,
+          length: p.length,
+          maxTries: p.max_tries,
+          hintKo: p.hint_ko ?? "",
+          guesses: [],
+          solved: false,
+          finished: false,
+          answer: null,
+          answerKo: null,
+        });
+        setInput("");
+        setRevealIdx(null);
+        setHintOpen(false);
+      } else {
+        setNote("연습 단어를 불러오지 못했어요 — 잠시 후 다시");
+      }
+    } catch {
+      setNote("연습 단어를 불러오지 못했어요 — 잠시 후 다시");
+    }
+    setBusy(false);
+  }
+
+  function exitPractice() {
+    setPractice(null);
+    setInput("");
+    setRevealIdx(null);
+    setHintOpen(false);
+    setNote(null);
+  }
 
   const pressKey = useCallback(
     (key: string) => {
@@ -152,7 +248,7 @@ export default function DailyPuzzlePage() {
     maxWidth: `${length * 3.9}rem`,
   };
 
-  const solvedRow = state?.solved ? guesses.length - 1 : null;
+  const solvedRow = solved ? guesses.length - 1 : null;
 
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-4 py-4 sm:px-10 sm:py-8">
@@ -179,9 +275,16 @@ export default function DailyPuzzlePage() {
 
       {state?.available && (
         <section className="mx-auto flex max-w-md flex-col items-center gap-4">
-          <p className="text-sm opacity-70">
-            오늘의 <b>{length}글자</b> 영어 단어 — {maxTries}번 안에 맞혀보세요!
-          </p>
+          {practice ? (
+            <p className="rounded-full border-2 border-brick-blue/30 bg-brick-blue/10 px-4 py-1 text-sm font-bold">
+              연습 모드 — <b>{length}글자</b>, 기록에 안 남아요
+            </p>
+          ) : (
+            <p className="text-sm opacity-70">
+              오늘의 <b>{length}글자</b> 영어 단어 — {maxTries}번 안에
+              맞혀보세요!
+            </p>
+          )}
 
           {/* 보드 */}
           <div className="flex w-full flex-col items-center gap-1.5">
@@ -269,10 +372,10 @@ export default function DailyPuzzlePage() {
 
           {/* 뜻 힌트 — 2번 시도부터 해금 */}
           {playing &&
-            (state.hint_ko ? (
+            (hintKo ? (
               hintOpen ? (
                 <p className="word-pop rounded-full border-2 border-brick-blue/40 bg-brick-blue/10 px-4 py-1.5 text-sm font-bold">
-                  힌트 — 뜻: {state.hint_ko}
+                  힌트 — 뜻: {hintKo}
                 </p>
               ) : (
                 <button
@@ -289,8 +392,37 @@ export default function DailyPuzzlePage() {
               </p>
             ))}
 
-          {/* 결과 */}
-          {state.finished && (
+          {/* 연습 결과 — 무제한 재도전 */}
+          {practice?.finished && (
+            <div className="w-full rounded-lg border-2 border-ink/10 bg-white p-4">
+              <p
+                className={`font-hand text-3xl font-bold ${
+                  practice.solved ? "text-brick-green" : "text-brick-red"
+                }`}
+              >
+                {practice.solved
+                  ? `${practice.guesses.length}번 만에 성공!`
+                  : "아쉽다!"}
+              </p>
+              <p className="mt-2 text-sm">
+                연습 단어: <b className="uppercase">{practice.answer}</b>
+                {practice.answerKo && (
+                  <span className="ml-2 opacity-70">{practice.answerKo}</span>
+                )}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <Brick color="green" onClick={startPractice} disabled={busy}>
+                  한 판 더
+                </Brick>
+                <Brick color="yellow" onClick={exitPractice}>
+                  연습 끝내기
+                </Brick>
+              </div>
+            </div>
+          )}
+
+          {/* 데일리 결과 */}
+          {!practice && state.finished && (
             <div className="w-full rounded-lg border-2 border-ink/10 bg-white p-4">
               <p
                 className={`font-hand text-3xl font-bold ${
@@ -306,9 +438,13 @@ export default function DailyPuzzlePage() {
                 )}
               </p>
               <p className="mt-1 text-xs opacity-60">
-                내일 자정에 새 단어가 나와요 — 내일 또 만나요!
+                내일 자정에 새 단어가 나와요 — 그때까지는 연습 모드로 계속 풀 수
+                있어요!
               </p>
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Brick color="green" onClick={startPractice} disabled={busy}>
+                  연습으로 한 판 더
+                </Brick>
                 <ShareResultButton
                   data={{
                     game: "데일리 단어 퍼즐",
