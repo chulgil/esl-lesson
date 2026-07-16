@@ -26,6 +26,9 @@ body {
   background-color: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  /* 한국어 어절 단위 줄바꿈 — 좁은 화면에서 음절 중간 꺾임 방지, 긴 영단어는 break-word 폴백 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 인터랙션 기반 — Tailwind 4 preflight 는 버튼 커서가 default 라 명시 필요 */

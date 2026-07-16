@@ -48,6 +48,13 @@ export default function StudyPage() {
 
   const question = queue[idx];
 
+  // 문제 풀이 중에는 모바일 하단 탭바·마스코트 숨김 — 게임과 동일한 집중 모드 (이탈은 X 버튼으로)
+  useEffect(() => {
+    const active = phase === "question" || phase === "feedback";
+    document.body.classList.toggle("game-focus", active);
+    return () => document.body.classList.remove("game-focus");
+  }, [phase]);
+
   // 관전자에게 릴레이할 화면 상태 — 수락된 관전자만 수신 (study-spectate.md)
   const spectateSnapshot =
     phase === "question" || phase === "feedback"
@@ -114,8 +121,8 @@ export default function StudyPage() {
   }
 
   return (
-    <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
-      <header className="mb-6 flex items-center gap-4">
+    <main className="notebook-lines notebook-margin min-h-screen px-6 py-5 sm:px-16 sm:py-10">
+      <header className="mb-4 flex items-center gap-3 sm:mb-6 sm:gap-4">
         <Link
           href="/study"
           aria-label="학습 종료하고 학습 홈으로"

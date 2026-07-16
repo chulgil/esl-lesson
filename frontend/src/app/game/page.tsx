@@ -66,7 +66,7 @@ const GAMES: {
     players: "1인 · 하루 한 판",
     how: [
       "오늘의 영어 단어를 6번 안에 추측 — 초록=자리 정확, 노랑=자리 다름",
-      "전원 같은 단어라 친구와 \"몇 번 만에 맞혔나\" 자랑 대결",
+      '전원 같은 단어라 친구와 "몇 번 만에 맞혔나" 자랑 대결',
       "끝나면 단어와 뜻 공개 — 자정에 새 단어가 나와요",
     ],
     color: "border-ink/25",
@@ -100,10 +100,9 @@ export default function GameHubPage() {
 
       <div className="mt-6 grid max-w-4xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {GAMES.map((game) => (
-          <Link
+          <div
             key={game.href}
-            href={game.href}
-            className={`group flex flex-col rounded-xl border-2 ${game.color} bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md`}
+            className={`group relative flex flex-col rounded-xl border-2 ${game.color} bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md`}
           >
             <h2 className="font-hand text-2xl font-bold group-hover:underline group-hover:decoration-highlight group-hover:decoration-4 group-hover:underline-offset-4">
               {game.name}
@@ -114,23 +113,56 @@ export default function GameHubPage() {
             <p className="mt-2 inline-block self-start rounded-full bg-ink/5 px-2.5 py-1 text-xs font-bold">
               {game.players}
             </p>
-            <ul className="mt-3 flex flex-col gap-1.5 text-xs leading-relaxed opacity-70">
-              {game.how.map((line) => (
-                <li key={line} className="flex gap-1.5">
-                  <span aria-hidden>·</span>
-                  {line}
-                </li>
-              ))}
-            </ul>
-            <span className="mt-4 text-sm font-bold text-brick-blue">
+            {/* 모바일: 게임 방법 접기 — 카드 6장 스크롤 부담 절반으로 / 데스크톱: 상시 노출 */}
+            <details className="group relative z-10 mt-1 self-start sm:hidden">
+              {/* inline-flex 가 ::marker 를 지우므로 펼침 화살표를 직접 그림 */}
+              <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1 text-xs font-bold opacity-60">
+                게임 방법
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="transition group-open:rotate-180"
+                  aria-hidden
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </summary>
+              <HowList how={game.how} className="mb-2 flex" />
+            </details>
+            <HowList how={game.how} className="mt-3 hidden sm:flex" />
+            <Link
+              href={game.href}
+              className="mt-auto self-start pt-2 text-sm font-bold text-brick-blue after:absolute after:inset-0 sm:mt-4 sm:pt-0"
+            >
               플레이 →
-            </span>
-          </Link>
+            </Link>
+          </div>
         ))}
       </div>
 
       {/* 게임별 주간 최고 기록 — 매주 리셋되는 경쟁 루프 (P3) */}
       <WeeklyLeaderboardsCard />
     </main>
+  );
+}
+
+function HowList({ how, className }: { how: string[]; className?: string }) {
+  return (
+    <ul
+      className={`flex-col gap-1.5 text-xs leading-relaxed opacity-70 ${className ?? ""}`}
+    >
+      {how.map((line) => (
+        <li key={line} className="flex gap-1.5">
+          <span aria-hidden>·</span>
+          {line}
+        </li>
+      ))}
+    </ul>
   );
 }
