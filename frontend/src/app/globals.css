@@ -414,3 +414,40 @@ html[data-theme="candy"] .brick-studs::before {
   display: inline-block;
   animation: word-pop 0.25s ease-out;
 }
+
+/* 퍼즐 타일 채점 뒤집기 — 색은 뒤집힌 뒤에 보이도록 배경 전환을 중간에 */
+@keyframes tile-flip {
+  0% {
+    transform: rotateX(0);
+  }
+  49% {
+    transform: rotateX(90deg);
+  }
+  51% {
+    transform: rotateX(90deg);
+  }
+  100% {
+    transform: rotateX(0);
+  }
+}
+.tile-flip {
+  animation: tile-flip 0.5s ease both;
+  backface-visibility: hidden;
+}
+
+/* 퍼즐 정답 행 바운스 — 뒤집기 후 순차 점프 */
+@keyframes tile-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-14px);
+  }
+  70% {
+    transform: translateY(3px);
+  }
+}
+.tile-bounce {
+  animation: tile-bounce 0.55s ease both;
+}

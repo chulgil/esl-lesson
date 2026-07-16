@@ -41,6 +41,7 @@ async def test_puzzle_api_flow(client, db_session):
     assert state["available"] is True and state["max_tries"] == 6
     length = state["length"]
     assert state["answer"] is None  # 진행 중엔 정답 비공개
+    assert state["hint_ko"] is None  # 힌트는 2번 시도 전엔 잠금
 
     # 길이 불일치 → 422
     bad = await client.post("/api/game/puzzle/guess", json={"word": "a" * (length + 1)})
@@ -48,9 +49,14 @@ async def test_puzzle_api_flow(client, db_session):
 
     # 오답 5번 + 마지막 오답 → 종료 + 정답 공개
     wrong = "z" * length
-    for _ in range(6):
+    for n in range(6):
         res = await client.post("/api/game/puzzle/guess", json={"word": wrong})
         assert res.status_code == 200
+        body = res.json()
+        # 뜻 힌트는 2번 시도부터 열림 (정답 단어는 여전히 비공개)
+        assert (body["hint_ko"] is not None) == (n + 1 >= dp.HINT_AFTER_TRIES)
+        if not body["finished"]:
+            assert body["answer"] is None
     final = res.json()
     assert final["finished"] is True and final["solved"] is False
     assert final["answer"] is not None and final["answer_ko"].endswith("뜻")

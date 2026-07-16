@@ -358,6 +358,8 @@ def _puzzle_payload(answer: str, ko: str, guesses: list[str], solved: bool) -> d
         # 정답·뜻은 끝났을 때만 공개 — 끝나면 학습 모먼트로 뜻까지 보여준다
         "answer": answer if finished else None,
         "answer_ko": ko if finished else None,
+        # 뜻 힌트는 2번 시도부터 해금 (정답 단어는 비공개 유지)
+        "hint_ko": ko if (finished or len(guesses) >= daily_puzzle.HINT_AFTER_TRIES) else None,
     }
 
 
