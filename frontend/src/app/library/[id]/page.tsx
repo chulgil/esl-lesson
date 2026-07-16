@@ -58,19 +58,24 @@ export default function LibraryDetailPage() {
   }, [detail]);
 
   // 재생 감시: 현재 구간 자막 동기 + A-B 루프 (docs/specs/learning.md)
+  // 폴링은 구간 시작을 항상 늦게만 감지 — 유튜브 자막처럼 정시에 전환되도록
+  // 촘촘한 틱 + 선행 매칭(문장 표시만, 루프 판정은 실시간 기준)
   useEffect(() => {
+    const SYNC_TICK_MS = 100;
+    const LOOKAHEAD_MS = 150;
     const timer = setInterval(() => {
       const player = playerRef.current;
       if (!player) return;
       try {
         const now = player.getCurrentTime() * 1000;
+        const ahead = now + LOOKAHEAD_MS;
 
         const segments = detailRef.current?.segments ?? [];
         const active = segments.find(
           (s) =>
             s.start_ms != null &&
-            now >= s.start_ms &&
-            now < (s.end_ms ?? s.start_ms + 5000),
+            ahead >= s.start_ms &&
+            ahead < (s.end_ms ?? s.start_ms + 5000),
         );
         // 문장 사이 공백에서 null 로 리셋하면 이전/다음의 기준점이 사라져
         // 1번 문장으로 튀는 버그 — 활성 구간이 있을 때만 갱신 (문장은 잔류 표시)
@@ -98,7 +103,7 @@ export default function LibraryDetailPage() {
       } catch {
         // 플레이어 미초기화 등은 무시
       }
-    }, 250);
+    }, SYNC_TICK_MS);
     return () => clearInterval(timer);
   }, []);
 
