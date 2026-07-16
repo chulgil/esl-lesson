@@ -294,7 +294,7 @@ export type IvMsg =
       game: "tetris" | "quiz" | "typing" | "scramble" | "dictation";
       code: string;
     }
-  | { t: "iv.sent"; ok: boolean };
+  | { t: "iv.sent"; ok: boolean; via?: "ws" | "push" | null };
 
 export type ServerMsg =
   | IvMsg

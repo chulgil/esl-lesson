@@ -24,9 +24,11 @@ from app.models import (
     User,
 )
 from app.services import daily_puzzle
+from app.services import push as push_service
+from app.services.friends import are_friends
 from app.services.game import records
 from app.services.game.dictation import dictator
-from app.services.game.invites import invite_hub
+from app.services.game.invites import GAMES, invite_hub, invite_push_payload
 from app.services.game.manager import WordPoolError, manager
 from app.services.game.quiz_royale import royale
 from app.services.game.scramble import scrambler
@@ -669,13 +671,26 @@ async def game_ws(websocket: WebSocket) -> None:
                 await spectate_hub.detach(user_id)
             # --- 친구 게임 초대 (P2 경쟁 루프) ---
             elif t == "iv.invite":
-                delivered = await invite_hub.invite(
-                    user_id,
-                    to_user_id=int(msg.get("to_user_id", 0)),
-                    game=str(msg.get("game", "")),
-                    code=str(msg.get("code", "")),
-                )
-                await send({"t": "iv.sent", "ok": delivered})
+                to_user_id = int(msg.get("to_user_id", 0))
+                game = str(msg.get("game", ""))
+                code = str(msg.get("code", ""))
+                via: str | None = None
+                # 수락된 친구에게만 — 임의 user_id 초대(스팸 푸시) 차단
+                async with get_session_factory()() as invite_db:
+                    if await are_friends(invite_db, user_id, to_user_id):
+                        if await invite_hub.invite(
+                            user_id, to_user_id=to_user_id, game=game, code=code
+                        ):
+                            via = "ws"
+                        elif game in GAMES and await push_service.send_to_user(
+                            invite_db,
+                            to_user_id,
+                            invite_push_payload(user.nickname, game, code),
+                        ):
+                            # 접속 중이 아니면 웹 푸시 초대장 — 클릭 시 자동 입장
+                            via = "push"
+                        await invite_db.commit()
+                await send({"t": "iv.sent", "ok": via is not None, "via": via})
             else:
                 await send({"t": "error", "code": "unknown_message"})
     except WebSocketDisconnect:

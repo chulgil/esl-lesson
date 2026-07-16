@@ -11,7 +11,26 @@ logger = logging.getLogger(__name__)
 
 Sender = Callable[[dict], Awaitable[None]]
 
-GAMES = ("tetris", "quiz", "typing", "scramble", "dictation")
+# 게임 키 ↔ 한글 이름 단일 소스 — GAMES 는 여기서 파생 (새 게임 추가 시 라벨 누락 방지)
+GAME_LABELS = {
+    "tetris": "워드 테트리스",
+    "quiz": "스피드 퀴즈 로얄",
+    "typing": "영문 타자연습",
+    "scramble": "어순 조립 레이스",
+    "dictation": "받아쓰기 배틀",
+}
+GAMES = tuple(GAME_LABELS)
+
+
+def invite_push_payload(from_name: str, game: str, code: str) -> dict:
+    """오프라인 친구용 웹 푸시 — 알림 클릭 시 대기실 자동 입장(?join=)."""
+    label = GAME_LABELS.get(game, game)
+    return {
+        "title": "게임 초대",
+        "body": f"{from_name} 님이 {label}에 초대했어요!",
+        "url": f"/game/{game}?join={code}",
+        "tag": "game-invite",
+    }
 
 
 class InviteHub:

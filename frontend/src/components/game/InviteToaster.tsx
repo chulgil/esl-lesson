@@ -9,6 +9,8 @@ const GAME_LABELS: Record<string, string> = {
   tetris: "워드 테트리스",
   quiz: "스피드 퀴즈 로얄",
   typing: "영문 타자연습",
+  scramble: "어순 조립 레이스",
+  dictation: "받아쓰기 배틀",
 };
 
 /** 전역 초대 수신기 — 로그인 시 상시 연결(프레즌스 겸용), 어느 화면에서든 초대 토스트 (P2) */

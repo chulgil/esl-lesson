@@ -39,6 +39,21 @@
 - 관전자: `/study/watch?code=` — 뷰어 전용 (친구 페이지에서 진입, 자동 요청 →
   수락 대기 → LIVE 뷰). 진입 동선: 학습 허브(/study) → 친구 카드(받은 요청 배지)
 
+## 친구 게임 초대 (P2 경쟁 루프, 2026-07-16 푸시 폴백 추가)
+
+- **프레즌스**: 로그인 시 `InviteToaster` 가 루트 레이아웃에서 게임 WS 를 상시 연결
+  (`invite_hub` attach) — 어느 메뉴에 있든 초대 토스트 수신, 끊기면 15초 후 재접속
+- **프로토콜**: 대기실에서 `iv.invite {to_user_id, game, code}` → 서버가
+  **수락된 친구인지 검증** (`services/friends.py are_friends`, 임의 user_id 스팸 차단) 후
+  - 접속 중: 친구의 모든 소켓에 `iv.invited {from, game, code}` 릴레이 → 토스트 [참가]
+  - 미접속: **웹 푸시 폴백** (`push.send_to_user` + `invite_push_payload`,
+    tag `game-invite`) — 알림 클릭 시 `/game/{game}?join={code}` 자동 입장
+  - 응답 `iv.sent {ok, via: "ws"|"push"|null}`
+- **게임 이름 단일 소스**: `services/game/invites.py GAME_LABELS` — `GAMES` 는 여기서 파생,
+  새 게임 추가 시 한글 라벨 누락이 테스트로 잡힌다 (프론트 토스트 라벨은 별도 유지)
+- **대기실 UI**: `InviteFriends` — 접속 중 친구는 초록 버튼(즉시 토스트), 미접속 친구는
+  회색 "알림 초대" 버튼(푸시). 푸시 미구독 친구에게는 도달하지 않음 — 방 코드 공유로 보완
+
 ## 관전 채팅·응원 (2026-07-15)
 
 - **보낼 수 있는 사람**: 호스트 + 수락된 관전자만 (`st.chat` {text} / `st.cheer` {kind}) — 대기자·비멤버 무시

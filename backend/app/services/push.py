@@ -53,6 +53,29 @@ async def send_to(sub: PushSubscription, payload: dict, settings: Settings) -> b
         return True
 
 
+async def send_to_user(db: AsyncSession, user_id: int, payload: dict) -> bool:
+    """유저의 모든 구독에 발송 — 하나라도 전달되면 True, 만료 구독은 삭제.
+
+    게임 초대 등 즉시성 알림 공용. 커밋은 호출자 책임.
+    """
+    settings = get_settings()
+    if not enabled(settings):
+        return False
+    subs = (
+        (await db.execute(select(PushSubscription).where(PushSubscription.user_id == user_id)))
+        .scalars()
+        .all()
+    )
+    delivered = False
+    for sub in subs:
+        if await send_to(sub, payload, settings):
+            delivered = True
+        else:
+            await db.delete(sub)
+    await db.flush()
+    return delivered
+
+
 async def due_count(db: AsyncSession, user_id: int, now: datetime) -> int:
     return (
         await db.execute(
