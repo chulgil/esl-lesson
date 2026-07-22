@@ -79,6 +79,9 @@ class TranscriptSegment(Base, PkMixin):
     end_ms: Mapped[int | None] = mapped_column(Integer)
     en_text: Mapped[str] = mapped_column(Text)
     ko_text: Mapped[str | None] = mapped_column(Text)
+    # 단어별 시각 [{"w","s","e"}] — 로컬 에이전트 정렬 결과 (docs/specs/word-alignment.md).
+    # NULL = 미정렬 → 프론트는 보간 경계로 폴백
+    words: Mapped[list | None] = mapped_column(JsonDict, nullable=True)
 
     content: Mapped[Content] = relationship(back_populates="segments")
 
@@ -87,7 +90,7 @@ class ExtractionJob(Base, PkMixin):
     __tablename__ = "extraction_jobs"
     __table_args__ = (
         CheckConstraint(
-            "step IN ('metadata','transcript','translate','extract','embed')",
+            "step IN ('metadata','transcript','translate','extract','embed','align')",
             name="ck_jobs_step",
         ),
         CheckConstraint("status IN ('pending','running','done','failed')", name="ck_jobs_status"),
