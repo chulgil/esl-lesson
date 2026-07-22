@@ -308,6 +308,8 @@ async def report_alignment_failed(
     if content is None or content.source != "youtube":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
     job = await _get_or_create_job(db, content_id, "align")
+    if job.status == "done":
+        return {"content_id": content_id, "skipped": True}
     job.status = "failed"
     job.error = "audio unavailable for alignment"
     job.payload = {"source": "local_agent", "reason": "audio_unavailable"}

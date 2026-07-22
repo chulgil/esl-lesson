@@ -112,3 +112,38 @@ async def test_alignment_failed_drops_from_queue(client, db_session):
 
 async def test_alignment_requires_token(client, db_session):
     assert (await client.get("/api/agent/pending-alignments")).status_code == 401
+
+
+async def test_alignment_failed_skipped_when_already_done(client, db_session):
+    content = await _ready_content(db_session)
+    body = {"alignments": {"0": [{"w": "Hi", "s": 120, "e": 700}]}}
+    await client.post(
+        f"/api/agent/transcripts/{content.id}/alignment", headers=AGENT_HEADERS, json=body
+    )
+    res = await client.post(
+        f"/api/agent/transcripts/{content.id}/alignment/failed", headers=AGENT_HEADERS
+    )
+    assert res.json().get("skipped") is True
+
+    job = (
+        await db_session.execute(
+            select(ExtractionJob).where(
+                ExtractionJob.content_id == content.id, ExtractionJob.step == "align"
+            )
+        )
+    ).scalar_one()
+    assert job.status == "done"
+    assert "aligned" in job.payload
+
+
+async def test_alignment_submit_requires_token(client, db_session):
+    res = await client.post(
+        "/api/agent/transcripts/1/alignment",
+        json={"alignments": {"0": [{"w": "Hi", "s": 1, "e": 2}]}},
+    )
+    assert res.status_code == 401
+
+
+async def test_alignment_failed_requires_token(client, db_session):
+    res = await client.post("/api/agent/transcripts/1/alignment/failed")
+    assert res.status_code == 401
