@@ -4,7 +4,12 @@ import Link from "next/link";
 import { BackLink } from "@/components/nav/BackLink";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { studyApi, type LibraryDetail } from "@/lib/study-api";
+import { TranscriptWords } from "@/components/media/TranscriptWords";
+import {
+  studyApi,
+  type LibraryDetail,
+  type AlignedWord,
+} from "@/lib/study-api";
 
 /** 라이브러리 상세 — 전문(全文) 나열 대신 재생 중 문장만 동기 표시.
  *  전체 스크립트 노출은 저작권 리스크 상위라 제거 (2026-07-14 저작권 검토). */
@@ -25,6 +30,7 @@ export default function LibraryDetailPage() {
   const [detail, setDetail] = useState<LibraryDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentSeq, setCurrentSeq] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(0);
   const [loop, setLoop] = useState(false);
   const [subtitleLead, setSubtitleLead] = useState(DEFAULT_LEAD_MS);
   const leadRef = useRef(DEFAULT_LEAD_MS);
@@ -89,6 +95,7 @@ export default function LibraryDetailPage() {
       if (!player) return;
       try {
         const now = player.getCurrentTime() * 1000;
+        setNowMs(now);
         const ahead = now + POLL_COMPENSATION_MS + leadRef.current;
 
         const segments = detailRef.current?.segments ?? [];
@@ -144,6 +151,19 @@ export default function LibraryDetailPage() {
     },
     [],
   );
+
+  function playWord(word: AlignedWord) {
+    const player = playerRef.current;
+    if (!player) return;
+    const start = word.s / 1000;
+    // 단어가 짧아 최소 400ms 보장 — 즉시 정지·재시킹 반복 방지
+    const end = Math.max(word.e, word.s + 400) / 1000;
+    rangeRef.current = { start, end };
+    setLoop(true);
+    loopRef.current = true;
+    player.seekTo(start, true);
+    player.playVideo();
+  }
 
   // 체크만으로 바로 반복 — 지금 화면에 보이는 문장을 반복 구간으로 설정.
   // (기존엔 이전/다음 버튼으로 구간을 만든 뒤에만 동작해 "안 된다"고 느껴짐)
@@ -215,7 +235,14 @@ export default function LibraryDetailPage() {
             <div className="min-h-24 rounded-lg border-2 border-ink/10 bg-white p-4 text-center sm:min-h-28 sm:p-5">
               {current ? (
                 <>
-                  <p className="text-lg font-medium">{current.en_text}</p>
+                  <p className="text-lg font-medium">
+                    <TranscriptWords
+                      words={current.words}
+                      text={current.en_text}
+                      nowMs={nowMs}
+                      onWordTap={playWord}
+                    />
+                  </p>
                   {current.ko_text && (
                     <p className="mt-1 text-sm opacity-60">{current.ko_text}</p>
                   )}

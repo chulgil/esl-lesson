@@ -146,6 +146,12 @@ export interface LibraryContent {
   item_count: number;
 }
 
+export interface AlignedWord {
+  w: string;
+  s: number;
+  e: number;
+}
+
 export interface LibraryDetail {
   id: number;
   title: string;
@@ -157,6 +163,7 @@ export interface LibraryDetail {
     end_ms: number | null;
     en_text: string;
     ko_text: string | null;
+    words: AlignedWord[] | null;
   }[];
 }
 
