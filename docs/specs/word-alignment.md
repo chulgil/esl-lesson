@@ -113,7 +113,7 @@ class StableTsAligner:               # 기본 구현 (교체 가능)
     - full-pass: model.align(audio, 전체_세그먼트_텍스트, language='en')
     - 정렬된 단어를 세그먼트 seq 로 재분배
 
-def download_audio(video_id: str) -> str:   # yt-dlp bestaudio → ffmpeg wav, 임시 디렉토리, 사용 후 정리
+def download_audio(video_id: str) -> str:   # yt-dlp bestaudio → ffmpeg m4a, 임시 디렉토리, 사용 후 정리
 ```
 
 - 정렬 엔진은 `Aligner` 인터페이스로 분리 → 향후 WhisperX 등으로 교체 가능.
