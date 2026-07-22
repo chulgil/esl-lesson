@@ -8,16 +8,16 @@ import subprocess
 import tempfile
 
 
-def remap_result_to_segments(result_segments, seg_count: int) -> dict | None:
+def remap_result_to_segments(result_segments, seqs) -> dict | None:
     """stable-ts align(original_split=True) 결과를 seq→단어시각 으로 변환.
 
-    입력 텍스트를 세그먼트당 한 줄로 주면 결과 세그먼트가 줄 단위로 나뉘어
-    인덱스가 seq 와 일치한다. 개수 불일치/빈 세그먼트는 None(폴백)로 안전 처리.
+    seqs: 입력 세그먼트의 실제 DB seq 리스트(위치 순서). 결과 세그먼트 개수가
+    seqs 길이와 다르거나 빈 세그먼트가 있으면 None(폴백)으로 안전 처리한다.
     """
-    if len(result_segments) != seg_count:
+    if len(result_segments) != len(seqs):
         return None
     out: dict[int, list[dict]] = {}
-    for seq, rseg in enumerate(result_segments):
+    for pos, rseg in enumerate(result_segments):
         words = []
         for w in rseg.words:
             text = (w.word or "").strip()
@@ -26,7 +26,7 @@ def remap_result_to_segments(result_segments, seg_count: int) -> dict | None:
             words.append({"w": text, "s": round(w.start * 1000), "e": round(w.end * 1000)})
         if not words:
             return None
-        out[seq] = words
+        out[seqs[pos]] = words
     return out
 
 
@@ -48,7 +48,7 @@ class StableTsAligner:
         model = self._load()
         text = "\n".join(en for _, en in segments)
         result = model.align(audio_path, text, language="en", original_split=True)
-        return remap_result_to_segments(result.segments, len(segments))
+        return remap_result_to_segments(result.segments, [seq for seq, _ in segments])
 
 
 def download_audio(video_id: str) -> str:
