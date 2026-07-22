@@ -126,6 +126,7 @@ async def get_ready_content(
                 "end_ms": s.end_ms,
                 "en_text": s.en_text,
                 "ko_text": s.ko_text,
+                "words": s.words,
             }
             for s in segments
         ],
