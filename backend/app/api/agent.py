@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.models import Content, ExtractionJob, TranscriptSegment
+from app.services.alignment import apply_alignment
 from app.services.pipeline import _align_ko_by_time
 from app.services.youtube import Snippet, merge_into_sentences
 from app.workers.queue import enqueue
@@ -183,3 +184,132 @@ async def submit_transcript(
 
     enqueue(content_id)  # 번역/추출은 서버가 이어서 진행
     return {"content_id": content_id, "segments": len(sentences), "status": "pending"}
+
+
+async def _get_or_create_job(db: AsyncSession, content_id: int, step: str) -> ExtractionJob:
+    job = (
+        await db.execute(
+            select(ExtractionJob).where(
+                ExtractionJob.content_id == content_id, ExtractionJob.step == step
+            )
+        )
+    ).scalar_one_or_none()
+    if job is None:
+        job = ExtractionJob(content_id=content_id, step=step)
+        db.add(job)
+    return job
+
+
+@router.get("/pending-alignments", dependencies=[Depends(require_agent_token)])
+async def pending_alignments(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
+    """정렬 대기 콘텐츠: ready + 세그먼트 존재 + align 잡이 done/failed 아님."""
+    has_segments = exists(
+        select(TranscriptSegment.id).where(TranscriptSegment.content_id == Content.id)
+    )
+    align_settled = exists(
+        select(ExtractionJob.id).where(
+            ExtractionJob.content_id == Content.id,
+            ExtractionJob.step == "align",
+            ExtractionJob.status.in_(("done", "failed")),
+        )
+    )
+    rows = (
+        (
+            await db.execute(
+                select(Content)
+                .where(
+                    Content.source == "youtube",
+                    Content.status == "ready",
+                    has_segments,
+                    ~align_settled,
+                )
+                .order_by(Content.id)
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    items = []
+    for content in rows:
+        segs = (
+            await db.execute(
+                select(TranscriptSegment.seq, TranscriptSegment.en_text)
+                .where(TranscriptSegment.content_id == content.id)
+                .order_by(TranscriptSegment.seq)
+            )
+        ).all()
+        items.append(
+            {
+                "content_id": content.id,
+                "youtube_video_id": content.youtube_video_id,
+                "segments": [{"seq": s.seq, "en_text": s.en_text} for s in segs],
+            }
+        )
+    return {"items": items}
+
+
+class WordBody(BaseModel):
+    w: str
+    s: int = Field(ge=0)
+    e: int = Field(ge=0)
+
+
+class AlignmentSubmit(BaseModel):
+    alignments: dict[int, list[WordBody]] = Field(min_length=1)
+
+
+@router.post(
+    "/transcripts/{content_id}/alignment",
+    dependencies=[Depends(require_agent_token)],
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def submit_alignment(
+    content_id: int,
+    body: AlignmentSubmit,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    content = await db.get(Content, content_id)
+    if content is None or content.source != "youtube":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
+    job = await _get_or_create_job(db, content_id, "align")
+    if job.status == "done":
+        return {"content_id": content_id, "skipped": True}
+
+    segments = (
+        (
+            await db.execute(
+                select(TranscriptSegment).where(TranscriptSegment.content_id == content_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    alignments = {seq: [w.model_dump() for w in words] for seq, words in body.alignments.items()}
+    aligned = apply_alignment(segments, alignments)
+
+    job.status = "done"
+    job.error = None
+    job.payload = {"aligned": aligned, "source": "local_agent"}
+    await db.commit()
+    return {"content_id": content_id, "aligned": aligned}
+
+
+@router.post(
+    "/transcripts/{content_id}/alignment/failed",
+    dependencies=[Depends(require_agent_token)],
+)
+async def report_alignment_failed(
+    content_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """오디오 항구 불가(비공개/삭제) 보고 → align 잡 failed 로 대기열 제외."""
+    content = await db.get(Content, content_id)
+    if content is None or content.source != "youtube":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
+    job = await _get_or_create_job(db, content_id, "align")
+    job.status = "failed"
+    job.error = "audio unavailable for alignment"
+    job.payload = {"source": "local_agent", "reason": "audio_unavailable"}
+    await db.commit()
+    return {"content_id": content_id, "status": "failed"}
