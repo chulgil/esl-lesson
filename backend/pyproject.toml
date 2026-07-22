@@ -26,6 +26,9 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.15.21",
 ]
+align = [
+    "stable-ts>=2.17.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
