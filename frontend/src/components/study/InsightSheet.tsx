@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { primeVoices, speakWord } from "@/lib/speech";
 import { studyApi, type WordInsight } from "@/lib/study-api";
 
 /** 단어 인사이트 바텀시트 — 뉘앙스/유사단어/예문 (docs/proposal/word-insight.md P1) */
@@ -16,6 +17,11 @@ export function InsightSheet({
   const [insight, setInsight] = useState<WordInsight | null>(null);
   const [error, setError] = useState(false);
 
+  // 음성 목록 비동기 로드 — 스피커 버튼 첫 클릭부터 지정 음성이 나오도록 선점
+  useEffect(() => {
+    primeVoices();
+  }, []);
+
   useEffect(() => {
     let alive = true;
     setInsight(null);
@@ -28,14 +34,6 @@ export function InsightSheet({
       alive = false;
     };
   }, [itemId]);
-
-  function speak() {
-    // 브라우저 내장 TTS — 서버 비용 없음 (P1 결정)
-    const utter = new SpeechSynthesisUtterance(word);
-    utter.lang = "en-US";
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utter);
-  }
 
   return (
     <div
@@ -53,7 +51,7 @@ export function InsightSheet({
           <h2 className="font-hand text-3xl font-bold">{word}</h2>
           <button
             type="button"
-            onClick={speak}
+            onClick={() => speakWord(word)}
             aria-label="발음 듣기"
             className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-2 border-brick-blue/40 bg-white text-brick-blue transition hover:border-brick-blue"
           >
