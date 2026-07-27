@@ -2,6 +2,7 @@
 
 from app.models.base import Base
 from app.models.card import ReviewCard, ReviewLog
+from app.models.chat import ChatMessage, ChatRead, Conversation
 from app.models.content import (
     Content,
     ContentPermission,
@@ -26,6 +27,9 @@ from app.models.user import User, UserSettings
 
 __all__ = [
     "Base",
+    "ChatMessage",
+    "ChatRead",
+    "Conversation",
     "DailyPuzzlePlay",
     "DictationRace",
     "Content",

@@ -296,8 +296,36 @@ export type IvMsg =
     }
   | { t: "iv.sent"; ok: boolean; via?: "ws" | "push" | null };
 
+// --- 채팅·프레즌스 (docs/specs/chat.md) ---
+export type ChatServerMsg =
+  | {
+      t: "chat.message";
+      id: number;
+      conversation_id: number;
+      sender_id: number;
+      from_name: string;
+      body: string;
+      item_ref: {
+        item_id: number;
+        item_type: string;
+        en_text: string;
+        ko_text: string;
+      } | null;
+      client_msg_id: string;
+      created_at: string | null;
+    }
+  | {
+      t: "chat.read";
+      conversation_id: number;
+      user_id: number;
+      last_read_message_id: number;
+    }
+  | { t: "chat.typing"; from_user_id: number }
+  | { t: "presence"; user_id: number; online: boolean };
+
 export type ServerMsg =
   | IvMsg
+  | ChatServerMsg
   | StateMsg
   | MatchFoundMsg
   | ClearResultMsg
@@ -363,6 +391,9 @@ export class GameSocket {
   }
   leaveQueue(): void {
     this.send({ t: "queue.leave" });
+  }
+  sendChatTyping(toUserId: number): void {
+    this.send({ t: "chat.typing", to: toUserId });
   }
   createRoom(quiz: string, contentIds?: number[]): void {
     this.send({ t: "room.create", quiz, content_ids: contentIds });

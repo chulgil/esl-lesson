@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ChatNavButton } from "@/components/chat/ChatNavButton";
 import { fetchMe, type Me } from "@/lib/api";
 
 /** 전역 내비게이션 (듀오링고 패턴 차용 — docs/specs/ui-design.md 내비게이션)
@@ -89,6 +90,7 @@ export function AppNav() {
           );
         })}
         <div className="ml-auto flex items-center gap-3">
+          <ChatNavButton />
           {me?.role === "admin" && (
             <Link
               href="/admin"
@@ -100,6 +102,9 @@ export function AppNav() {
           <span className="text-sm opacity-60">{me?.nickname}</span>
         </div>
       </header>
+
+      {/* 모바일: 채팅 진입점은 우상단 플로팅 (하단 탭 6개 유지 — docs/specs/chat.md) */}
+      <ChatNavButton floating />
 
       {/* 모바일: 하단 탭바 고정 */}
       <nav

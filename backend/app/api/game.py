@@ -24,6 +24,7 @@ from app.models import (
     TypingRace,
     User,
 )
+from app.services import chat as chat_service
 from app.services import daily_puzzle
 from app.services import push as push_service
 from app.services.friends import are_friends
@@ -533,8 +534,13 @@ async def game_ws(websocket: WebSocket) -> None:
         await websocket.send_json(message)
 
     # 프레즌스 등록 (친구 초대 수신용) + 진행 중이던 매치 자동 복귀
+    became_online = not invite_hub.online(user_id)
     invite_hub.attach(user_id, user.nickname, send)
     await manager.attach(user_id, send)
+    if became_online:
+        # 접속 상태 변화를 친구에게 실시간 푸시 (docs/specs/chat.md 프레즌스)
+        async with get_session_factory()() as db:
+            await chat_service.broadcast_presence(db, user_id, True)
 
     try:
         while True:
@@ -542,6 +548,12 @@ async def game_ws(websocket: WebSocket) -> None:
             t = msg.get("t")
             if t == "ping":
                 await send({"t": "pong"})
+            # --- 채팅 (docs/specs/chat.md — 수신·읽음은 REST 가 WS 로 푸시, 입력중만 클라→서버) ---
+            elif t == "chat.typing":
+                to_id = int(msg.get("to", 0) or 0)
+                if to_id and chat_service.typing_allowed(user_id, to_id):
+                    async with get_session_factory()() as db:
+                        await chat_service.relay_typing(db, user_id, to_id)
             elif t == "queue.join":
                 quiz = msg.get("quiz", "en")
                 if msg.get("mode") == "pve":
@@ -757,6 +769,12 @@ async def game_ws(websocket: WebSocket) -> None:
                 await send({"t": "error", "code": "unknown_message"})
     except WebSocketDisconnect:
         invite_hub.detach(user_id, send)
+        if not invite_hub.online(user_id):
+            try:
+                async with get_session_factory()() as db:
+                    await chat_service.broadcast_presence(db, user_id, False)
+            except Exception:  # noqa: BLE001 — 종료 경로에서 프레즌스 실패는 무시
+                logger.warning("presence offline broadcast failed user=%s", user_id)
         manager.detach(user_id)
         royale.detach(user_id)
         racer.detach(user_id)
@@ -766,6 +784,12 @@ async def game_ws(websocket: WebSocket) -> None:
     except Exception:
         logger.exception("ws error user=%s", user_id)
         invite_hub.detach(user_id, send)
+        if not invite_hub.online(user_id):
+            try:
+                async with get_session_factory()() as db:
+                    await chat_service.broadcast_presence(db, user_id, False)
+            except Exception:  # noqa: BLE001 — 종료 경로에서 프레즌스 실패는 무시
+                logger.warning("presence offline broadcast failed user=%s", user_id)
         manager.detach(user_id)
         royale.detach(user_id)
         racer.detach(user_id)

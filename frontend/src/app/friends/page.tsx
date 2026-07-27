@@ -146,6 +146,13 @@ export default function FriendsPage() {
                   </span>
                 )}
                 <span className="ml-auto flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/chat/${f.user_id}`)}
+                    className="min-h-10 rounded-md border-2 border-brick-blue/50 bg-white px-3 text-sm font-bold text-brick-blue transition hover:border-brick-blue"
+                  >
+                    메시지
+                  </button>
                   {f.studying && f.watch_code && (
                     <button
                       type="button"

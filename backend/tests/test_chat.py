@@ -1,0 +1,367 @@
+"""친구 1:1 채팅 — 대화 정규화·멱등 전송·커서·읽음·권한·캐시·푸시 (docs/specs/chat.md)."""
+
+import pytest
+from sqlalchemy import func, select
+
+from app.models import ChatMessage, Conversation, Friendship, LearningItem
+from app.services import chat as chat_service
+from app.services.game.invites import invite_hub
+from tests.test_my_contents import login_as
+from tests.test_study import seed_items
+
+
+@pytest.fixture(autouse=True)
+def _fresh_caches():
+    chat_service.reset_caches()
+    yield
+    chat_service.reset_caches()
+
+
+async def make_friends(db, a, b):
+    row = Friendship(requester_id=a.id, addressee_id=b.id, status="accepted")
+    db.add(row)
+    await db.commit()
+    return row
+
+
+async def two_friends(client, db):
+    a = await login_as(client, db, "a@example.com")
+    b = await login_as(client, db, "b@example.com")
+    await make_friends(db, a, b)
+    return a, b
+
+
+def send_body(to_id, body="hello", cid="cid-00000001", item_id=None):
+    payload = {"to_user_id": to_id, "body": body, "client_msg_id": cid}
+    if item_id is not None:
+        payload["item_id"] = item_id
+    return payload
+
+
+async def login(client, db, user):
+    """이미 만든 사용자로 세션 전환."""
+    from app.core.security import SESSION_COOKIE, create_session_token
+
+    client.cookies.set(SESSION_COOKIE, create_session_token(user))
+
+
+# --- 대화 정규화·멱등 -----------------------------------------------------------
+
+
+async def test_conversation_normalized_one_row_per_pair(client, db_session):
+    a, b = await two_friends(client, db_session)
+
+    await login(client, db_session, a)
+    r1 = await client.post("/api/chat/messages", json=send_body(b.id, "from a", "cid-aaaaaaaa"))
+    assert r1.status_code == 201
+
+    await login(client, db_session, b)
+    r2 = await client.post("/api/chat/messages", json=send_body(a.id, "from b", "cid-bbbbbbbb"))
+    assert r2.status_code == 201
+
+    convs = (await db_session.execute(select(func.count(Conversation.id)))).scalar_one()
+    assert convs == 1
+    assert r1.json()["conversation_id"] == r2.json()["conversation_id"]
+
+
+async def test_send_is_idempotent_by_client_msg_id(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    first = await client.post("/api/chat/messages", json=send_body(b.id, "hi", "cid-dup00001"))
+    dup = await client.post("/api/chat/messages", json=send_body(b.id, "hi", "cid-dup00001"))
+    assert first.json()["id"] == dup.json()["id"]
+    assert first.json()["created"] is True
+    assert dup.json()["created"] is False
+    count = (await db_session.execute(select(func.count(ChatMessage.id)))).scalar_one()
+    assert count == 1
+
+
+# --- 검증 ----------------------------------------------------------------------
+
+
+async def test_send_validations(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    self_msg = await client.post("/api/chat/messages", json=send_body(a.id))
+    assert self_msg.status_code == 400
+
+    empty = await client.post("/api/chat/messages", json=send_body(b.id, "   ", "cid-empty001"))
+    assert empty.status_code == 422
+
+    # 친구 아닌 상대 — 404 (존재 비노출)
+    stranger = await login_as(client, db_session, "x@example.com")
+    await login(client, db_session, a)
+    not_friend = await client.post("/api/chat/messages", json=send_body(stranger.id))
+    assert not_friend.status_code == 404
+
+
+async def test_unfriend_blocks_send_but_keeps_history(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "before", "cid-before01"))
+
+    # 친구 삭제
+    row = (await db_session.execute(select(Friendship))).scalar_one()
+    await db_session.delete(row)
+    await db_session.commit()
+
+    blocked = await client.post("/api/chat/messages", json=send_body(b.id, "after", "cid-after001"))
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"] == "not_friends"
+
+    # 기록 조회는 여전히 허용 (기록 보존 원칙)
+    history = await client.get(f"/api/chat/with/{b.id}/messages")
+    assert history.status_code == 200
+    assert [m["body"] for m in history.json()["items"]] == ["before"]
+
+
+# --- 커서 페이지네이션 -----------------------------------------------------------
+
+
+async def test_cursor_pagination_no_gap_no_overlap(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    for i in range(7):
+        await client.post("/api/chat/messages", json=send_body(b.id, f"m{i}", f"cid-page{i:04d}"))
+
+    latest = (await client.get(f"/api/chat/with/{b.id}/messages?limit=3")).json()["items"]
+    assert [m["body"] for m in latest] == ["m4", "m5", "m6"]
+
+    older = (
+        await client.get(f"/api/chat/with/{b.id}/messages?before={latest[0]['id']}&limit=3")
+    ).json()["items"]
+    assert [m["body"] for m in older] == ["m1", "m2", "m3"]
+
+    oldest = (
+        await client.get(f"/api/chat/with/{b.id}/messages?before={older[0]['id']}&limit=3")
+    ).json()["items"]
+    assert [m["body"] for m in oldest] == ["m0"]
+
+
+# --- 읽음·안읽음 -----------------------------------------------------------------
+
+
+async def test_unread_counts_and_mark_read(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    for i in range(3):
+        await client.post("/api/chat/messages", json=send_body(b.id, f"u{i}", f"cid-unrd{i:04d}"))
+
+    await login(client, db_session, b)
+    assert (await client.get("/api/chat/unread-total")).json()["total"] == 3
+    convs = (await client.get("/api/chat/conversations")).json()["items"]
+    assert convs[0]["unread"] == 3
+    assert convs[0]["last_message"] == "u2"
+
+    await client.post(f"/api/chat/with/{a.id}/read")
+    assert (await client.get("/api/chat/unread-total")).json()["total"] == 0
+
+    # 내가 보낸 메시지는 내 안읽음에 안 잡힌다
+    await login(client, db_session, a)
+    assert (await client.get("/api/chat/unread-total")).json()["total"] == 0
+
+
+async def test_read_positions_exposed_for_receipt_render(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    sent = (
+        await client.post("/api/chat/messages", json=send_body(b.id, "rcpt", "cid-rcpt0001"))
+    ).json()
+
+    await login(client, db_session, b)
+    await client.post(f"/api/chat/with/{a.id}/read")
+
+    await login(client, db_session, a)
+    res = (await client.get(f"/api/chat/with/{b.id}/messages")).json()
+    assert res["reads"][str(b.id)] >= sent["id"]  # 상대가 읽었음 → "1" 제거 가능
+
+
+# --- 캐시 ----------------------------------------------------------------------
+
+
+async def test_cache_returns_fresh_message_after_send(client, db_session):
+    """레드-그린 필수: 전송 직후 최신 조회에 신규 메시지가 반영돼야 한다 (stale 금지)."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "warm", "cid-warm0001"))
+    # 캐시 웜업 (콜드 스타트 로드)
+    await client.get(f"/api/chat/with/{b.id}/messages")
+
+    await client.post("/api/chat/messages", json=send_body(b.id, "fresh", "cid-fresh001"))
+    bodies = [
+        m["body"] for m in (await client.get(f"/api/chat/with/{b.id}/messages")).json()["items"]
+    ]
+    assert bodies == ["warm", "fresh"]
+
+
+async def test_unread_cache_invalidated_on_send_and_read(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, b)
+    assert (await client.get("/api/chat/unread-total")).json()["total"] == 0  # 캐시 채움
+
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "ping", "cid-ping0001"))
+
+    await login(client, db_session, b)
+    # TTL 이 남아 있어도 전송이 무효화했으므로 즉시 1
+    assert (await client.get("/api/chat/unread-total")).json()["total"] == 1
+
+
+# --- 학습 카드 스냅샷 ------------------------------------------------------------
+
+
+async def test_item_snapshot_survives_item_deletion(client, db_session):
+    a, b = await two_friends(client, db_session)
+    items = await seed_items(db_session, count=1)
+    await login(client, db_session, a)
+
+    sent = await client.post(
+        "/api/chat/messages", json=send_body(b.id, "", "cid-card0001", item_id=items[0].id)
+    )
+    assert sent.status_code == 201
+    ref = sent.json()["item_ref"]
+    assert ref["en_text"] == items[0].en_text
+
+    # 원본 항목 삭제 후에도 스냅샷 무결 (기록 보존)
+    await db_session.delete(await db_session.get(LearningItem, items[0].id))
+    await db_session.commit()
+    chat_service.reset_caches()
+
+    history = (await client.get(f"/api/chat/with/{b.id}/messages")).json()["items"]
+    assert history[0]["item_ref"]["en_text"] == ref["en_text"]
+
+
+async def test_item_snapshot_rejects_invisible_item(client, db_session):
+    """남의 개인 항목은 카드로 첨부 불가 (위조·유출 방지)."""
+    a, b = await two_friends(client, db_session)
+    stranger = await login_as(client, db_session, "x@example.com")
+    hidden = await seed_items(
+        db_session, count=1, status="pending", visibility="private", owner=stranger.id
+    )
+    await login(client, db_session, a)
+    res = await client.post(
+        "/api/chat/messages", json=send_body(b.id, "", "cid-steal001", item_id=hidden[0].id)
+    )
+    assert res.status_code == 404
+
+
+# --- WS 전달·푸시 ----------------------------------------------------------------
+
+
+async def test_ws_delivery_to_online_recipient(client, db_session):
+    a, b = await two_friends(client, db_session)
+    received = []
+
+    async def fake_send(message):
+        received.append(message)
+
+    invite_hub.attach(b.id, "B", fake_send)
+    try:
+        await login(client, db_session, a)
+        await client.post("/api/chat/messages", json=send_body(b.id, "live", "cid-live0001"))
+    finally:
+        invite_hub.detach(b.id, fake_send)
+
+    assert any(m["t"] == "chat.message" and m["body"] == "live" for m in received)
+
+
+async def test_push_only_when_offline_with_throttle(client, db_session, monkeypatch):
+    a, b = await two_friends(client, db_session)
+    pushed = []
+
+    async def fake_push(db, user_id, payload):
+        pushed.append((user_id, payload))
+        return True
+
+    import app.api.chat as chat_api
+
+    monkeypatch.setattr(chat_api.push_service, "send_to_user", fake_push)
+
+    await login(client, db_session, a)
+    # 오프라인 → 푸시 1회
+    await client.post("/api/chat/messages", json=send_body(b.id, "off1", "cid-off10001"))
+    # 5분 내 같은 대화 → 스로틀
+    await client.post("/api/chat/messages", json=send_body(b.id, "off2", "cid-off20001"))
+    assert len(pushed) == 1
+    assert pushed[0][0] == b.id
+    assert "off1" in pushed[0][1]["body"]
+
+    # 온라인이면 푸시 안 감
+    async def noop(message):
+        pass
+
+    invite_hub.attach(b.id, "B", noop)
+    try:
+        await client.post("/api/chat/messages", json=send_body(b.id, "on1", "cid-on100001"))
+    finally:
+        invite_hub.detach(b.id, noop)
+    assert len(pushed) == 1
+
+
+# --- 프레즌스·입력중 -------------------------------------------------------------
+
+
+async def test_presence_broadcast_reaches_online_friends_only(client, db_session):
+    a, b = await two_friends(client, db_session)
+    stranger = await login_as(client, db_session, "x@example.com")  # 친구 아님
+
+    got_b, got_x = [], []
+
+    async def send_b(message):
+        got_b.append(message)
+
+    async def send_x(message):
+        got_x.append(message)
+
+    invite_hub.attach(b.id, "B", send_b)
+    invite_hub.attach(stranger.id, "X", send_x)
+    try:
+        await chat_service.broadcast_presence(db_session, a.id, True)
+    finally:
+        invite_hub.detach(b.id, send_b)
+        invite_hub.detach(stranger.id, send_x)
+
+    assert got_b == [{"t": "presence", "user_id": a.id, "online": True}]
+    assert got_x == []  # 친구 아닌 접속자에게는 안 감
+
+
+async def test_typing_throttle_and_friend_gate(client, db_session):
+    a, b = await two_friends(client, db_session)
+    got = []
+
+    async def send_b(message):
+        got.append(message)
+
+    invite_hub.attach(b.id, "B", send_b)
+    try:
+        assert chat_service.typing_allowed(a.id, b.id) is True
+        await chat_service.relay_typing(db_session, a.id, b.id)
+        # 2초 스로틀 — 연타는 거부
+        assert chat_service.typing_allowed(a.id, b.id) is False
+    finally:
+        invite_hub.detach(b.id, send_b)
+
+    assert got == [{"t": "chat.typing", "from_user_id": a.id}]
+    # 오프라인 상대 — 게이트에서 거부
+    assert chat_service.typing_allowed(a.id, 99999) is False
+
+
+async def test_conversations_list_shows_online_flag(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "hey", "cid-online01"))
+
+    async def noop(message):
+        pass
+
+    convs = (await client.get("/api/chat/conversations")).json()["items"]
+    assert convs[0]["online"] is False
+
+    invite_hub.attach(b.id, "B", noop)
+    try:
+        convs = (await client.get("/api/chat/conversations")).json()["items"]
+        assert convs[0]["online"] is True
+    finally:
+        invite_hub.detach(b.id, noop)
