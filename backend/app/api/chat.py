@@ -1,16 +1,21 @@
 """친구 1:1 채팅 API — 전송은 REST 멱등 POST, 수신·읽음·입력중은 WS 푸시 (docs/specs/chat.md)."""
 
 import logging
+import re
+import uuid
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.models import LearningItem, User
+from app.models import ChatMessage, Conversation, LearningItem, User
 from app.services import chat
 from app.services import push as push_service
 from app.services.game.invites import invite_hub
@@ -65,11 +70,74 @@ async def messages(
     }
 
 
+# --- 이미지 업로드 (docs/specs/chat.md 이미지 전송) ------------------------------
+
+IMAGE_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+IMAGE_MAX_BYTES = 5 * 1024 * 1024  # 5MB - 2GB 서버 디스크 보호
+# 서버가 발급한 파일명 형식만 통과 - 경로 조작 원천 차단
+IMAGE_NAME_RE = re.compile(r"^[0-9a-f]{32}\.(jpg|png|webp|gif)$")
+
+
+@router.post("/uploads", status_code=status.HTTP_201_CREATED)
+async def upload_image(
+    file: UploadFile,
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    ext = IMAGE_TYPES.get(file.content_type or "")
+    if ext is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "unsupported_image_type")
+    data = await file.read()
+    if len(data) > IMAGE_MAX_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "image_too_large")
+    name = f"{uuid.uuid4().hex}{ext}"
+    upload_dir = Path(get_settings().chat_upload_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    (upload_dir / name).write_bytes(data)
+    return {"image_id": name}
+
+
+@router.get("/uploads/{name}")
+async def serve_image(
+    name: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> FileResponse:
+    """대화 참여자만 열람 - 메시지에 귀속된 이미지의 대화 소속을 검사."""
+    if IMAGE_NAME_RE.fullmatch(name) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "image_not_found")
+    allowed = (
+        await db.execute(
+            select(ChatMessage.id)
+            .join(Conversation, Conversation.id == ChatMessage.conversation_id)
+            .where(
+                ChatMessage.image_path == name,
+                or_(
+                    Conversation.user_lo_id == user.id,
+                    Conversation.user_hi_id == user.id,
+                ),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if allowed is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "image_not_found")
+    path = Path(get_settings().chat_upload_dir) / name
+    if not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "image_not_found")
+    return FileResponse(path)
+
+
 class SendBody(BaseModel):
     to_user_id: int
     body: str = Field(default="", max_length=chat.BODY_MAX)
     client_msg_id: str = Field(min_length=8, max_length=64)
     item_id: int | None = None
+    image_id: str | None = None
 
 
 @router.post("/messages", status_code=status.HTTP_201_CREATED)
@@ -78,6 +146,11 @@ async def send(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
+    if payload.image_id is not None:
+        if IMAGE_NAME_RE.fullmatch(payload.image_id) is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_image_id")
+        if not (Path(get_settings().chat_upload_dir) / payload.image_id).is_file():
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "image_not_uploaded")
     data, created = await chat.send_message(
         db,
         user,
@@ -85,6 +158,7 @@ async def send(
         payload.body,
         payload.client_msg_id,
         item_id=payload.item_id,
+        image_path=payload.image_id,
     )
     if created:
         message = {"t": "chat.message", "from_name": user.nickname, **data}
@@ -96,7 +170,10 @@ async def send(
                     db,
                     payload.to_user_id,
                     chat.chat_push_payload(
-                        user.nickname, data["body"], user.id, data["conversation_id"]
+                        user.nickname,
+                        data["body"] or ("[사진]" if data.get("image_url") else ""),
+                        user.id,
+                        data["conversation_id"],
                     ),
                 )
             except Exception:  # noqa: BLE001

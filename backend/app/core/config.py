@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # 로컬 자막 수집기 인증 토큰 (빈 값이면 에이전트 API 비활성)
     agent_token: str = ""
 
+    # 채팅 이미지 업로드 디렉토리 (운영: 컴포즈 볼륨 /data/chat-uploads)
+    chat_upload_dir: str = "./data/chat-uploads"
+
     # 추출 워커 (테스트에서는 비활성)
     enable_workers: bool = True
 

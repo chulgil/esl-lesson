@@ -3,7 +3,8 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMe } from "@/lib/api";
-import { dispatchChatEvent, setChatSocket } from "@/lib/chat-signals";
+import { dispatchChatEvent, getActiveChatRoom, setChatSocket } from "@/lib/chat-signals";
+import { getAppTheme } from "@/lib/theme";
 import { GameSocket, type ServerMsg } from "@/lib/game-ws";
 
 const GAME_LABELS: Record<string, string> = {
@@ -39,11 +40,21 @@ export function InviteToaster() {
       return;
     }
     if (msg.t === "chat.message") {
-      // 이벤트 버스로 배급 (대화방·네비 배지가 구독)
+      // 이벤트 버스로 배급 (대화방·위젯·네비 배지가 구독)
       dispatchChatEvent(msg);
-      // 해당 대화방을 보고 있으면 토스트 생략 (스펙: 알림 기획)
-      if (pathRef.current !== `/chat/${msg.sender_id}`) {
-        const body = msg.body || "[단어 카드]";
+      const viewing =
+        pathRef.current === `/chat/${msg.sender_id}` ||
+        getActiveChatRoom() === msg.sender_id;
+      const body = msg.body || (msg.image_url ? "[사진]" : "[단어 카드]");
+      // 탭이 백그라운드면 OS 알림 (알림 켜기 수락 시) — 오피스 테마는 문서 알림으로 위장
+      if (document.hidden && Notification.permission === "granted") {
+        const excel = getAppTheme() === "excel";
+        notifyOs(
+          excel ? "공유 문서" : msg.from_name,
+          excel ? "변경 사항 1건" : body.slice(0, 40),
+          `/chat/${msg.sender_id}`,
+        );
+      } else if (!viewing) {
         setChatToast({
           fromId: msg.sender_id,
           fromName: msg.from_name,
@@ -141,6 +152,22 @@ export function InviteToaster() {
       )}
     </>
   );
+}
+
+/** 백그라운드 탭 OS 알림 — SW 우선, 미등록이면 페이지 Notification 폴백 */
+function notifyOs(title: string, body: string, url: string) {
+  const options: NotificationOptions = { body, tag: "esl-chat", data: { url } };
+  navigator.serviceWorker
+    ?.getRegistration()
+    .then((reg) => {
+      if (reg) return reg.showNotification(title, options);
+      const n = new Notification(title, options);
+      n.onclick = () => {
+        window.focus();
+        window.location.href = url;
+      };
+    })
+    .catch(() => {});
 }
 
 function ChatBubbleIcon() {

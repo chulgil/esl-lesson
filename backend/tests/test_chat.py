@@ -393,3 +393,109 @@ async def test_chat_responses_never_expose_real_name_or_google_avatar(client, db
         assert "REAL-NAME" not in raw, f"실명 노출: {path}"
         assert "googleusercontent" not in raw, f"구글 아바타 노출: {path}"
         assert "avatar_url" not in raw, f"아바타 필드 잔존: {path}"
+
+
+# --- 이미지 전송 (docs/specs/chat.md) ---------------------------------------------
+
+
+@pytest.fixture
+def upload_dir(tmp_path, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "chat_upload_dir", str(tmp_path))
+    return tmp_path
+
+
+PNG_1PX = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d49444154789c626001000000ffff03000006000557bfabd40000000049454e44ae426082"
+)
+
+
+async def upload_png(client):
+    res = await client.post(
+        "/api/chat/uploads", files={"file": ("x.png", PNG_1PX, "image/png")}
+    )
+    assert res.status_code == 201
+    return res.json()["image_id"]
+
+
+async def test_image_upload_send_and_view(client, db_session, upload_dir):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    image_id = await upload_png(client)
+
+    sent = await client.post(
+        "/api/chat/messages",
+        json={
+            "to_user_id": b.id,
+            "body": "",
+            "client_msg_id": "cid-img00001",
+            "image_id": image_id,
+        },
+    )
+    assert sent.status_code == 201
+    assert sent.json()["image_url"] == f"/api/chat/uploads/{image_id}"
+
+    # 참여자(수신자)는 열람 가능
+    await login(client, db_session, b)
+    view = await client.get(f"/api/chat/uploads/{image_id}")
+    assert view.status_code == 200
+    assert view.content == PNG_1PX
+    # 목록 미리보기는 [사진]
+    convs = (await client.get("/api/chat/conversations")).json()["items"]
+    assert convs[0]["last_message"] == "[사진]"
+
+
+async def test_image_denied_to_non_participant(client, db_session, upload_dir):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    image_id = await upload_png(client)
+    await client.post(
+        "/api/chat/messages",
+        json={
+            "to_user_id": b.id,
+            "body": "",
+            "client_msg_id": "cid-img00002",
+            "image_id": image_id,
+        },
+    )
+
+    outsider = await login_as(client, db_session, "x@example.com")
+    assert outsider is not None
+    res = await client.get(f"/api/chat/uploads/{image_id}")
+    assert res.status_code == 404  # 존재 비노출
+
+
+async def test_image_upload_validations(client, db_session, upload_dir):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    bad_type = await client.post(
+        "/api/chat/uploads", files={"file": ("x.txt", b"hello", "text/plain")}
+    )
+    assert bad_type.status_code == 422
+
+    # 경로 조작 형식의 image_id 거부
+    traversal = await client.post(
+        "/api/chat/messages",
+        json={
+            "to_user_id": b.id,
+            "body": "",
+            "client_msg_id": "cid-img00003",
+            "image_id": "../../etc/passwd",
+        },
+    )
+    assert traversal.status_code == 422
+
+    # 업로드된 적 없는 image_id 거부
+    ghost = await client.post(
+        "/api/chat/messages",
+        json={
+            "to_user_id": b.id,
+            "body": "",
+            "client_msg_id": "cid-img00004",
+            "image_id": "0" * 32 + ".png",
+        },
+    )
+    assert ghost.status_code == 422

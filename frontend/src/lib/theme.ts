@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 /** 전역 앱 테마 — 디자인 토큰(data-theme)과 게임 보드가 함께 따른다 */
-export type AppTheme = "note" | "candy" | "lego" | "cat";
+export type AppTheme = "note" | "candy" | "lego" | "cat" | "excel";
 
 export const APP_THEMES: {
   key: AppTheme;
@@ -35,13 +35,19 @@ export const APP_THEMES: {
     swatch: "#FFEDD6",
     desc: "헤헤 웃는 크림 냥이 + 몰랑 발도장",
   },
+  {
+    key: "excel",
+    label: "오피스",
+    swatch: "#E2EFDA",
+    desc: "스프레드시트 위장 — 채팅이 문서처럼 보여요",
+  },
 ];
 
 const STORAGE_KEY = "app.theme";
 const EVENT = "app-theme-change";
 
 function isTheme(v: unknown): v is AppTheme {
-  return v === "note" || v === "candy" || v === "lego" || v === "cat";
+  return v === "note" || v === "candy" || v === "lego" || v === "cat" || v === "excel";
 }
 
 export function getAppTheme(): AppTheme {

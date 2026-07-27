@@ -49,6 +49,8 @@ class ChatMessage(Base, PkMixin):
     body: Mapped[str] = mapped_column(Text)
     # {item_id, item_type, en_text, ko_text} — 전송 시점 서버 스냅샷
     item_ref: Mapped[dict | None] = mapped_column(JsonDict, nullable=True)
+    # 업로드 이미지 파일명 (uuid.ext) — 참여자만 GET /api/chat/uploads/{name} 로 열람
+    image_path: Mapped[str | None] = mapped_column(Text)
     client_msg_id: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

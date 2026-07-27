@@ -11,6 +11,7 @@ export interface ChatMessage {
     en_text: string;
     ko_text: string;
   } | null;
+  image_url: string | null;
   client_msg_id: string;
   created_at: string | null;
 }
@@ -61,6 +62,7 @@ export const chatApi = {
     body: string;
     client_msg_id: string;
     item_id?: number;
+    image_id?: string;
   }) =>
     request<ChatMessage & { created: boolean }>("/api/chat/messages", {
       method: "POST",
@@ -70,6 +72,20 @@ export const chatApi = {
     request<{ ok: boolean }>(`/api/chat/with/${userId}/read`, {
       method: "POST",
     }),
+  uploadImage: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/chat/uploads", {
+      method: "POST",
+      credentials: "same-origin",
+      body: form,
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null);
+      throw new Error(detail?.detail ?? "upload failed");
+    }
+    return (await res.json()) as { image_id: string };
+  },
   shareableItems: (q: string) =>
     request<{ items: ShareableItem[] }>(
       `/api/chat/shareable-items?q=${encodeURIComponent(q)}`,

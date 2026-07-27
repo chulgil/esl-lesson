@@ -24,6 +24,11 @@ services:
     container_name: englesson-api
     restart: unless-stopped
     env_file: .env.api
+    environment:
+      CHAT_UPLOAD_DIR: /data/chat-uploads
+    volumes:
+      # 채팅 이미지 — 컨테이너 재생성에도 유지 (docs/specs/chat.md 이미지 전송)
+      - ./data/chat-uploads:/data/chat-uploads
     networks: [traefiknet, postgresql_internal]
     labels:
       traefik.enable: "true"

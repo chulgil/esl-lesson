@@ -51,7 +51,9 @@ function TetrisInner() {
   const [missSignal, setMissSignal] = useState(0);
   const [itemToast, setItemToast] = useState<string | null>(null);
   const [garbageTip, setGarbageTip] = useState(false);
-  const boardTheme = useAppTheme(); // 전역 테마(설정)를 게임 보드가 따름
+  const appTheme = useAppTheme(); // 전역 테마(설정)를 게임 보드가 따름
+  // 오피스(위장) 테마는 게임 보드 스킨이 없어 노트 보드로 폴백
+  const boardTheme = appTheme === "excel" ? "note" : appTheme;
   const [profile, setProfile] = useState<GameProfile | null>(null);
   const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
   const socketRef = useRef<GameSocket | null>(null);

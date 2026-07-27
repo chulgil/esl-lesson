@@ -1,0 +1,455 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { ImageAttachButton } from "@/components/chat/ImageAttachButton";
+import { KaomojiPicker } from "@/components/chat/KaomojiPicker";
+import { useChatRoom } from "@/components/chat/useChatRoom";
+import { WordSharePicker } from "@/components/chat/WordSharePicker";
+import { fetchMe } from "@/lib/api";
+import { chatApi, type ChatConversation } from "@/lib/chat-api";
+import { onChatEvent, setActiveChatRoom } from "@/lib/chat-signals";
+import { useAppTheme } from "@/lib/theme";
+
+/** 플로팅 채팅 위젯 — excelkospi 우하단 버튼 컨셉 (docs/specs/chat.md 위장 테마).
+ *  어느 화면에서든 작은 팝업으로 대화. 페이지(/chat)는 푸시 딥링크·모바일용으로 유지.
+ *  Esc 한 번 = 즉시 닫기 (빠른 숨김). 오피스 테마 = "메모" 패널로 위장. */
+export function ChatWidget() {
+  const pathname = usePathname();
+  const theme = useAppTheme();
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [room, setRoom] = useState<{ userId: number; name: string } | null>(
+    null,
+  );
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    fetchMe().then((me) => setLoggedIn(Boolean(me)));
+  }, []);
+
+  // 안읽음 배지 — WS 이벤트 즉시 + 60초 폴링 (서버 TTL 캐시)
+  useEffect(() => {
+    if (!loggedIn) return;
+    const load = () =>
+      chatApi
+        .unreadTotal()
+        .then((res) => setUnread(res.total))
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 60000);
+    const off = onChatEvent((msg) => {
+      if (msg.t === "chat.message" || msg.t === "chat.read") load();
+    });
+    return () => {
+      clearInterval(timer);
+      off();
+    };
+  }, [loggedIn]);
+
+  // Esc 한 번으로 즉시 닫기 (빠른 숨김)
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  // 열린 대화방 추적 — 전역 토스트·OS 알림 중복 억제
+  useEffect(() => {
+    setActiveChatRoom(open && room ? room.userId : null);
+    return () => setActiveChatRoom(null);
+  }, [open, room]);
+
+  // 채팅 전체 페이지·관리자·로그인 화면에서는 숨김
+  if (
+    !loggedIn ||
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/admin") ||
+    pathname === "/login"
+  ) {
+    return null;
+  }
+
+  const excel = theme === "excel";
+
+  return (
+    <>
+      {open && (
+        <div
+          className={`fixed right-4 bottom-20 z-50 flex h-[30rem] w-[22.5rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg shadow-2xl ${
+            excel
+              ? "border border-[#c9cfd6] bg-white font-sans text-[13px] text-[#24292f]"
+              : "border-2 border-ink/15 bg-paper"
+          }`}
+          style={{ maxHeight: "min(30rem, calc(100dvh - 7rem))" }}
+        >
+          {/* 헤더 */}
+          <div
+            className={
+              excel
+                ? "flex items-center gap-2 bg-[#185c37] px-3 py-1.5 text-xs text-white"
+                : "flex items-center gap-2 border-b-2 border-ink/10 bg-white px-3 py-2"
+            }
+          >
+            {room ? (
+              <button
+                type="button"
+                onClick={() => setRoom(null)}
+                aria-label="목록으로"
+                className="font-bold opacity-80 hover:opacity-100"
+              >
+                ‹
+              </button>
+            ) : null}
+            <b className={excel ? "" : "font-hand text-base"}>
+              {excel
+                ? room
+                  ? `${room.name}_공유.xlsx`
+                  : "공유 메모"
+                : room
+                  ? `${room.name} 와의 교환 노트`
+                  : "교환 노트"}
+            </b>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="닫기 (Esc)"
+              className="ml-auto opacity-60 hover:opacity-100"
+            >
+              ×
+            </button>
+          </div>
+
+          {room ? (
+            <WidgetRoom userId={room.userId} excel={excel} />
+          ) : (
+            <WidgetList
+              excel={excel}
+              onPick={(c) => setRoom({ userId: c.user_id, name: c.name })}
+            />
+          )}
+        </div>
+      )}
+
+      {/* 런처 — 오피스: 메모 pill / 그 외: 연필 노트 원형 */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={`대화 열기${unread > 0 ? ` — 새 글 ${unread}개` : ""}`}
+        className={
+          excel
+            ? "fixed right-4 bottom-4 z-50 flex min-h-10 items-center gap-1.5 rounded-full bg-[#185c37] px-4 font-sans text-xs font-bold text-white shadow-lg hover:bg-[#217346]"
+            : "fixed right-4 bottom-4 z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5"
+        }
+      >
+        {excel ? <span>메모</span> : <PencilNoteIcon />}
+        {unread > 0 && (
+          <span
+            className={
+              excel
+                ? "rounded-full bg-white/25 px-1.5 text-[10px]"
+                : "absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brick-red px-1 text-[10px] font-bold text-white"
+            }
+          >
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
+      </button>
+    </>
+  );
+}
+
+/* --- 목록 뷰 ---------------------------------------------------------------- */
+
+function WidgetList({
+  excel,
+  onPick,
+}: {
+  excel: boolean;
+  onPick: (c: ChatConversation) => void;
+}) {
+  const [items, setItems] = useState<ChatConversation[] | null>(null);
+
+  useEffect(() => {
+    const load = () =>
+      chatApi
+        .conversations()
+        .then((res) => setItems(res.items))
+        .catch(() => setItems([]));
+    load();
+    return onChatEvent((msg) => {
+      if (msg.t === "chat.message" || msg.t === "presence") load();
+    });
+  }, []);
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {items?.map((c) => (
+        <button
+          key={c.conversation_id}
+          type="button"
+          onClick={() => onPick(c)}
+          className={`flex w-full items-center gap-2 px-3 py-2 text-left ${
+            excel
+              ? "border-b border-[#e4e8ec] hover:bg-[#f6f8f9]"
+              : "border-b border-ink/5 hover:bg-white"
+          }`}
+        >
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${
+              c.online
+                ? excel
+                  ? "bg-[#217346]"
+                  : "bg-brick-green"
+                : excel
+                  ? "bg-[#ccc]"
+                  : "bg-ink/20"
+            }`}
+          />
+          <span className="min-w-0 flex-1">
+            <b className="block truncate text-sm">
+              {excel ? `${c.name}_공유.xlsx` : c.name}
+            </b>
+            <span
+              className={`block truncate text-xs ${excel ? "text-[#888]" : "opacity-50"}`}
+            >
+              {c.last_message ?? (excel ? "-" : "첫 줄을 적어보세요")}
+            </span>
+          </span>
+          {c.unread > 0 && (
+            <span
+              className={
+                excel
+                  ? "text-xs font-bold text-[#217346]"
+                  : "rounded-full bg-brick-red px-1.5 py-0.5 text-[10px] font-bold text-white"
+              }
+            >
+              {excel ? `+${c.unread}` : c.unread}
+            </span>
+          )}
+        </button>
+      ))}
+      {items && items.length === 0 && (
+        <p
+          className={`px-4 py-8 text-center text-xs ${excel ? "text-[#999]" : "opacity-50"}`}
+        >
+          {excel
+            ? "공유된 문서가 없습니다"
+            : "친구 화면에서 첫 노트를 시작해보세요"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* --- 대화 뷰 (useChatRoom 재사용) -------------------------------------------- */
+
+function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
+  const p = useChatRoom(userId);
+
+  return (
+    <>
+      <div
+        ref={p.listRef}
+        onScroll={p.onScroll}
+        className={`flex-1 overflow-y-auto px-3 py-1.5 ${excel ? "" : "bg-white/60"}`}
+      >
+        {p.messages.map((m) => {
+          const mine = m.sender_id === p.myId;
+          return (
+            <div
+              key={m.id}
+              className={`border-b py-1 text-[13px] leading-relaxed ${
+                excel
+                  ? `border-[#f0f2f4] ${mine ? "text-[#217346]" : ""}`
+                  : `border-ink/5 ${mine ? "text-brick-blue" : "text-ink"}`
+              }`}
+            >
+              {m.item_ref && (
+                <span
+                  className={`mr-1.5 rounded px-1 text-xs ${
+                    excel ? "bg-[#e2efda]" : "bg-highlight/50"
+                  }`}
+                >
+                  <b>{m.item_ref.en_text}</b> {m.item_ref.ko_text}
+                </span>
+              )}
+              {m.image_url && (
+                <a href={m.image_url} target="_blank" rel="noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={m.image_url}
+                    alt="첨부"
+                    className="my-1 block max-h-28 rounded border border-ink/10"
+                  />
+                </a>
+              )}
+              <span className="break-words whitespace-pre-wrap">{m.body}</span>
+              <span
+                className={`ml-1.5 text-[10px] ${excel ? "text-[#aaa]" : "opacity-35"}`}
+              >
+                {mine ? "나" : p.peerName}
+                {mine && m.id > p.otherRead && (
+                  <span
+                    aria-label="상대가 아직 읽지 않음"
+                    className={`ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${
+                      excel ? "bg-[#bf8f00]" : "bg-brick-yellow"
+                    }`}
+                  />
+                )}
+              </span>
+            </div>
+          );
+        })}
+        {p.pending.map((entry) => (
+          <div
+            key={entry.client_msg_id}
+            className={`border-b py-1 text-[13px] opacity-60 ${
+              excel
+                ? "border-[#f0f2f4] text-[#217346]"
+                : "border-ink/5 text-brick-blue"
+            }`}
+          >
+            {entry.body || (entry.imageUrl ? "[사진]" : "")}
+            {entry.failed ? (
+              <button
+                type="button"
+                onClick={() => p.onRetry(entry)}
+                className="ml-1.5 text-[10px] font-bold text-brick-red"
+              >
+                재시도
+              </button>
+            ) : (
+              <span className="ml-1.5 text-[10px]">...</span>
+            )}
+          </div>
+        ))}
+        {p.typing && (
+          <p
+            className={`py-1 text-[11px] ${excel ? "text-[#217346]" : "opacity-45"}`}
+          >
+            {excel
+              ? "공동 작성자가 편집 중"
+              : `${p.peerName} 이(가) 적고 있어요`}
+            <span className="inline-block animate-pulse">...</span>
+          </p>
+        )}
+        {p.messages.length === 0 && p.pending.length === 0 && (
+          <p
+            className={`py-8 text-center text-xs ${excel ? "text-[#999]" : "opacity-40"}`}
+          >
+            {excel ? "기록이 없습니다" : "첫 줄을 적어보세요 (´｡• ᵕ •｡`)"}
+          </p>
+        )}
+      </div>
+
+      {p.error && (
+        <p className="px-3 py-1 text-[11px] text-brick-red">{p.error}</p>
+      )}
+      {p.attachedImage && (
+        <div
+          className={`flex items-center gap-2 px-3 py-1 text-xs ${
+            excel ? "bg-[#e2efda]" : "bg-highlight/30"
+          }`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={p.attachedImage.url}
+            alt=""
+            className="h-7 w-7 rounded object-cover"
+          />
+          {p.attachedImage.uploading ? "업로드 중..." : "준비 완료"}
+          <button
+            type="button"
+            onClick={p.onDetachImage}
+            aria-label="이미지 첨부 해제"
+            className="ml-auto opacity-60"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {p.attachedItem && (
+        <div
+          className={`flex items-center gap-2 px-3 py-1 text-xs ${
+            excel ? "bg-[#e2efda]" : "bg-highlight/30"
+          }`}
+        >
+          <b>{p.attachedItem.en_text}</b>
+          <button
+            type="button"
+            onClick={p.onDetachItem}
+            aria-label="첨부 해제"
+            className="ml-auto opacity-60"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      <div
+        className={`flex items-center gap-1 border-t p-1.5 ${
+          excel ? "border-[#d8dde3]" : "border-ink/10 bg-white"
+        }`}
+      >
+        <WordSharePicker onPick={p.onAttachItem} />
+        <ImageAttachButton
+          onPick={p.onAttachImageFile}
+          variant={excel ? "excel" : "note"}
+        />
+        <KaomojiPicker onPick={p.onPickKaomoji} />
+        <input
+          value={p.input}
+          onChange={(e) => p.onInputChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) p.onSend();
+          }}
+          placeholder={excel ? "내용 입력" : "한 줄 적기..."}
+          maxLength={2000}
+          className={`min-h-9 min-w-0 flex-1 px-2 text-[13px] focus:outline-none ${
+            excel
+              ? "rounded-sm border border-[#c9cfd6] focus:border-[#217346]"
+              : "rounded-md border-2 border-ink/20 focus:border-brick-blue"
+          }`}
+        />
+        <button
+          type="button"
+          onClick={p.onSend}
+          disabled={
+            (!p.input.trim() && !p.attachedItem && !p.attachedImage) ||
+            Boolean(p.attachedImage?.uploading)
+          }
+          className={`min-h-9 px-2.5 text-xs font-bold disabled:opacity-40 ${
+            excel
+              ? "rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] hover:bg-[#e2efda]"
+              : "rounded-md bg-brick-blue text-brick-label hover:bg-brick-blue/85"
+          }`}
+        >
+          {excel ? "입력" : "적기"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function PencilNoteIcon() {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}

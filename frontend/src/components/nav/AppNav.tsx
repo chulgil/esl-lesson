@@ -103,10 +103,7 @@ export function AppNav() {
         </div>
       </header>
 
-      {/* 모바일: 채팅 진입점은 우상단 플로팅 (하단 탭 6개 유지 — docs/specs/chat.md) */}
-      <ChatNavButton floating />
-
-      {/* 모바일: 하단 탭바 고정 */}
+      {/* 모바일: 하단 탭바 고정 (채팅 진입은 우하단 ChatWidget 런처) */}
       <nav
         aria-label="주요 메뉴"
         className="fixed inset-x-0 bottom-0 z-40 flex border-t-2 border-ink/15 bg-white sm:hidden"

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Gaegu, IBM_Plex_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { AppNav } from "@/components/nav/AppNav";
+import { ChatWidget } from "@/components/chat/ChatWidget";
 import { InviteToaster } from "@/components/game/InviteToaster";
 import { HenyangPeek } from "@/components/theme/HenyangPeek";
 
@@ -60,6 +61,7 @@ export default function RootLayout({
         />
         <AppNav />
         <InviteToaster />
+        <ChatWidget />
         <HenyangPeek />
         {children}
       </body>

@@ -454,3 +454,34 @@ html[data-theme="candy"] .brick-studs::before {
 .tile-bounce {
   animation: tile-bounce 0.55s ease both;
 }
+
+/* 전역 테마: 오피스 — 스프레드시트 위장 (docs/specs/chat.md 위장 테마)
+ * 회사 화면에서 힐끗 봐도 업무 문서로 보이는 무채색+오피스 그린 토큰 */
+html[data-theme="excel"] {
+  --color-paper: #ffffff;
+  --color-paper-line: #d8dde3;
+  --color-margin-red: #d8dde3;
+  --color-ink: #24292f;
+  --color-brick-red: #c0504d;
+  --color-brick-red-shadow: #9e3d3b;
+  --color-brick-yellow: #bf8f00;
+  --color-brick-yellow-shadow: #8f6c02;
+  --color-brick-blue: #2e75b6;
+  --color-brick-blue-shadow: #235d92;
+  --color-brick-green: #217346;
+  --color-brick-green-shadow: #1a5c38;
+  --color-highlight: #e2efda;
+}
+
+/* 오피스: 줄노트 대신 셀 격자 배경 */
+html[data-theme="excel"] .notebook-lines {
+  background-image:
+    linear-gradient(to right, rgba(120, 130, 140, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(120, 130, 140, 0.12) 1px, transparent 1px);
+  background-size: 96px 26px;
+}
+
+/* 오피스: 손글씨 폰트 억제 — 위장 문서는 시스템 폰트가 자연스럽다 */
+html[data-theme="excel"] .font-hand {
+  font-family: var(--font-sans, ui-sans-serif, system-ui), sans-serif;
+}

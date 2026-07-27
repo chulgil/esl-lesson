@@ -10,6 +10,16 @@ export const CHAT_EVENT = "esl-chat";
 
 let socket: GameSocket | null = null;
 let lastTypingSent = 0;
+// 지금 보고 있는 대화 상대 (페이지든 위젯이든) — 토스트·OS 알림 중복 억제용
+let activeRoomUserId: number | null = null;
+
+export function setActiveChatRoom(userId: number | null): void {
+  activeRoomUserId = userId;
+}
+
+export function getActiveChatRoom(): number | null {
+  return activeRoomUserId;
+}
 
 export function setChatSocket(s: GameSocket | null): void {
   socket = s;

@@ -56,6 +56,7 @@ def message_dict(m: ChatMessage) -> dict:
         "sender_id": m.sender_id,
         "body": m.body,
         "item_ref": m.item_ref,
+        "image_url": f"/api/chat/uploads/{m.image_path}" if m.image_path else None,
         "client_msg_id": m.client_msg_id,
         "created_at": m.created_at.isoformat() if m.created_at else None,
     }
@@ -128,6 +129,7 @@ async def send_message(
     body: str,
     client_msg_id: str,
     item_id: int | None = None,
+    image_path: str | None = None,
 ) -> tuple[dict, bool]:
     """저장 + 캐시 갱신. 반환 (메시지 dict, 신규 여부). 멱등: 같은 client_msg_id 는 기존 행."""
     if to_user_id == sender.id:
@@ -135,7 +137,7 @@ async def send_message(
     body = body.strip()
     if len(body) > BODY_MAX:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "body_too_long")
-    if not body and item_id is None:
+    if not body and item_id is None and image_path is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty_message")
 
     # 친구 삭제 후에는 조회만 허용, 전송은 차단 (기록 보존 원칙)
@@ -164,6 +166,7 @@ async def send_message(
         sender_id=sender.id,
         body=body,
         item_ref=item_ref,
+        image_path=image_path,
         client_msg_id=client_msg_id,
     )
     db.add(msg)
@@ -298,7 +301,7 @@ async def list_conversations(db: AsyncSession, user: User) -> list[dict]:
         last = last_by_conv.get(conv.id)
         preview = None
         if last is not None:
-            preview = last.body if last.body else "[단어 카드]"
+            preview = last.body or ("[사진]" if last.image_path else "[단어 카드]")
         out.append(
             {
                 "conversation_id": conv.id,

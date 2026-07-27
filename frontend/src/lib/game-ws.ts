@@ -311,6 +311,7 @@ export type ChatServerMsg =
         en_text: string;
         ko_text: string;
       } | null;
+      image_url: string | null;
       client_msg_id: string;
       created_at: string | null;
     }
