@@ -41,7 +41,7 @@ chat_reads
 
 | 메서드/경로 | 역할 |
 |---|---|
-| GET `/api/chat/conversations` | 대화 목록: 상대(닉네임·아바타·`online`)·마지막 메시지 미리보기·`unread` 카운트. `last_message_at DESC` |
+| GET `/api/chat/conversations` | 대화 목록: 상대(닉네임·`online`)·마지막 메시지 미리보기·`unread` 카운트. `last_message_at DESC` |
 | GET `/api/chat/unread-total` | 안읽음 합계 (네비 배지). 인프로세스 캐시 |
 | GET `/api/chat/with/{user_id}/messages?before={id}&limit=50` | 히스토리 커서 페이지네이션 (id DESC → 클라에서 역순 렌더) |
 | POST `/api/chat/messages` | 전송 `{to_user_id, body, client_msg_id, item_ref?}` → 저장·캐시 갱신·WS 푸시·오프라인이면 웹푸시. 같은 `client_msg_id` 재전송은 기존 행 반환 (멱등) |

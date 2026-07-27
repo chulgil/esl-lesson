@@ -19,7 +19,6 @@ export interface ChatConversation {
   conversation_id: number;
   user_id: number;
   name: string;
-  avatar_url: string | null;
   online: boolean;
   last_message: string | null;
   last_message_at: string | null;
@@ -55,7 +54,7 @@ export const chatApi = {
       items: ChatMessage[];
       reads: Record<string, number>;
       online: boolean;
-      peer: { user_id: number; name: string; avatar_url: string | null } | null;
+      peer: { user_id: number; name: string } | null;
     }>(`/api/chat/with/${userId}/messages${before ? `?before=${before}` : ""}`),
   send: (body: {
     to_user_id: number;

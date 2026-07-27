@@ -365,3 +365,31 @@ async def test_conversations_list_shows_online_flag(client, db_session):
         assert convs[0]["online"] is True
     finally:
         invite_hub.detach(b.id, noop)
+
+
+# --- 실명 비노출 (2026-07-27 결정) ------------------------------------------------
+
+
+async def test_chat_responses_never_expose_real_name_or_google_avatar(client, db_session):
+    """채팅 응답 어디에도 구글 실명·프로필 사진이 인용되면 안 된다.
+
+    login_as 는 name=이메일로 만들므로, 실명을 뚜렷한 값으로 바꿔 검사한다.
+    """
+    a, b = await two_friends(client, db_session)
+    b.name = "REAL-NAME-홍길동"
+    b.avatar_url = "https://lh3.googleusercontent.com/real-photo"
+    a.name = "REAL-NAME-김철수"
+    await db_session.commit()
+
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "hi", "cid-real0001"))
+
+    for path in (
+        "/api/chat/conversations",
+        f"/api/chat/with/{b.id}/messages",
+        "/api/chat/unread-total",
+    ):
+        raw = (await client.get(path)).text
+        assert "REAL-NAME" not in raw, f"실명 노출: {path}"
+        assert "googleusercontent" not in raw, f"구글 아바타 노출: {path}"
+        assert "avatar_url" not in raw, f"아바타 필드 잔존: {path}"

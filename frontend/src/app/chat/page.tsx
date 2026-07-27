@@ -51,7 +51,7 @@ export default function ChatListPage() {
             className="flex items-center gap-3 rounded-lg border-2 border-ink/10 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-brick-blue/40"
           >
             <span className="relative">
-              <Avatar name={c.name} url={c.avatar_url} />
+              <Avatar name={c.name} />
               {/* 접속 점 — invite_hub 프레즌스 (스펙 5) */}
               <span
                 aria-label={c.online ? "접속 중" : "미접속"}
@@ -101,21 +101,25 @@ export default function ChatListPage() {
   );
 }
 
-function Avatar({ name, url }: { name: string; url: string | null }) {
-  if (url) {
-    return (
-      // 아바타는 구글 프로필 외부 URL — next/image 도메인 허용 목록 관리 대신 원본 사용
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={url}
-        alt=""
-        className="h-11 w-11 rounded-full border-2 border-ink/10 object-cover"
-      />
-    );
-  }
+/** 닉네임 이니셜 아바타 — 구글 프로필 사진은 실명 이니셜·사진이 포함되므로
+ *  채팅에서는 절대 사용하지 않는다 (2026-07-27 결정). 색상은 닉네임 해시로 고정. */
+const AVATAR_COLORS = [
+  "bg-brick-red/15 text-brick-red",
+  "bg-brick-blue/15 text-brick-blue",
+  "bg-brick-green/15 text-brick-green",
+  "bg-brick-yellow/30 text-ink",
+  "bg-highlight/50 text-ink",
+];
+
+function Avatar({ name }: { name: string }) {
+  let hash = 0;
+  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) % 997;
+  const color = AVATAR_COLORS[hash % AVATAR_COLORS.length];
   return (
-    <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-ink/10 bg-highlight/40 font-bold">
-      {name.slice(0, 1)}
+    <span
+      className={`flex h-11 w-11 items-center justify-center rounded-full border-2 border-ink/10 font-bold ${color}`}
+    >
+      {name.slice(0, 1) || "?"}
     </span>
   );
 }

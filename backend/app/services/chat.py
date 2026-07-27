@@ -303,8 +303,9 @@ async def list_conversations(db: AsyncSession, user: User) -> list[dict]:
             {
                 "conversation_id": conv.id,
                 "user_id": other.id,
+                # 실명·구글 아바타 금지 (2026-07-27 결정) — 닉네임만 노출,
+                # 아바타는 클라가 닉네임 이니셜로 생성
                 "name": other.nickname,
-                "avatar_url": other.avatar_url,
                 "online": invite_hub.online(other.id),
                 "last_message": preview,
                 "last_message_at": conv.last_message_at.isoformat()

@@ -50,11 +50,8 @@ async def messages(
     if conv is None:
         await chat.require_friend(db, user.id, other_id)
     other = await db.get(User, other_id)
-    peer = (
-        {"user_id": other.id, "name": other.nickname, "avatar_url": other.avatar_url}
-        if other is not None
-        else None
-    )
+    # 실명·구글 아바타 금지 (2026-07-27 결정) — 닉네임만
+    peer = {"user_id": other.id, "name": other.nickname} if other is not None else None
     if conv is None:
         return {"items": [], "reads": {}, "online": invite_hub.online(other_id), "peer": peer}
     items = await chat.get_messages(db, user.id, other_id, before=before, limit=limit)
