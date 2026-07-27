@@ -1,0 +1,113 @@
+# 스펙: 친구 1:1 채팅
+
+> 최종 수정: 2026-07-27 · 설계 승인: 2026-07-27 (사용자)
+
+수락된 친구끼리 1:1 대화. 기록은 무제한 보존, 읽음 표시·입력 중 표시·오프라인 웹푸시·학습 단어 공유 카드·카오모지 피커 포함. [study-spectate.md](study-spectate.md) 의 친구 관계와 프레즌스 인프라를 재사용한다.
+
+## 아키텍처 결정
+
+| 결정 | 근거 | 기각한 대안 |
+|---|---|---|
+| 기존 `/ws/game` 상시 연결에 chat 이벤트 추가 | `InviteToaster` 가 이미 로그인 시 전역 연결·재접속·프레즌스를 유지. 사용자당 소켓 1개 (2GB 서버) | 별도 `/ws/chat` — 소켓 2배 + 재접속 로직 중복 |
+| 전송 = REST POST, 수신·읽음·입력중 = WS 푸시 | HTTP 재시도 의미론이 명확해 유실/중복 처리가 깔끔 (`client_msg_id` 멱등). WS 끊김 중에도 전송 가능. 테스트 용이 | 전송도 WS — 전달 보장을 자체 ACK 프로토콜로 재발명해야 함 |
+| 인프로세스 캐시 (Redis 없음) | API 단일 인스턴스라 일관성 보장. 2GB 서버에 컨테이너 추가는 OOM 리스크 | Redis — 수평 확장 시점에 pub/sub 과 함께 도입 (이 스펙의 캐시 인터페이스 유지) |
+| 학습 카드 = 전송 시점 스냅샷(JSONB) | 원본 항목이 삭제·수정돼도 대화 기록 불변 ("기록은 남아야 한다") | item_id FK 참조 — 항목 삭제 시 기록 훼손 |
+
+## 데이터 모델
+
+```
+conversations
+  id, user_lo_id, user_hi_id   -- user_lo < user_hi 정규화, unique(lo,hi) → 쌍당 1행
+  last_message_at              -- 비정규화: 대화 목록 정렬에 조인 불필요
+  created_at
+
+chat_messages
+  id                           -- 커서 (BigInt PK, 시간순 단조)
+  conversation_id FK
+  sender_id FK
+  body Text                    -- 텍스트+카오모지. 2,000자 제한 (API 검증)
+  item_ref JSONB nullable      -- 학습 카드 스냅샷 {item_id, item_type, en_text, ko_text}
+  client_msg_id Text           -- 멱등키. unique(conversation_id, client_msg_id)
+  created_at
+
+chat_reads
+  conversation_id FK, user_id FK  -- unique(conversation_id, user_id)
+  last_read_message_id            -- 읽음 표시·안읽음 카운트의 단일 근거
+```
+
+인덱스: `chat_messages(conversation_id, id DESC)` — 커서 페이지네이션 전용.
+
+## API
+
+| 메서드/경로 | 역할 |
+|---|---|
+| GET `/api/chat/conversations` | 대화 목록: 상대(닉네임·아바타·`online`)·마지막 메시지 미리보기·`unread` 카운트. `last_message_at DESC` |
+| GET `/api/chat/unread-total` | 안읽음 합계 (네비 배지). 인프로세스 캐시 |
+| GET `/api/chat/with/{user_id}/messages?before={id}&limit=50` | 히스토리 커서 페이지네이션 (id DESC → 클라에서 역순 렌더) |
+| POST `/api/chat/messages` | 전송 `{to_user_id, body, client_msg_id, item_ref?}` → 저장·캐시 갱신·WS 푸시·오프라인이면 웹푸시. 같은 `client_msg_id` 재전송은 기존 행 반환 (멱등) |
+| POST `/api/chat/with/{user_id}/read` | 읽음 갱신 → 상대에게 WS `chat.read` 푸시 |
+
+- 상대가 **수락된 친구가 아니면 404** (존재 비노출). 친구 삭제 후에도 기존 대화 조회는 허용, **전송만 403** `not_friends` — 기록 보존 원칙.
+- 대화 행은 첫 전송 시 get-or-create (정규화된 쌍으로 upsert).
+
+## WS 이벤트 (기존 `/ws/game` 확장)
+
+| 방향 | 이벤트 | 내용 |
+|---|---|---|
+| 서버→클라 | `chat.message` | 새 메시지 (본문 전체) — 수신자에게 |
+| 서버→클라 | `chat.read` | `{conversation_id, user_id, last_read_message_id}` — 읽음 "1" 제거용 |
+| 서버→클라 | `chat.typing` | `{from_user_id}` — 입력 중 표시 (5초 자동 소멸, 저장 안 함) |
+| 서버→클라 | `presence` | `{user_id, online}` — 친구 접속 상태 실시간 갱신 |
+| 클라→서버 | `chat.typing` | `{to_user_id}` — 스로틀 3초 (클라) |
+
+- chat hub: `user_id → send 콜백` 레지스트리 (`invite_hub` 패턴). `game_ws` attach/detach 시 함께 등록·해제.
+- presence 브로드캐스트: attach/detach 시 **온라인인 친구에게만** 전송 (친구 수 소규모 전제).
+
+## 캐싱 (인프로세스 2계층)
+
+| 캐시 | 구조 | 무효화 |
+|---|---|---|
+| 대화별 최근 메시지 | `conversation_id → deque(maxlen=50)` | 전송 시 append. 콜드 스타트 시 DB 로드 후 채움 |
+| 사용자 안읽음 합계 | `user_id → (합계, 만료시각)` TTL 30초 | 전송·읽음 갱신 시 양쪽 사용자 무효화 |
+
+- 최신 50개 요청(before 없음)은 캐시 히트 시 DB 를 타지 않는다. `before` 커서 요청(과거 스크롤)은 항상 DB.
+- 클라이언트: 대화별 메시지 메모리 캐시(뒤로가기 즉시 복원), 낙관적 렌더(전송 즉시 표시 → 서버 확정 시 치환, 실패 시 재시도 버튼).
+
+## 알림 기획
+
+| 상황 | 동작 |
+|---|---|
+| 접속 중 + 다른 화면 | 인앱 토스트 (보낸 사람·미리보기 40자, 탭 → 대화방) + 네비 배지 갱신 |
+| 접속 중 + 해당 대화방 | 알림 없음. 메시지 추가 + 읽음 자동 갱신 |
+| 미접속 | 웹푸시 (기존 VAPID `send_to_user`) — "{닉네임}: {미리보기 50자}", 클릭 → `/chat/{userId}`. **같은 대화 5분 스로틀** (인프로세스 마지막 발송 시각) |
+
+## 프론트엔드
+
+- `/chat` — 대화 목록: 아바타·접속 점(초록)·마지막 메시지·상대 시각·안읽음 배지
+- `/chat/[userId]` — 대화방: 위로 무한스크롤, 내 메시지 우측·읽음 전 "1" 표시, 입력 중 표시, 하단 입력창 + 카오모지 피커 + 단어 공유("+" → 내 학습 단어 검색 → 카드 첨부)
+- `AppNav` "학습" 탭 매칭에 `/chat` 추가하지 않고 **채팅 전용 탭 추가는 하지 않는다** — 홈·친구 화면 진입점 + 전역 토스트로 충분 (탭 6개 초과 시 모바일 밀림). 진입점: 친구 목록(`/friends`) 각 행에 "메시지" 버튼, AppNav 우측에 안읽음 배지 달린 채팅 아이콘 링크
+- 전역 수신: `InviteToaster` 의 기존 소켓이 chat 이벤트도 수신 → `CustomEvent` 로 배지·토스트·대화방에 전파 (두 번째 소켓 금지)
+- 카오모지: `lib/kaomoji.ts` — 카테고리(기쁨·응원·슬픔·동물·인사) 40여 개 상수, 최근 사용 8개 localStorage
+
+## 에러·엣지
+
+- 메시지 2,000자 초과 422 · 빈 본문(공백만) 422 (item_ref 만 있으면 허용)
+- WS 끊김 중 수신분: 대화방 재진입·재연결 시 REST 최신 50개 재조회로 동기화
+- XSS: React 기본 이스케이프. 링크 자동화는 하지 않는다 (1차 범위 밖)
+- 자기 자신에게 전송 400
+
+## 테스트
+
+- 대화 정규화: A→B 와 B→A 가 같은 conversation 행
+- 멱등: 같은 client_msg_id 재전송 → 새 행 없음, 동일 응답
+- 커서: before 페이지네이션 경계 (중복·누락 없음)
+- 읽음: unread 카운트 정확성, read 갱신 후 0
+- 권한: 친구 아님 404, 친구 삭제 후 전송 403·조회 200
+- 캐시: 전송 직후 목록 조회에 신규 메시지 반영 (stale 금지 — 레드-그린 필수)
+- 푸시: 오프라인 상대에게만 발송, 5분 스로틀
+- item_ref: 스냅샷 저장·원본 삭제 후에도 조회 무결
+
+## 범위 밖 (후속)
+
+- 그룹 채팅 · 이미지 첨부 · 메시지 삭제/수정 · 링크 미리보기
+- 수평 확장 시 Redis pub/sub 전환 (캐시·허브 인터페이스는 그대로)
