@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PendingMessage } from "@/components/chat/skins/types";
 import { fetchMe } from "@/lib/api";
+import { prepareImageForUpload, UnsupportedImageError } from "@/lib/image-utils";
 import {
   chatApi,
   newClientMsgId,
@@ -141,17 +142,24 @@ export function useChatRoom(otherId: number) {
     if (el.scrollTop < 60 && hasMore) loadOlder();
   }, [hasMore, loadOlder]);
 
-  // 이미지 첨부 — 즉시 업로드, 전송 시 image_id 만 귀속
-  const onAttachImageFile = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError("이미지는 5MB 이하만 보낼 수 있어요");
+  // 이미지 첨부 — 큰 사진·미지원 형식은 자동 변환 후 업로드 (image-utils)
+  const onAttachImageFile = useCallback(async (file: File) => {
+    setError(null);
+    let prepared: File;
+    try {
+      prepared = await prepareImageForUpload(file);
+    } catch (e) {
+      setError(
+        e instanceof UnsupportedImageError
+          ? "이 형식은 보낼 수 없어요 — jpg·png·webp·gif 로 저장해서 다시 시도해주세요"
+          : "이미지를 준비하지 못했어요 — 다른 사진으로 시도해주세요",
+      );
       return;
     }
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(prepared);
     setAttachedImage({ url, imageId: null, uploading: true });
     chatApi
-      .uploadImage(file)
+      .uploadImage(prepared)
       .then((res) =>
         setAttachedImage((prev) =>
           prev && prev.url === url
@@ -159,10 +167,16 @@ export function useChatRoom(otherId: number) {
             : prev,
         ),
       )
-      .catch(() => {
+      .catch((e) => {
         setAttachedImage(null);
         URL.revokeObjectURL(url);
-        setError("이미지 업로드에 실패했어요 — 다시 시도해주세요");
+        const detail = e instanceof Error ? e.message : "";
+        setError(
+          {
+            unsupported_image_type: "이 형식은 보낼 수 없어요 — jpg·png·webp·gif 만 가능해요",
+            image_too_large: "이미지가 너무 커요 — 5MB 이하로 줄여주세요",
+          }[detail] ?? "이미지 업로드에 실패했어요 — 잠시 후 다시 시도해주세요",
+        );
       });
   }, []);
 

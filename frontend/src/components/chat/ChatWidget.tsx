@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ImageAttachButton } from "@/components/chat/ImageAttachButton";
+import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
 import { KaomojiPicker } from "@/components/chat/KaomojiPicker";
 import { useChatRoom } from "@/components/chat/useChatRoom";
 import { WordSharePicker } from "@/components/chat/WordSharePicker";
@@ -187,6 +188,13 @@ function WidgetList({
 
   return (
     <div className="flex-1 overflow-y-auto">
+      {/* 브라우저 알림 허용 진입점 — 수락하면 백그라운드·오프라인에도 알림 */}
+      <div className="px-3 pt-2 pb-1">
+        <NotifyEnableButton
+          label={excel ? "변경 알림 받기" : "새 글 알림 켜기"}
+          variant={excel ? "excel" : "note"}
+        />
+      </div>
       {items?.map((c) => (
         <button
           key={c.conversation_id}
