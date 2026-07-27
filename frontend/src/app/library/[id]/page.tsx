@@ -17,6 +17,11 @@ import {
 // 자막 선행 표시 — 발화보다 먼저 읽을 준비가 되도록 (기기별 설정, localStorage)
 const LEAD_STORAGE_KEY = "esl:library:subtitle-lead-ms";
 const DEFAULT_LEAD_MS = 1000;
+// 단어 탭 반복 구간 — 유튜브 시킹 오차(아래 playWord 주석)를 흡수하는 값
+const WORD_LEAD_MS = 200; // 시킹 직후 건너뛰는 구간 보정 → 단어 첫 음절부터 들린다
+const WORD_TAIL_MS = 400; // 마지막 음절 잘림 방지
+const WORD_MIN_MS = 1200; // 짧은 단어도 1초 이상 들리도록 보장
+
 const LEAD_OPTIONS = [
   { value: 0, label: "정시" },
   { value: 500, label: "0.5초 먼저" },
@@ -155,9 +160,13 @@ export default function LibraryDetailPage() {
   function playWord(word: AlignedWord) {
     const player = playerRef.current;
     if (!player) return;
-    const start = word.s / 1000;
-    // 단어가 짧아 최소 400ms 보장 — 즉시 정지·재시킹 반복 방지
-    const end = Math.max(word.e, word.s + 400) / 1000;
+    // 유튜브 seekTo 계측(2026-07-27): 착지 후 300~400ms 는 버퍼링이라 소리가 없고,
+    // 재생이 실제로 시작되는 지점은 목표보다 200ms 정도 뒤다. 단어 길이(300~500ms)
+    // 보다 이 오차가 커서 기존 [s, s+400ms] 창은 단어가 나오기 전에 끝나버렸다.
+    const start = Math.max(0, word.s - WORD_LEAD_MS) / 1000;
+    const end =
+      Math.max(word.e + WORD_TAIL_MS, word.s - WORD_LEAD_MS + WORD_MIN_MS) /
+      1000;
     rangeRef.current = { start, end };
     setLoop(true);
     loopRef.current = true;
