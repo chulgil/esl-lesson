@@ -69,6 +69,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** 원저작자 이용허락 증빙 — 파이프라인이 수행하는 이용 3종이 모두 허락돼야 등록된다 */
+export interface ContentPermission {
+  rights_holder: string;
+  rights_holder_contact?: string;
+  granted_at: string;
+  scope_transcript: boolean;
+  scope_translate: boolean;
+  scope_derive: boolean;
+  scope_commercial: boolean;
+  evidence: string;
+  note?: string;
+}
+
 export const adminApi = {
   dashboard: () =>
     request<{
@@ -92,8 +105,8 @@ export const adminApi = {
     title?: string;
     script_en?: string;
     script_ko?: string;
-    /** CC 게이트 오버라이드 — 권리자 허락 확보 시에만 */
-    allow_non_cc?: boolean;
+    /** 비 CC 영상은 원저작자 허락 증빙이 있어야 등록된다 (content-governance.md) */
+    permission?: ContentPermission;
   }) =>
     request<{ id: number }>("/api/admin/contents", {
       method: "POST",

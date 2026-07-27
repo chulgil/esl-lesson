@@ -23,8 +23,14 @@ _seed_counter = 0
 async def seed_items(
     db, count=5, item_type="word", status="approved", visibility="public", owner=None
 ):
-    """가시성 규칙 대응: 항목은 콘텐츠 출처(occurrence)가 있어야 노출된다."""
-    from app.models import Content, ContentSubscription, ItemOccurrence
+    """가시성 규칙 대응: 항목은 콘텐츠 출처(occurrence)가 있고 담겨(구독) 있어야 노출된다.
+
+    2026-07-27 이후 공용 콘텐츠도 담아야 노출되므로(content-governance.md), 시드
+    시점에 존재하는 사용자를 자동 구독시킨다. 시드 후 로그인하는 경우는 login()
+    이 기존 공용 콘텐츠를 담아 준다. 담기 게이트 자체를 검증하는 테스트는 이
+    헬퍼를 쓰지 않고 콘텐츠·구독을 직접 만든다.
+    """
+    from app.models import Content, ContentSubscription, ItemOccurrence, User
 
     global _seed_counter
     _seed_counter += 1
@@ -39,8 +45,12 @@ async def seed_items(
     )
     db.add(content)
     await db.flush()
-    if visibility == "private" and owner is not None:
-        db.add(ContentSubscription(content_id=content.id, user_id=owner))
+    if visibility == "private":
+        if owner is not None:
+            db.add(ContentSubscription(content_id=content.id, user_id=owner))
+    else:
+        for user_id in (await db.execute(select(User.id))).scalars().all():
+            db.add(ContentSubscription(content_id=content.id, user_id=user_id))
     items = []
     for i in range(count):
         item = LearningItem(
@@ -70,7 +80,30 @@ async def login(client, db, email="s@example.com"):
         get_settings(),
     )
     client.cookies.set(SESSION_COOKIE, create_session_token(user))
+    await subscribe_existing_public(db, user.id)
     return user
+
+
+async def subscribe_existing_public(db, user_id):
+    """이 사용자를 기존 공용 콘텐츠에 담아 둔다 (seed_items 뒤에 로그인하는 순서 대응)."""
+    from app.models import Content, ContentSubscription
+
+    existing = set(
+        (
+            await db.execute(
+                select(ContentSubscription.content_id).where(ContentSubscription.user_id == user_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    rows = (
+        (await db.execute(select(Content.id).where(Content.visibility == "public"))).scalars().all()
+    )
+    for content_id in rows:
+        if content_id not in existing:
+            db.add(ContentSubscription(content_id=content_id, user_id=user_id))
+    await db.commit()
 
 
 async def test_queue_introduces_new_cards_and_builds_questions(client, db_session):
@@ -242,9 +275,7 @@ async def test_question_includes_youtube_media_segment(client, db_session):
     )
     db_session.add(item)
     await db_session.flush()
-    db_session.add(
-        ItemOccurrence(item_id=item.id, content_id=content.id, segment_id=segment.id)
-    )
+    db_session.add(ItemOccurrence(item_id=item.id, content_id=content.id, segment_id=segment.id))
     await db_session.commit()
 
     queue = (await client.get("/api/study/queue")).json()
@@ -347,9 +378,7 @@ async def test_reviews_today_uses_kst_day_boundary(client, db_session):
 
     me = await login(client, db_session)
     items = await seed_items(db_session, count=1)
-    card = ReviewCard(
-        user_id=me.id, item_id=items[0].id, state="review", due_at=datetime.now(UTC)
-    )
+    card = ReviewCard(user_id=me.id, item_id=items[0].id, state="review", due_at=datetime.now(UTC))
     db_session.add(card)
     await db_session.flush()
 

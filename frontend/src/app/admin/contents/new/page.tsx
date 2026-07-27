@@ -3,9 +3,21 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Brick } from "@/components/brick/Brick";
-import { adminApi } from "@/lib/admin-api";
+import { adminApi, type ContentPermission } from "@/lib/admin-api";
 
 type Tab = "youtube" | "manual";
+
+const EMPTY_PERMISSION: ContentPermission = {
+  rights_holder: "",
+  rights_holder_contact: "",
+  granted_at: "",
+  scope_transcript: false,
+  scope_translate: false,
+  scope_derive: false,
+  scope_commercial: false,
+  evidence: "",
+  note: "",
+};
 
 export default function NewContentPage() {
   const router = useRouter();
@@ -16,10 +28,22 @@ export default function NewContentPage() {
   const [scriptKo, setScriptKo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // CC 게이트(cc_required) — 권리자 허락 확인 후에만 오버라이드 (저작권 검토 2026-07-14)
+  // CC 게이트(cc_required) — 비 CC 는 허락 증빙을 남겨야 등록된다
   const [ccBlocked, setCcBlocked] = useState(false);
+  const [permission, setPermission] =
+    useState<ContentPermission>(EMPTY_PERMISSION);
 
-  async function submit(allowNonCc = false) {
+  const scopeComplete =
+    permission.scope_transcript &&
+    permission.scope_translate &&
+    permission.scope_derive;
+  const permissionComplete =
+    permission.rights_holder.trim() !== "" &&
+    permission.granted_at !== "" &&
+    permission.evidence.trim() !== "" &&
+    scopeComplete;
+
+  async function submit(withPermission = false) {
     setError(null);
     setCcBlocked(false);
     setSubmitting(true);
@@ -28,7 +52,7 @@ export default function NewContentPage() {
         await adminApi.createContent({
           source: "youtube",
           url,
-          allow_non_cc: allowNonCc || undefined,
+          permission: withPermission ? permission : undefined,
         });
       } else {
         await adminApi.createContent({
@@ -44,11 +68,20 @@ export default function NewContentPage() {
       const message = e instanceof Error ? e.message : "등록 실패";
       if (message === "cc_required") {
         setCcBlocked(true);
+      } else if (message === "permission_scope_insufficient") {
+        setError("자막·번역·학습항목 세 가지 이용이 모두 허락되어야 등록돼요.");
       } else {
         setError(message);
       }
       setSubmitting(false);
     }
+  }
+
+  function setPerm<K extends keyof ContentPermission>(
+    key: K,
+    value: ContentPermission[K],
+  ) {
+    setPermission((prev) => ({ ...prev, [key]: value }));
   }
 
   return (
@@ -127,23 +160,105 @@ export default function NewContentPage() {
         {error && <p className="text-sm text-brick-red">{error}</p>}
 
         {ccBlocked && (
-          <div className="rounded-md border-2 border-brick-yellow bg-highlight/30 p-3 text-sm">
-            <p className="font-bold">
-              이 영상은 크리에이티브 커먼즈(CC) 라이선스가 아니거나 확인되지
-              않았어요.
-            </p>
-            <p className="mt-1 opacity-70">
-              공용 콘텐츠는 전 회원에게 공유되므로 CC 영상을 권장해요. 채널
-              소유자의 허락을 받았다면 아래 버튼으로 계속할 수 있어요.
-            </p>
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={() => submit(true)}
-              className="mt-2 min-h-11 rounded-md border-2 border-brick-red/50 bg-white px-4 text-sm font-bold text-brick-red transition hover:border-brick-red disabled:opacity-50"
-            >
-              허락을 확인했어요 — 그래도 공용 등록
-            </button>
+          <div className="flex flex-col gap-3 rounded-md border-2 border-brick-yellow bg-highlight/30 p-4 text-sm">
+            <div>
+              <p className="font-bold">
+                이 영상은 크리에이티브 커먼즈(CC) 라이선스가 아니거나 확인되지
+                않았어요.
+              </p>
+              <p className="mt-1 opacity-70">
+                원저작자 허락을 받았다면 아래에 증빙을 남기고 등록하세요. 분쟁이
+                생겼을 때 &ldquo;허락받았다&rdquo;를 입증할 유일한 기록이에요.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="권리자 (채널명·법인명) *">
+                <input
+                  value={permission.rights_holder}
+                  onChange={(e) => setPerm("rights_holder", e.target.value)}
+                  className="rounded border-2 border-ink/20 px-3 py-2"
+                />
+              </Field>
+              <Field label="연락처 (이메일 등)">
+                <input
+                  value={permission.rights_holder_contact ?? ""}
+                  onChange={(e) =>
+                    setPerm("rights_holder_contact", e.target.value)
+                  }
+                  className="rounded border-2 border-ink/20 px-3 py-2"
+                />
+              </Field>
+              <Field label="허락받은 날짜 *">
+                <input
+                  type="date"
+                  value={permission.granted_at}
+                  onChange={(e) => setPerm("granted_at", e.target.value)}
+                  className="rounded border-2 border-ink/20 px-3 py-2"
+                />
+              </Field>
+            </div>
+
+            <fieldset className="rounded border-2 border-ink/15 bg-white p-3">
+              <legend className="px-1 text-xs font-bold opacity-60">
+                허락 범위 — 앞의 세 가지가 모두 있어야 등록돼요
+              </legend>
+              <div className="flex flex-col gap-1.5">
+                <Check
+                  checked={permission.scope_transcript}
+                  onChange={(v) => setPerm("scope_transcript", v)}
+                  label="자막 복제·서버 저장"
+                />
+                <Check
+                  checked={permission.scope_translate}
+                  onChange={(v) => setPerm("scope_translate", v)}
+                  label="한국어 번역 작성·제공 (2차적저작물)"
+                />
+                <Check
+                  checked={permission.scope_derive}
+                  onChange={(v) => setPerm("scope_derive", v)}
+                  label="학습 항목 추출·게임 소재 변형"
+                />
+                <Check
+                  checked={permission.scope_commercial}
+                  onChange={(v) => setPerm("scope_commercial", v)}
+                  label="상업적 이용 (광고·유료) — 선택, 수익화 시 판별용"
+                />
+              </div>
+            </fieldset>
+
+            <Field label="증빙 위치 또는 요지 *">
+              <textarea
+                value={permission.evidence}
+                onChange={(e) => setPerm("evidence", e.target.value)}
+                rows={2}
+                placeholder="예: 2026-07-20 이메일 승낙 (보관: legal/permissions/채널명.eml)"
+                className="rounded border-2 border-ink/20 px-3 py-2"
+              />
+            </Field>
+            <Field label="특약 (기간·해지 조건 등)">
+              <input
+                value={permission.note ?? ""}
+                onChange={(e) => setPerm("note", e.target.value)}
+                className="rounded border-2 border-ink/20 px-3 py-2"
+              />
+            </Field>
+
+            <div>
+              <button
+                type="button"
+                disabled={submitting || !permissionComplete}
+                onClick={() => submit(true)}
+                className="min-h-11 rounded-md border-2 border-brick-green/60 bg-white px-4 text-sm font-bold text-brick-green transition hover:border-brick-green disabled:opacity-40"
+              >
+                허락 증빙 남기고 등록
+              </button>
+              {!permissionComplete && (
+                <p className="mt-1.5 text-xs opacity-60">
+                  권리자·날짜·증빙과 위 세 가지 범위를 채우면 등록할 수 있어요.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -154,6 +269,42 @@ export default function NewContentPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      {label}
+      {children}
+    </label>
+  );
+}
+
+function Check({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      {label}
+    </label>
   );
 }
 

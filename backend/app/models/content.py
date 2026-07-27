@@ -1,8 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
+    Date,
     ForeignKey,
     Integer,
     Text,
@@ -50,6 +52,34 @@ class Content(Base, PkMixin, TimestampMixin):
     )
     jobs: Mapped[list["ExtractionJob"]] = relationship(
         back_populates="content", cascade="all, delete-orphan"
+    )
+
+
+class ContentPermission(Base, PkMixin, CreatedAtMixin):
+    """원저작자 이용허락 증빙 (docs/specs/content-governance.md).
+
+    비 CC 영상은 이 행이 있어야 공용 등록된다. 체크박스 하나로 게이트를 뚫으면
+    분쟁 시 "허락받았다"를 입증할 데이터가 남지 않는다.
+    """
+
+    __tablename__ = "content_permissions"
+
+    content_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("contents.id", ondelete="CASCADE"), unique=True
+    )
+    rights_holder: Mapped[str] = mapped_column(Text)
+    rights_holder_contact: Mapped[str | None] = mapped_column(Text)
+    granted_at: Mapped[date] = mapped_column(Date)
+    # 파이프라인이 실제로 수행하는 이용 — 셋 다 허락돼야 등록 가능
+    scope_transcript: Mapped[bool] = mapped_column(Boolean)  # 자막 복제·서버 저장
+    scope_translate: Mapped[bool] = mapped_column(Boolean)  # 번역 (제22조 2차적저작물)
+    scope_derive: Mapped[bool] = mapped_column(Boolean)  # 학습 항목 추출·변형
+    # 등록을 막지는 않지만, 수익화 시 제외 대상 판별을 위해 지금 기록해 둔다
+    scope_commercial: Mapped[bool] = mapped_column(Boolean, default=False)
+    evidence: Mapped[str] = mapped_column(Text)  # 증빙 위치(메일 링크·보관 경로) 또는 요지
+    note: Mapped[str | None] = mapped_column(Text)  # 조건·기간·해지 등 특약
+    recorded_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
 
 

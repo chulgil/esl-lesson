@@ -101,7 +101,7 @@ function Dashboard({ me }: { me: Me }) {
           콘텐츠 라이브러리
         </Brick>
         <Brick color="yellow" href="/my">
-          내 콘텐츠 등록
+          내 콘텐츠
         </Brick>
         <Brick color="red" href="/game">
           게임

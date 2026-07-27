@@ -3,6 +3,7 @@
 from sqlalchemy import select
 
 from app.models import Content, ItemOccurrence, LearningItem, TranscriptSegment
+from tests.test_content_governance import PERMISSION
 
 
 async def test_admin_routes_require_admin(client, db_session):
@@ -74,7 +75,7 @@ async def test_create_youtube_content_validates_and_dedups(admin_client, db_sess
 
 
 async def test_public_promotion_requires_cc_license(admin_client, db_session):
-    """공용 승격 CC 게이트 — CC 아니면(미확인 포함) 409, allow_non_cc 로만 우회."""
+    """공용 승격 CC 게이트 — CC 아니면(미확인 포함) 409, 허락 증빙으로만 우회."""
     from unittest.mock import AsyncMock, patch
 
     import app.api.admin_contents as admin_mod
@@ -89,13 +90,13 @@ async def test_public_promotion_requires_cc_license(admin_client, db_session):
         assert blocked.status_code == 409
         assert blocked.json()["detail"] == "cc_required"
 
-        # 관리자 명시 오버라이드(권리자 허락 확보 시) → 등록 + 라이선스 저장
+        # 원저작자 허락 증빙 첨부 시 → 등록 + 라이선스 저장
         forced = await admin_client.post(
             "/api/admin/contents",
             json={
                 "source": "youtube",
                 "url": "https://youtu.be/aaaaaaaaaa1",
-                "allow_non_cc": True,
+                "permission": PERMISSION,
             },
         )
         assert forced.status_code == 202

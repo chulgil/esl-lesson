@@ -1,7 +1,7 @@
-"""개인 콘텐츠 API — 구독 구조 (docs/specs/content-pipeline.md 콘텐츠 가시성).
+"""내 콘텐츠 API — 담기(구독) 구조 (docs/specs/content-governance.md).
 
-같은 유튜브 영상은 콘텐츠 1행을 공유하고, 사용자별로 content_subscriptions 로 연결한다.
-이미 추출된 영상을 등록하면 재추출 없이 즉시 구독된다 (AI 비용 0).
+콘텐츠 등록은 관리자 전용이다. 사용자는 라이브러리의 공용 콘텐츠를 담아서
+학습하고, 담은 것만 학습 큐·게임에 편입된다.
 """
 
 from datetime import UTC, datetime
@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.study import kst_day_start
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import (
@@ -22,22 +21,16 @@ from app.models import (
     ReviewCard,
     User,
 )
-from app.models.user import ROLE_ADMIN
 from app.services.content_service import (
-    ContentCreate,
     content_detail,
     content_summary,
-    create_content,
     delete_content_row,
     retry_content_row,
 )
 from app.services.visibility import subscribed_content_ids
-from app.services.youtube import parse_video_id
 from app.workers.queue import enqueue
 
 router = APIRouter(prefix="/my", tags=["my"])
-
-DAILY_PRIVATE_LIMIT = 10  # 신규 생성(=AI 추출 비용)만 카운트. 기존 콘텐츠 구독은 무제한.
 
 
 async def get_subscribed_content(db: AsyncSession, content_id: int, user: User) -> Content:
@@ -71,49 +64,19 @@ async def subscribe(db: AsyncSession, content_id: int, user_id: int) -> None:
         await db.commit()
 
 
-async def _check_daily_limit(db: AsyncSession, user: User) -> None:
-    if user.role == ROLE_ADMIN:
-        return
-    day_start = kst_day_start(datetime.now(UTC))
-    today_created = (
-        await db.execute(
-            select(func.count(Content.id)).where(
-                Content.created_by == user.id,
-                Content.visibility == "private",
-                Content.created_at >= day_start,
-            )
-        )
-    ).scalar_one()
-    if today_created >= DAILY_PRIVATE_LIMIT:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            f"daily limit reached ({DAILY_PRIVATE_LIMIT}/day)",
-        )
-
-
-@router.post("/contents", status_code=status.HTTP_202_ACCEPTED)
-async def create_my_content(
-    body: ContentCreate,
+@router.post("/contents/{content_id}/subscribe", status_code=status.HTTP_202_ACCEPTED)
+async def subscribe_content(
+    content_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
-    # 동일 영상은 기존 콘텐츠에 구독으로 연결 — 재추출 없이 즉시 사용 (한도 미차감)
-    if body.source == "youtube":
-        video_id = parse_video_id(body.url or "")
-        if video_id is None:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid youtube url")
-        existing = (
-            await db.execute(select(Content).where(Content.youtube_video_id == video_id))
-        ).scalar_one_or_none()
-        if existing is not None:
-            await subscribe(db, existing.id, user.id)
-            return {"id": existing.id, "status": existing.status, "reused": True}
-
-    await _check_daily_limit(db, user)
-    content = await create_content(db, body, user.id, visibility="private")
+    """담기 — 라이브러리의 공용 콘텐츠를 내 학습에 편입 (멱등)."""
+    content = await db.get(Content, content_id)
+    # 준비 안 된/개인 콘텐츠는 담을 수 없다. 존재 여부도 흘리지 않도록 동일 404
+    if content is None or content.visibility != "public" or content.status != "ready":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
     await subscribe(db, content.id, user.id)
-    enqueue(content.id)
-    return {"id": content.id, "status": content.status, "reused": False}
+    return {"id": content.id, "subscribed": True}
 
 
 @router.get("/contents")
@@ -163,6 +126,10 @@ async def retry_my_content(
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     content = await get_subscribed_content(db, content_id, user)
+    # 공용 콘텐츠 재추출은 관리자만 — 담기가 열리면서 사용자가 관리자 콘텐츠의
+    # AI 재추출 비용을 트리거할 수 있게 되는 구멍을 막는다 (content-governance.md)
+    if content.visibility != "private":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "admin only")
     retry_content_row(content)
     await db.commit()
     enqueue(content_id)

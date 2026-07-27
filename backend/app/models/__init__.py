@@ -2,7 +2,13 @@
 
 from app.models.base import Base
 from app.models.card import ReviewCard, ReviewLog
-from app.models.content import Content, ContentSubscription, ExtractionJob, TranscriptSegment
+from app.models.content import (
+    Content,
+    ContentPermission,
+    ContentSubscription,
+    ExtractionJob,
+    TranscriptSegment,
+)
 from app.models.friend import Friendship
 from app.models.game import (
     DailyPuzzlePlay,
@@ -23,6 +29,7 @@ __all__ = [
     "DailyPuzzlePlay",
     "DictationRace",
     "Content",
+    "ContentPermission",
     "ContentSubscription",
     "ExtractionJob",
     "Friendship",

@@ -2,16 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Brick } from "@/components/brick/Brick";
 import { StatusBadge } from "@/components/content/StatusBadge";
 import type { ContentSummary } from "@/lib/admin-api";
 import { myApi } from "@/lib/my-api";
 
-type Tab = "youtube" | "manual";
-
+/** 내 콘텐츠 — 라이브러리에서 담은 것만 모아 보는 화면.
+ *  등록은 관리자 전용이다 (docs/specs/content-governance.md). */
 export default function MyContentsPage() {
   const [contents, setContents] = useState<ContentSummary[]>([]);
-  const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -34,25 +32,17 @@ export default function MyContentsPage() {
           <span className="hl">내 콘텐츠</span>
         </h1>
         <span className="text-xs opacity-60">
-          나만 보는 개인 학습 재료 (하루 10개)
+          라이브러리에서 담은 학습 재료
         </span>
-        <div className="ml-auto">
-          <Brick color="red" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "닫기" : "+ 콘텐츠 등록"}
-          </Brick>
-        </div>
+        <Link
+          href="/library"
+          className="ml-auto flex min-h-11 items-center rounded-md border-2 border-brick-blue/50 bg-white px-4 text-sm font-bold text-brick-blue transition hover:-translate-y-0.5 hover:border-brick-blue"
+        >
+          라이브러리에서 담기
+        </Link>
       </header>
 
       {error && <p className="mb-4 text-sm text-brick-red">{error}</p>}
-
-      {showForm && (
-        <RegisterForm
-          onDone={() => {
-            setShowForm(false);
-            load();
-          }}
-        />
-      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {contents.map((c, i) => (
@@ -82,135 +72,13 @@ export default function MyContentsPage() {
             )}
           </Link>
         ))}
-        {contents.length === 0 && !showForm && (
+        {contents.length === 0 && (
           <p className="text-sm opacity-50">
-            좋아하는 유튜브 영상을 등록하면 나만의 영어 교재가 돼요.
+            아직 담은 콘텐츠가 없어요. 라이브러리에서 마음에 드는 영상을 담으면
+            오늘의 학습에 들어와요.
           </p>
         )}
       </div>
     </main>
-  );
-}
-
-function RegisterForm({ onDone }: { onDone: () => void }) {
-  const [tab, setTab] = useState<Tab>("youtube");
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [scriptEn, setScriptEn] = useState("");
-  const [scriptKo, setScriptKo] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function submit() {
-    setError(null);
-    setSubmitting(true);
-    try {
-      if (tab === "youtube") {
-        await myApi.create({ source: "youtube", url });
-      } else {
-        await myApi.create({
-          source: "manual",
-          title,
-          script_en: scriptEn,
-          script_ko: scriptKo || undefined,
-        });
-      }
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "등록 실패");
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="mb-8 max-w-2xl rounded-lg border-2 border-ink/10 bg-white p-5">
-      <div className="mb-4 flex gap-2">
-        <TabButton
-          label="유튜브 URL"
-          active={tab === "youtube"}
-          onClick={() => setTab("youtube")}
-        />
-        <TabButton
-          label="수기 입력"
-          active={tab === "manual"}
-          onClick={() => setTab("manual")}
-        />
-      </div>
-
-      {tab === "youtube" ? (
-        <label className="flex flex-col gap-1 text-sm">
-          유튜브 URL
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://youtu.be/..."
-            className="rounded border-2 border-ink/20 px-3 py-2"
-          />
-          <span className="text-xs opacity-60">
-            제목·스크립트·학습 항목이 자동으로 만들어져요 (보통 1~2분). 영어
-            자막이 있는 영상만 등록할 수 있어요.
-          </span>
-        </label>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            제목 (필수)
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="rounded border-2 border-ink/20 px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            영어 스크립트 (필수)
-            <textarea
-              value={scriptEn}
-              onChange={(e) => setScriptEn(e.target.value)}
-              rows={6}
-              className="rounded border-2 border-ink/20 px-3 py-2 font-mono text-xs"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            한글 스크립트 (비우면 AI 번역)
-            <textarea
-              value={scriptKo}
-              onChange={(e) => setScriptKo(e.target.value)}
-              rows={6}
-              className="rounded border-2 border-ink/20 px-3 py-2 font-mono text-xs"
-            />
-          </label>
-        </div>
-      )}
-
-      {error && <p className="mt-3 text-sm text-brick-red">{error}</p>}
-      <div className="mt-4">
-        <Brick color="green" onClick={submitting ? undefined : submit}>
-          {submitting ? "등록 중..." : "등록"}
-        </Brick>
-      </div>
-    </div>
-  );
-}
-
-function TabButton({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded px-3 py-1.5 text-sm font-bold ${
-        active ? "bg-ink text-white" : "bg-ink/5 hover:bg-ink/10"
-      }`}
-    >
-      {label}
-    </button>
   );
 }

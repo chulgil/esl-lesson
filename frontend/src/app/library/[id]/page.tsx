@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BackLink } from "@/components/nav/BackLink";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SubscribeButton } from "@/components/content/SubscribeButton";
 import { TranscriptWords } from "@/components/media/TranscriptWords";
 import {
   studyApi,
@@ -231,6 +232,13 @@ export default function LibraryDetailPage() {
         <h1 className="font-hand text-xl leading-snug font-bold sm:text-2xl">
           <span className="hl">{detail.title}</span>
         </h1>
+        <div className="ml-auto">
+          <SubscribeButton
+            contentId={detail.id}
+            subscribed={detail.subscribed}
+            size="md"
+          />
+        </div>
       </header>
 
       <div className="mx-auto flex max-w-2xl flex-col gap-3 sm:gap-4">

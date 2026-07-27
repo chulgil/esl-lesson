@@ -44,7 +44,16 @@ _seed_batch = 0
 
 async def seed_dictation_sentences(db, count=6):
     """유튜브 구간이 있는 문장 시딩 — 받아쓰기 풀 요건 (video_id + start_ms)."""
-    from app.models import Content, ItemOccurrence, LearningItem, TranscriptSegment
+    from sqlalchemy import select
+
+    from app.models import (
+        Content,
+        ContentSubscription,
+        ItemOccurrence,
+        LearningItem,
+        TranscriptSegment,
+        User,
+    )
 
     global _seed_batch
     _seed_batch += 1
@@ -80,6 +89,8 @@ async def seed_dictation_sentences(db, count=6):
             ItemOccurrence(item_id=item.id, content_id=content.id, segment_id=segment.id)
         )
         items.append(item)
+    for user_id in (await db.execute(select(User.id))).scalars().all():
+        db.add(ContentSubscription(content_id=content.id, user_id=user_id))
     await db.commit()
     return items
 

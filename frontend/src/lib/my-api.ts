@@ -39,17 +39,12 @@ export const myApi = {
   list: () =>
     request<{ total: number; items: ContentSummary[] }>("/api/my/contents"),
   get: (id: number) => request<MyContentDetail>(`/api/my/contents/${id}`),
-  create: (body: {
-    source: "youtube" | "manual";
-    url?: string;
-    title?: string;
-    script_en?: string;
-    script_ko?: string;
-  }) =>
-    request<{ id: number }>("/api/my/contents", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+  // 등록은 관리자 전용 — 사용자는 담기/빼기만 (docs/specs/content-governance.md)
+  subscribe: (id: number) =>
+    request<{ id: number; subscribed: boolean }>(
+      `/api/my/contents/${id}/subscribe`,
+      { method: "POST" },
+    ),
   retry: (id: number) =>
     request<{ id: number }>(`/api/my/contents/${id}/retry`, { method: "POST" }),
   remove: (id: number) =>

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.models import Content, ItemOccurrence, TranscriptSegment, User
+from app.models import Content, ContentSubscription, ItemOccurrence, TranscriptSegment, User
 from app.services.visibility import subscribed_content_ids
 
 router = APIRouter(prefix="/contents", tags=["contents"])
@@ -57,6 +57,19 @@ async def list_ready_contents(
         if rows
         else {}
     )
+    # 담기 버튼 상태 — 담은 콘텐츠만 학습 큐에 편입된다 (content-governance.md)
+    subscribed = set(
+        (
+            await db.execute(
+                select(ContentSubscription.content_id).where(
+                    ContentSubscription.user_id == user.id,
+                    ContentSubscription.content_id.in_([c.id for c in rows] or [0]),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {
         "total": total,
         "page": page,
@@ -67,6 +80,7 @@ async def list_ready_contents(
                 "source": c.source,
                 "url": c.url,
                 "mine": c.visibility == "private",
+                "subscribed": c.id in subscribed,
                 "item_count": item_counts.get(c.id, 0),
                 "created_at": c.created_at,
             }
@@ -112,12 +126,21 @@ async def get_ready_content(
         .scalars()
         .all()
     )
+    subscribed = (
+        await db.execute(
+            select(ContentSubscription.id).where(
+                ContentSubscription.content_id == content_id,
+                ContentSubscription.user_id == user.id,
+            )
+        )
+    ).scalar_one_or_none() is not None
     return {
         "id": content.id,
         "title": content.title,
         "source": content.source,
         "url": content.url,
         "mine": content.visibility == "private",
+        "subscribed": subscribed,
         "youtube_video_id": content.youtube_video_id,
         "segments": [
             {

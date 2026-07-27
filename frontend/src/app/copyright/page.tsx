@@ -24,7 +24,23 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
     ),
   },
   {
-    title: "2. 이용 목적",
+    title: "2. 콘텐츠 선정 — 관리자 큐레이션",
+    body: (
+      <>
+        <p>
+          학습 콘텐츠는 <b>운영자가 직접 선정해 등록</b>합니다. 회원이 임의의
+          영상을 올릴 수 있는 경로는 제공하지 않습니다.
+        </p>
+        <p className="mt-2">
+          크리에이티브 커먼즈(CC) 라이선스 영상을 우선하며, 그 외 영상은{" "}
+          <b>원저작자에게 허락을 받고</b> 허락 범위(자막 저장·번역·학습 항목
+          변형)와 증빙을 기록한 경우에만 등록합니다.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "3. 이용 목적",
     body: (
       <p>
         모든 콘텐츠는 회원 개인의 영어 학습(복습·퀴즈) 목적으로만 사용되며, 원본
@@ -34,7 +50,7 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
     ),
   },
   {
-    title: "3. 권리자 삭제 요청 (Notice & Takedown)",
+    title: "4. 권리자 삭제 요청 (Notice & Takedown)",
     body: (
       <>
         <p>
@@ -52,7 +68,7 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
     ),
   },
   {
-    title: "4. 이의제기",
+    title: "5. 이의제기",
     body: (
       <p>
         삭제 조치에 이의가 있는 회원은 같은 이메일로 소명을 보낼 수 있으며,
@@ -62,7 +78,7 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
   },
 ];
 
-/** 저작권 안내 — 원저작자 보호 구조 + 삭제 요청 채널 (2026-07-14 저작권 검토) */
+/** 저작권 안내 — 관리자 큐레이션·허락 확보 + 삭제 요청 채널 (docs/specs/content-governance.md) */
 export default function CopyrightPage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
@@ -77,8 +93,9 @@ export default function CopyrightPage() {
         <p className="rounded-lg border-2 border-brick-blue/40 bg-white p-4 text-sm">
           한 줄 요약:{" "}
           <b>
-            영상은 유튜브 임베드로만 재생하고(수익은 원저작자에게), 전체
-            스크립트는 제공하지 않으며, 권리자가 요청하면 즉시 삭제합니다.
+            운영자가 허락을 확인한 영상만 등록하고, 재생은 유튜브 임베드로만
+            하며(수익은 원저작자에게), 전체 스크립트는 제공하지 않습니다.
+            권리자가 요청하면 즉시 삭제합니다.
           </b>
         </p>
         {SECTIONS.map((s) => (
@@ -87,7 +104,7 @@ export default function CopyrightPage() {
             {s.body}
           </section>
         ))}
-        <p className="text-xs opacity-50">시행일: 2026-07-14</p>
+        <p className="text-xs opacity-50">시행일: 2026-07-27</p>
       </div>
     </main>
   );

@@ -69,7 +69,15 @@ _seed_batch = 0
 
 async def seed_scramble_sentences(db, count=6):
     """seed_items 는 단어 1개짜리 en_text — 칩 범위(4~12단어)용 문장을 별도 시딩."""
-    from app.models import Content, ItemOccurrence, LearningItem
+    from sqlalchemy import select
+
+    from app.models import (
+        Content,
+        ContentSubscription,
+        ItemOccurrence,
+        LearningItem,
+        User,
+    )
 
     global _seed_batch
     _seed_batch += 1
@@ -89,6 +97,8 @@ async def seed_scramble_sentences(db, count=6):
         await db.flush()
         db.add(ItemOccurrence(item_id=item.id, content_id=content.id))
         items.append(item)
+    for user_id in (await db.execute(select(User.id))).scalars().all():
+        db.add(ContentSubscription(content_id=content.id, user_id=user_id))
     await db.commit()
     return items
 

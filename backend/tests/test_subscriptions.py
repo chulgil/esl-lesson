@@ -1,43 +1,64 @@
-"""콘텐츠 구독 구조: 동일 영상 공유·즉시 재사용 (2026-07-11 요구사항)."""
+"""콘텐츠 담기(구독) 구조 — 같은 콘텐츠를 여러 사용자가 공유.
+
+등록은 관리자 전용이고 사용자는 담기만 한다 (docs/specs/content-governance.md).
+"""
 
 from sqlalchemy import func, select
 
 from app.models import Content, ContentSubscription, LearningItem
+from tests.test_content_governance import PERMISSION
 from tests.test_my_contents import login_as
 from tests.test_study import seed_items
 
 YT = "https://youtu.be/dQw4w9WgXcQ"
 
 
-async def test_same_video_reuses_content_and_subscribes(client, db_session):
-    user_a = await login_as(client, db_session, "a@example.com")
-    first = await client.post("/api/my/contents", json={"source": "youtube", "url": YT})
-    assert first.status_code == 202
-    content_id = first.json()["id"]
-    assert first.json()["reused"] is False
+async def make_public_content(db, title="공용 영상", status="ready"):
+    content = Content(
+        source="youtube",
+        youtube_video_id="dQw4w9WgXcQ",
+        title=title,
+        visibility="public",
+        status=status,
+    )
+    db.add(content)
+    await db.commit()
+    return content
 
-    # 다른 사용자가 같은 영상 등록 -> 콘텐츠 재사용 + 구독 추가 (재추출 없음)
+
+async def test_multiple_users_share_one_content_row(client, db_session):
+    content = await make_public_content(db_session)
+
+    user_a = await login_as(client, db_session, "a@example.com")
+    assert (await client.post(f"/api/my/contents/{content.id}/subscribe")).status_code == 202
     user_b = await login_as(client, db_session, "b@example.com")
-    second = await client.post("/api/my/contents", json={"source": "youtube", "url": YT})
-    assert second.status_code == 202
-    assert second.json() == {"id": content_id, "status": "pending", "reused": True}
+    assert (await client.post(f"/api/my/contents/{content.id}/subscribe")).status_code == 202
 
     count = (await db_session.execute(select(func.count(Content.id)))).scalar_one()
     assert count == 1  # 콘텐츠 테이블 중복 없음
     subs = (await db_session.execute(select(ContentSubscription.user_id))).scalars().all()
     assert sorted(subs) == sorted([user_a.id, user_b.id])
-
-    # 양쪽 다 내 콘텐츠 목록에 보인다
     assert (await client.get("/api/my/contents")).json()["total"] == 1
 
 
-async def test_resubscribe_is_idempotent_and_free_of_limit(client, db_session):
+async def test_subscribe_is_idempotent(client, db_session):
+    content = await make_public_content(db_session)
     await login_as(client, db_session, "a@example.com")
-    await client.post("/api/my/contents", json={"source": "youtube", "url": YT})
-    again = await client.post("/api/my/contents", json={"source": "youtube", "url": YT})
-    assert again.json()["reused"] is True
+    await client.post(f"/api/my/contents/{content.id}/subscribe")
+    await client.post(f"/api/my/contents/{content.id}/subscribe")
     subs = (await db_session.execute(select(func.count(ContentSubscription.id)))).scalar_one()
     assert subs == 1
+
+
+async def test_cannot_subscribe_unready_or_private_content(client, db_session):
+    await login_as(client, db_session, "a@example.com")
+    pending = await make_public_content(db_session, title="준비중", status="pending")
+    assert (await client.post(f"/api/my/contents/{pending.id}/subscribe")).status_code == 404
+
+    private = Content(source="manual", title="개인", visibility="private", status="ready")
+    db_session.add(private)
+    await db_session.commit()
+    assert (await client.post(f"/api/my/contents/{private.id}/subscribe")).status_code == 404
 
 
 async def test_subscriber_sees_shared_private_items_in_queue(client, db_session):
@@ -58,25 +79,30 @@ async def test_subscriber_sees_shared_private_items_in_queue(client, db_session)
     assert len(queue["questions"]) == len(items)
 
 
-async def test_unsubscribe_keeps_content_for_other_subscribers(client, db_session):
+async def test_unsubscribe_keeps_public_content_for_other_subscribers(client, db_session):
+    content = await make_public_content(db_session)
     await login_as(client, db_session, "a@example.com")
-    res = await client.post("/api/my/contents", json={"source": "youtube", "url": YT})
-    content_id = res.json()["id"]
+    await client.post(f"/api/my/contents/{content.id}/subscribe")
     await login_as(client, db_session, "b@example.com")
-    await client.post("/api/my/contents", json={"source": "youtube", "url": YT})
+    await client.post(f"/api/my/contents/{content.id}/subscribe")
 
-    # B 구독 해지 -> 콘텐츠는 유지 (A가 남아있음)
-    assert (await client.delete(f"/api/my/contents/{content_id}")).status_code == 204
-    assert await db_session.get(Content, content_id) is not None
+    # B 가 빼도 콘텐츠는 유지 (공용 + A 가 남아있음)
+    assert (await client.delete(f"/api/my/contents/{content.id}")).status_code == 204
+    assert await db_session.get(Content, content.id) is not None
     assert (await client.get("/api/my/contents")).json()["total"] == 0
 
 
 async def test_last_unsubscribe_deletes_private_content(client, db_session):
-    await login_as(client, db_session, "a@example.com")
-    res = await client.post("/api/my/contents", json={"source": "youtube", "url": YT})
-    content_id = res.json()["id"]
-    assert (await client.delete(f"/api/my/contents/{content_id}")).status_code == 204
-    assert await db_session.get(Content, content_id) is None
+    """개인 콘텐츠(신규 등록 차단 이전 잔존분)는 마지막 구독자가 떠나면 본체 삭제."""
+    user = await login_as(client, db_session, "a@example.com")
+    content = Content(source="manual", title="잔존 개인", visibility="private", status="ready")
+    db_session.add(content)
+    await db_session.flush()
+    db_session.add(ContentSubscription(content_id=content.id, user_id=user.id))
+    await db_session.commit()
+
+    assert (await client.delete(f"/api/my/contents/{content.id}")).status_code == 204
+    assert await db_session.get(Content, content.id) is None
 
 
 async def test_delete_preserves_practice_records(client, db_session):
@@ -146,51 +172,15 @@ async def test_admin_registering_existing_private_promotes_to_public(admin_clien
     db_session.add(content)
     await db_session.commit()
 
-    # CC 게이트 도입(2026-07-14) — 라이선스 미확인 승격은 관리자 오버라이드 필요
+    # 라이선스 미확인 승격은 허락 증빙 필요 (content-governance.md)
     res = await admin_client.post(
         "/api/admin/contents",
-        json={"source": "youtube", "url": YT, "allow_non_cc": True},
+        json={"source": "youtube", "url": YT, "permission": PERMISSION},
     )
     assert res.status_code == 202
     assert res.json()["promoted"] is True
     await db_session.refresh(content)
     assert content.visibility == "public"
-
-
-async def test_daily_limit_counts_only_new_creations(client, db_session):
-    """기존 콘텐츠 구독은 한도를 소모하지 않는다."""
-    from datetime import UTC, datetime
-
-    user = await login_as(client, db_session, "a@example.com")
-    for i in range(10):
-        db_session.add(
-            Content(
-                source="manual",
-                title=f"c{i}",
-                visibility="private",
-                created_by=user.id,
-                created_at=datetime.now(UTC),
-            )
-        )
-    other = Content(
-        source="youtube",
-        youtube_video_id="dQw4w9WgXcQ",
-        title="남의 영상",
-        visibility="private",
-        status="ready",
-    )
-    db_session.add(other)
-    await db_session.commit()
-
-    # 신규 생성은 429
-    blocked = await client.post(
-        "/api/my/contents", json={"source": "manual", "title": "x", "script_en": "Hi."}
-    )
-    assert blocked.status_code == 429
-    # 기존 영상 구독은 허용
-    reused = await client.post("/api/my/contents", json={"source": "youtube", "url": YT})
-    assert reused.status_code == 202
-    assert reused.json()["reused"] is True
 
 
 @__import__("pytest").fixture

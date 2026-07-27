@@ -143,6 +143,7 @@ export interface LibraryContent {
   source: string;
   url: string | null;
   mine: boolean;
+  subscribed: boolean;
   item_count: number;
 }
 
@@ -156,6 +157,7 @@ export interface LibraryDetail {
   id: number;
   title: string;
   source: string;
+  subscribed: boolean;
   youtube_video_id: string | null;
   segments: {
     seq: number;

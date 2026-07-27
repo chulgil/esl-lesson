@@ -1,15 +1,22 @@
 """백오피스 콘텐츠/항목 API — 공용(public) 콘텐츠 전용 (docs/specs/backoffice.md)."""
 
+from datetime import date
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import require_admin
-from app.models import Content, ItemOccurrence, LearningItem, TranscriptSegment
+from app.models import (
+    Content,
+    ContentPermission,
+    ItemOccurrence,
+    LearningItem,
+    TranscriptSegment,
+)
 from app.models.user import User
 from app.services import youtube
 from app.services.content_service import (
@@ -33,9 +40,42 @@ async def get_public_content(db: AsyncSession, content_id: int) -> Content:
     return content
 
 
+class PermissionInput(BaseModel):
+    """원저작자 이용허락 증빙 (docs/specs/content-governance.md)."""
+
+    rights_holder: str = Field(min_length=1, max_length=200)
+    rights_holder_contact: str | None = Field(default=None, max_length=200)
+    granted_at: date
+    scope_transcript: bool = False
+    scope_translate: bool = False
+    scope_derive: bool = False
+    scope_commercial: bool = False
+    evidence: str = Field(min_length=1)
+    note: str | None = None
+
+
 class PublicContentCreate(ContentCreate):
-    # CC 게이트 오버라이드 — 권리자 허락을 확보한 영상만 true 로 (저작권 검토 2026-07-14)
-    allow_non_cc: bool = False
+    # 비 CC 영상은 이 증빙이 있어야 등록된다 (기존 allow_non_cc 불리언 대체)
+    permission: PermissionInput | None = None
+
+
+def _permission_row(content_id: int, perm: PermissionInput, admin_id: int) -> ContentPermission:
+    # 파이프라인이 실제로 수행하는 이용 3종이 모두 허락돼야 처리 자체가 범위 안이다
+    if not (perm.scope_transcript and perm.scope_translate and perm.scope_derive):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "permission_scope_insufficient")
+    return ContentPermission(
+        content_id=content_id,
+        rights_holder=perm.rights_holder,
+        rights_holder_contact=perm.rights_holder_contact,
+        granted_at=perm.granted_at,
+        scope_transcript=perm.scope_transcript,
+        scope_translate=perm.scope_translate,
+        scope_derive=perm.scope_derive,
+        scope_commercial=perm.scope_commercial,
+        evidence=perm.evidence,
+        note=perm.note,
+        recorded_by=admin_id,
+    )
 
 
 @router.post("/contents", status_code=status.HTTP_202_ACCEPTED)
@@ -48,24 +88,33 @@ async def create_public_content(
     if body.source == "youtube":
         video_id = parse_video_id(body.url or "")
         if video_id:
-            # 공용 = 전 회원 전송이라 CC(재배포 허용) 영상만 기본 허용.
-            # 미확인(키 없음/조회 실패)도 안전 기본값으로 차단 — allow_non_cc 로만 우회
+            # 공용 = 전 회원 제공이라 CC(재배포 허용) 영상만 증빙 없이 허용.
+            # 미확인(키 없음/조회 실패)도 안전 기본값으로 차단 — 허락 증빙으로만 우회
             license_ = await youtube.fetch_license(video_id)
-            if license_ != "creativeCommons" and not body.allow_non_cc:
+            if license_ != "creativeCommons" and body.permission is None:
                 raise HTTPException(status.HTTP_409_CONFLICT, "cc_required")
             # 이미 개인이 등록한 영상이면 공용으로 승격 (재추출 없음)
             existing = (
                 await db.execute(select(Content).where(Content.youtube_video_id == video_id))
             ).scalar_one_or_none()
             if existing is not None and existing.visibility == "private":
+                if body.permission is not None:
+                    db.add(_permission_row(existing.id, body.permission, admin.id))
                 existing.visibility = "public"
                 existing.youtube_license = existing.youtube_license or license_
                 await db.commit()
                 return {"id": existing.id, "status": existing.status, "promoted": True}
+    # 범위 검증을 콘텐츠 생성보다 먼저 — 반려 시 고아 콘텐츠가 남지 않게
+    permission = (
+        _permission_row(0, body.permission, admin.id) if body.permission is not None else None
+    )
     content = await create_content(db, body, admin.id, visibility="public")
     if license_ is not None:
         content.youtube_license = license_
-        await db.commit()
+    if permission is not None:
+        permission.content_id = content.id
+        db.add(permission)
+    await db.commit()
     enqueue(content.id)
     return {"id": content.id, "status": content.status}
 
@@ -88,7 +137,29 @@ async def list_contents(
 @router.get("/contents/{content_id}")
 async def get_content(content_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
     content = await get_public_content(db, content_id)
-    return await content_detail(db, content)
+    detail = await content_detail(db, content)
+    perm = (
+        await db.execute(
+            select(ContentPermission).where(ContentPermission.content_id == content_id)
+        )
+    ).scalar_one_or_none()
+    detail["youtube_license"] = content.youtube_license
+    detail["permission"] = (
+        None
+        if perm is None
+        else {
+            "rights_holder": perm.rights_holder,
+            "rights_holder_contact": perm.rights_holder_contact,
+            "granted_at": perm.granted_at,
+            "scope_transcript": perm.scope_transcript,
+            "scope_translate": perm.scope_translate,
+            "scope_derive": perm.scope_derive,
+            "scope_commercial": perm.scope_commercial,
+            "evidence": perm.evidence,
+            "note": perm.note,
+        }
+    )
+    return detail
 
 
 @router.post("/contents/{content_id}/retry", status_code=status.HTTP_202_ACCEPTED)

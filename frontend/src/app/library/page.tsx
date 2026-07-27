@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SubscribeButton } from "@/components/content/SubscribeButton";
 import { studyApi, type LibraryContent } from "@/lib/study-api";
 
 export default function LibraryPage() {
@@ -27,28 +28,45 @@ export default function LibraryPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {contents.map((c, i) => (
-          <Link
+          <div
             key={c.id}
-            href={`/library/${c.id}`}
-            className={`rounded-lg border-2 border-ink/10 bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-md ${
+            className={`flex flex-col rounded-lg border-2 border-ink/10 bg-white p-4 shadow-sm transition hover:shadow-md ${
               i % 2 ? "rotate-[0.4deg]" : "-rotate-[0.4deg]"
             }`}
           >
-            <p className="flex items-center gap-2 text-xs">
-              <span className="opacity-50">
-                {c.source === "youtube" ? "유튜브" : "수기"}
-              </span>
-              {c.mine && (
-                <span className="rounded bg-brick-yellow/40 px-1.5 py-0.5 font-bold">
-                  내 것
+            <Link href={`/library/${c.id}`} className="block">
+              <p className="flex items-center gap-2 text-xs">
+                <span className="opacity-50">
+                  {c.source === "youtube" ? "유튜브" : "수기"}
                 </span>
-              )}
-            </p>
-            <p className="mt-1 font-bold">{c.title}</p>
-            <p className="mt-2 text-xs opacity-60">
-              학습 항목 {c.item_count}개
-            </p>
-          </Link>
+                {c.mine && (
+                  <span className="rounded bg-brick-yellow/40 px-1.5 py-0.5 font-bold">
+                    내 것
+                  </span>
+                )}
+              </p>
+              <p className="mt-1 font-bold">{c.title}</p>
+              <p className="mt-2 text-xs opacity-60">
+                학습 항목 {c.item_count}개
+              </p>
+            </Link>
+            {/* 개인 콘텐츠는 이미 내 것이라 담기 대상이 아니다 */}
+            {!c.mine && (
+              <div className="mt-3">
+                <SubscribeButton
+                  contentId={c.id}
+                  subscribed={c.subscribed}
+                  onChange={(on) =>
+                    setContents((prev) =>
+                      prev.map((x) =>
+                        x.id === c.id ? { ...x, subscribed: on } : x,
+                      ),
+                    )
+                  }
+                />
+              </div>
+            )}
+          </div>
         ))}
         {contents.length === 0 && !error && (
           <p className="text-sm opacity-50">아직 준비된 콘텐츠가 없어요.</p>

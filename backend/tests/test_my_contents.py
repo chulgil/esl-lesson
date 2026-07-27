@@ -1,6 +1,4 @@
-"""개인 콘텐츠 + 가시성 격리 (docs/specs/content-pipeline.md 콘텐츠 가시성)."""
-
-from datetime import UTC, datetime
+"""내 콘텐츠 + 가시성 격리 (docs/specs/content-governance.md)."""
 
 from sqlalchemy import select
 
@@ -8,7 +6,7 @@ from app.api.auth import upsert_google_user
 from app.core.config import get_settings
 from app.core.security import SESSION_COOKIE, create_session_token
 from app.models import Content, LearningItem, ReviewCard
-from tests.test_study import seed_items
+from tests.test_study import seed_items, subscribe_existing_public
 
 
 async def login_as(client, db, email):
@@ -18,64 +16,23 @@ async def login_as(client, db, email):
         get_settings(),
     )
     client.cookies.set(SESSION_COOKIE, create_session_token(user))
+    await subscribe_existing_public(db, user.id)
     return user
 
 
-async def test_create_my_content_is_private_and_owned(client, db_session):
-    user = await login_as(client, db_session, "u1@example.com")
-    res = await client.post(
-        "/api/my/contents",
-        json={"source": "manual", "title": "내 노트", "script_en": "Hello there. Bye now."},
+async def test_user_cannot_register_content(client, db_session):
+    """등록은 관리자 전용 — 유튜브·수기 두 경로 모두 사용자에게 닫혀 있다."""
+    await login_as(client, db_session, "u1@example.com")
+    youtube = await client.post(
+        "/api/my/contents", json={"source": "youtube", "url": "https://youtu.be/dQw4w9WgXcQ"}
     )
-    assert res.status_code == 202
-    content = await db_session.get(Content, res.json()["id"])
-    assert content.visibility == "private"
-    assert content.created_by == user.id
-
-    listed = (await client.get("/api/my/contents")).json()
-    assert listed["total"] == 1
-
-
-async def test_daily_limit_blocks_11th_private_content(client, db_session):
-    user = await login_as(client, db_session, "u1@example.com")
-    for i in range(10):
-        db_session.add(
-            Content(
-                source="manual",
-                title=f"c{i}",
-                visibility="private",
-                created_by=user.id,
-                created_at=datetime.now(UTC),
-            )
-        )
-    await db_session.commit()
-
-    res = await client.post(
+    manual = await client.post(
         "/api/my/contents",
-        json={"source": "manual", "title": "초과분", "script_en": "One more."},
+        json={"source": "manual", "title": "내 노트", "script_en": "Hello there."},
     )
-    assert res.status_code == 429
-
-
-async def test_admin_bypasses_daily_limit(client, db_session):
-    admin = await login_as(client, db_session, "boss@example.com")  # ADMIN_EMAILS
-    assert admin.role == "admin"
-    for i in range(10):
-        db_session.add(
-            Content(
-                source="manual",
-                title=f"c{i}",
-                visibility="private",
-                created_by=admin.id,
-                created_at=datetime.now(UTC),
-            )
-        )
-    await db_session.commit()
-    res = await client.post(
-        "/api/my/contents",
-        json={"source": "manual", "title": "관리자", "script_en": "Fine."},
-    )
-    assert res.status_code == 202
+    assert youtube.status_code == 405
+    assert manual.status_code == 405
+    assert (await db_session.execute(select(Content.id))).scalars().all() == []
 
 
 async def test_private_items_visible_only_to_owner(client, db_session):
