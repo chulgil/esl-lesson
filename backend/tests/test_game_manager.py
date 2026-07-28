@@ -38,9 +38,16 @@ class Collector:
 
 
 async def seed_user_and_words(db, count=45):
+    """가시성 규칙 대응: 게임 풀도 담긴(구독) 콘텐츠 출처가 필요 (content-governance.md)."""
+    from app.models import Content, ContentSubscription, ItemOccurrence
+
     user = User(google_sub="g-p1", email="p1@example.com", name="P1")
     db.add(user)
     await db.flush()
+    content = Content(source="manual", title="게임 소재", visibility="public", status="ready")
+    db.add(content)
+    await db.flush()
+    db.add(ContentSubscription(content_id=content.id, user_id=user.id))
     for i in range(count):
         item = LearningItem(
             item_type="word",
@@ -51,6 +58,7 @@ async def seed_user_and_words(db, count=45):
         )
         db.add(item)
         await db.flush()
+        db.add(ItemOccurrence(item_id=item.id, content_id=content.id))
         db.add(
             ReviewCard(
                 user_id=user.id,

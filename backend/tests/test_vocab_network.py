@@ -74,6 +74,38 @@ async def test_network_endpoint_requires_auth(client):
     assert res.status_code == 401
 
 
+async def test_network_excludes_unsubscribed_content_words(client, db_session):
+    """구독 해제 → 노드 소멸(카드는 보존), 재담기 → 그대로 복귀 (content-governance.md)."""
+    from sqlalchemy import select
+
+    from app.models import ItemOccurrence, ReviewCard
+
+    user = await login(client, db_session)
+    words = await seed_items(db_session, count=1)
+    await client.post("/api/cards", json={"item_id": words[0].id})
+    content_id = (
+        await db_session.execute(
+            select(ItemOccurrence.content_id).where(ItemOccurrence.item_id == words[0].id)
+        )
+    ).scalar_one()
+
+    nodes = (await client.get("/api/study/network")).json()["nodes"]
+    assert [n["item_id"] for n in nodes] == [words[0].id]
+
+    # 빼기: 노드에서 사라지지만 카드 행은 남는다
+    assert (await client.delete(f"/api/my/contents/{content_id}")).status_code == 204
+    assert (await client.get("/api/study/network")).json()["nodes"] == []
+    card = (
+        await db_session.execute(select(ReviewCard).where(ReviewCard.user_id == user.id))
+    ).scalar_one()
+    assert card.item_id == words[0].id
+
+    # 재담기: 같은 카드로 복귀
+    assert (await client.post(f"/api/my/contents/{content_id}/subscribe")).status_code == 202
+    nodes = (await client.get("/api/study/network")).json()["nodes"]
+    assert [n["item_id"] for n in nodes] == [words[0].id]
+
+
 async def test_network_endpoint_edges_and_visible_suggestions(client, db_session):
     """임베딩 활성(mock): 내 항목 간 엣지 + 덱 밖 추천(가시성 통과분만)."""
     await login(client, db_session)
