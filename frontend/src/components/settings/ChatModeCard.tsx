@@ -5,6 +5,7 @@ import { setChatFloating, useChatFloating } from "@/lib/chat-mode";
 import {
   getPushState,
   type PushState,
+  sendTestPush,
   subscribePush,
   unsubscribePush,
 } from "@/lib/push";
@@ -35,6 +36,22 @@ export function ChatModeCard() {
       }
     } catch {
       setMessage("알림 설정에 실패했어요 — 잠시 후 다시 시도해주세요.");
+    }
+    setBusy(false);
+  }
+
+  async function handleTest() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const sent = await sendTestPush();
+      setMessage(
+        sent > 0
+          ? "테스트 알림을 보냈어요 — 잠시 후 도착해요. 안 보이면 OS 설정(macOS: 시스템 설정 > 알림 / Windows: 설정 > 알림)에서 이 브라우저의 알림이 허용됐는지 확인해주세요."
+          : "등록된 기기가 없어요 — 알림을 다시 켜주세요.",
+      );
+    } catch {
+      setMessage("테스트 발송에 실패했어요.");
     }
     setBusy(false);
   }
@@ -73,19 +90,31 @@ export function ChatModeCard() {
         </p>
       )}
       {(push === "idle" || push === "subscribed") && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={toggleNotify}
-          aria-pressed={push === "subscribed"}
-          className={`min-h-11 rounded-md border-2 px-4 text-sm font-bold transition disabled:opacity-50 ${
-            push === "subscribed"
-              ? "border-brick-green bg-brick-green/10 text-brick-green"
-              : "border-ink/20 bg-white hover:border-ink/50"
-          }`}
-        >
-          {push === "subscribed" ? "새 글 알림 켜짐" : "새 글 알림 켜기"}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={toggleNotify}
+            aria-pressed={push === "subscribed"}
+            className={`min-h-11 rounded-md border-2 px-4 text-sm font-bold transition disabled:opacity-50 ${
+              push === "subscribed"
+                ? "border-brick-green bg-brick-green/10 text-brick-green"
+                : "border-ink/20 bg-white hover:border-ink/50"
+            }`}
+          >
+            {push === "subscribed" ? "새 글 알림 켜짐" : "새 글 알림 켜기"}
+          </button>
+          {push === "subscribed" && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleTest}
+              className="min-h-11 rounded-md border-2 border-ink/20 bg-white px-4 text-sm font-bold transition hover:border-ink/50 disabled:opacity-50"
+            >
+              테스트 알림 보내기
+            </button>
+          )}
+        </div>
       )}
       {message && <p className="mt-2 text-xs opacity-70">{message}</p>}
     </section>
