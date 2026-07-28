@@ -52,7 +52,7 @@ export default function MyContentDetailPage() {
   async function remove() {
     if (
       !confirm(
-        "이 콘텐츠를 내 학습에서 뺄까요?\n지금까지의 연습 기록은 그대로 남아요.",
+        "이 콘텐츠를 내 학습에서 뺄까요?\n학습 기록은 안전하게 보관돼요 — 다시 담으면 그대로 이어져요.",
       )
     )
       return;

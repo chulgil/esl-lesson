@@ -10,6 +10,7 @@ import {
   type GraphNode,
 } from "@/components/study/VocabGraph";
 import { fetchMe, loginUrl } from "@/lib/api";
+import { myApi } from "@/lib/my-api";
 import { studyApi, type VocabNetwork } from "@/lib/study-api";
 
 const STATE_LEGEND = [
@@ -33,6 +34,7 @@ export default function VocabNetworkPage() {
   const [showInsight, setShowInsight] = useState(false);
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
   const [adding, setAdding] = useState(false);
+  const [hasContents, setHasContents] = useState<boolean | null>(null);
 
   useEffect(() => {
     // 공유 링크로 비로그인 진입 시 에러 대신 SSO 유도 (홈 Showcase 와 동일 게이트)
@@ -43,7 +45,16 @@ export default function VocabNetworkPage() {
       }
       studyApi
         .network()
-        .then(setData)
+        .then((res) => {
+          setData(res);
+          // 노드 0의 원인 구분 — 담은 콘텐츠가 없으면 라이브러리 유도 문구로 분기
+          if (res.nodes.length === 0) {
+            myApi
+              .list()
+              .then((my) => setHasContents(my.total > 0))
+              .catch(() => setHasContents(true)); // 판별 실패 시 기존 문구 유지
+          }
+        })
         .catch(() => setError(true));
     });
   }, []);
@@ -128,17 +139,27 @@ export default function VocabNetworkPage() {
         <p className="text-sm opacity-60">어휘망을 그리는 중...</p>
       )}
 
-      {data && data.nodes.length === 0 && (
-        <div className="flex flex-col items-start gap-4">
-          <p>
-            아직 어휘망에 그릴 단어가 없어요. 학습을 시작하면 단어들이 연결되기
-            시작해요!
-          </p>
-          <Brick color="green" href="/study">
-            오늘의 학습 시작
-          </Brick>
-        </div>
-      )}
+      {data &&
+        data.nodes.length === 0 &&
+        (hasContents === false ? (
+          // 담은 콘텐츠 자체가 없으면 학습 유도보다 담기 유도가 먼저다
+          <div className="flex flex-col items-start gap-4">
+            <p>라이브러리에서 콘텐츠를 담으면 어휘망이 자라나요.</p>
+            <Brick color="blue" href="/library">
+              라이브러리 구경하기
+            </Brick>
+          </div>
+        ) : (
+          <div className="flex flex-col items-start gap-4">
+            <p>
+              아직 어휘망에 그릴 단어가 없어요. 학습을 시작하면 단어들이
+              연결되기 시작해요!
+            </p>
+            <Brick color="green" href="/study">
+              오늘의 학습 시작
+            </Brick>
+          </div>
+        ))}
 
       {data && data.nodes.length > 0 && (
         <>
