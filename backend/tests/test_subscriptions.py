@@ -357,3 +357,51 @@ async def test_game_pool_allows_subscribed_content(wired_db):
     await wired_db.commit()
     with pytest.raises(WordPoolError):
         await load_word_pool_from_contents(c.id, [content.id])
+
+
+async def test_private_promotion_preserves_subscriber_visibility(client, db_session):
+    """개인→공용 일괄 승격 시맨틱 (마이그레이션 a6b7c8d9e0f1 과 동일 SQL) —
+    pending 항목을 먼저 승인해야 기존 구독자의 학습 재료가 사라지지 않는다."""
+    from sqlalchemy import text
+
+    from app.services.visibility import visible_item_clause
+
+    user = await login_as(client, db_session, "a@example.com")
+    items = await seed_items(
+        db_session, count=2, status="pending", visibility="private", owner=user.id
+    )
+
+    def visible_count():
+        return db_session.execute(
+            select(func.count(LearningItem.id)).where(
+                LearningItem.id.in_([i.id for i in items]), visible_item_clause(user.id)
+            )
+        )
+
+    # 승격 전: 개인 콘텐츠라 pending 도 보인다
+    assert (await visible_count()).scalar_one() == 2
+
+    # 마이그레이션과 동일한 2단계 SQL (순서 뒤집으면 공용+pending 이 되어 소실)
+    await db_session.execute(
+        text(
+            "UPDATE learning_items SET review_status = 'approved' "
+            "WHERE review_status = 'pending' AND id IN ("
+            "  SELECT item_id FROM item_occurrences WHERE content_id IN ("
+            "    SELECT id FROM contents WHERE visibility = 'private'))"
+        )
+    )
+    await db_session.execute(
+        text("UPDATE contents SET visibility = 'public' WHERE visibility = 'private'")
+    )
+    await db_session.commit()
+
+    # 승격 후: 공용 승인 항목으로 계속 보이고, 담김(구독)도 그대로
+    assert (await visible_count()).scalar_one() == 2
+    subs = (
+        await db_session.execute(
+            select(func.count(ContentSubscription.id)).where(
+                ContentSubscription.user_id == user.id
+            )
+        )
+    ).scalar_one()
+    assert subs >= 1
