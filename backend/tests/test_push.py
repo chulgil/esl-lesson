@@ -94,7 +94,7 @@ async def test_reminder_sends_once_per_day_to_due_users(
 
     async def fake_send(sub, payload, settings):
         sent.append(payload)
-        return True
+        return "ok"
 
     monkeypatch.setattr(push, "send_to", fake_send)
     evening = datetime.now(UTC).astimezone(push.KST).replace(hour=20, minute=30)
@@ -117,7 +117,7 @@ async def test_reminder_skips_before_hour_and_zero_due(client, db_session, vapid
 
     async def fake_send(sub, payload, settings):
         sent.append(payload)
-        return True
+        return "ok"
 
     monkeypatch.setattr(push, "send_to", fake_send)
 
@@ -141,7 +141,7 @@ async def test_reminder_removes_gone_subscription(client, db_session, vapid_keys
     await client.post("/api/push/subscriptions", json=SUB_BODY)
 
     async def gone_send(sub, payload, settings):
-        return False
+        return "gone"
 
     monkeypatch.setattr(push, "send_to", gone_send)
     evening = datetime.now(UTC).astimezone(push.KST).replace(hour=20, minute=5)
@@ -151,6 +151,50 @@ async def test_reminder_removes_gone_subscription(client, db_session, vapid_keys
     assert rows == []
 
 
+async def test_reminder_transient_error_keeps_sub_and_retries(
+    client, db_session, vapid_keys, monkeypatch
+):
+    """일시 오류(403 등)는 구독 유지 + 발송 마킹 안 함 — 다음 루프에서 재시도.
+
+    이전엔 오류가 True 로 뭉개져 last_sent_on 이 찍혀 그날 재시도가 막혔다."""
+    user = await login(client, db_session)
+    await _add_due_card(db_session, user.id)
+    await client.post("/api/push/subscriptions", json=SUB_BODY)
+
+    async def error_send(sub, payload, settings):
+        return "error"
+
+    monkeypatch.setattr(push, "send_to", error_send)
+    evening = datetime.now(UTC).astimezone(push.KST).replace(hour=20, minute=5)
+    assert await push.send_review_reminders(db_session, now=evening.astimezone(UTC)) == 0
+    await db_session.commit()
+    rows = (await db_session.execute(select(PushSubscription))).scalars().all()
+    assert len(rows) == 1 and rows[0].last_sent_on is None  # 유지 + 미마킹
+
+    # 복구되면 같은 날에도 발송된다
+    async def ok_send(sub, payload, settings):
+        return "ok"
+
+    monkeypatch.setattr(push, "send_to", ok_send)
+    assert await push.send_review_reminders(db_session, now=evening.astimezone(UTC)) == 1
+
+
+async def test_push_test_endpoint_reports_errors_honestly(
+    client, db_session, vapid_keys, monkeypatch
+):
+    """발송 실패는 sent 가 아니라 errors 로 보고 — '보냈어요' 거짓 안내 방지."""
+    await login(client, db_session)
+    await client.post("/api/push/subscriptions", json=SUB_BODY)
+
+    async def error_send(sub, payload, settings):
+        return "error"
+
+    monkeypatch.setattr(push, "send_to", error_send)
+    res = await client.post("/api/push/test")
+    assert res.status_code == 200
+    assert res.json() == {"sent": 0, "errors": 1}
+
+
 async def test_push_test_endpoint_sends_to_my_devices(client, db_session, vapid_keys, monkeypatch):
     await login(client, db_session)
     await client.post("/api/push/subscriptions", json=SUB_BODY)
@@ -158,7 +202,7 @@ async def test_push_test_endpoint_sends_to_my_devices(client, db_session, vapid_
 
     async def fake_send(sub, payload, settings):
         sent.append(payload)
-        return True
+        return "ok"
 
     monkeypatch.setattr(push, "send_to", fake_send)
     res = await client.post("/api/push/test")

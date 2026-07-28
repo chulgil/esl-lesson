@@ -36,21 +36,24 @@ def _send_sync(subscription_info: dict, payload: dict, settings: Settings) -> No
     )
 
 
-async def send_to(sub: PushSubscription, payload: dict, settings: Settings) -> bool:
-    """False = 구독이 더 이상 유효하지 않음(404/410) — 호출자가 행을 삭제한다."""
+async def send_to(sub: PushSubscription, payload: dict, settings: Settings) -> str:
+    """ "ok"=전달 성공, "gone"=만료 구독(404/410, 호출자가 행 삭제), "error"=일시 오류(유지).
+
+    이전엔 일시 오류도 True 로 뭉개져 테스트 발송이 '보냈어요'라고 거짓 보고하고
+    리마인더가 실패한 날을 발송 완료로 마킹해 재시도를 건너뛰었다 (2026-07-28)."""
     info = {
         "endpoint": sub.endpoint,
         "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
     }
     try:
         await asyncio.to_thread(_send_sync, info, payload, settings)
-        return True
+        return "ok"
     except WebPushException as exc:
         status = getattr(exc.response, "status_code", None)
         if status in (404, 410):
-            return False
+            return "gone"
         logger.warning("push send failed sub=%s status=%s", sub.id, status)
-        return True
+        return "error"
 
 
 async def send_to_user(db: AsyncSession, user_id: int, payload: dict) -> bool:
@@ -68,9 +71,10 @@ async def send_to_user(db: AsyncSession, user_id: int, payload: dict) -> bool:
     )
     delivered = False
     for sub in subs:
-        if await send_to(sub, payload, settings):
+        result = await send_to(sub, payload, settings)
+        if result == "ok":
             delivered = True
-        else:
+        elif result == "gone":
             await db.delete(sub)
     await db.flush()
     return delivered
@@ -160,10 +164,12 @@ async def send_review_reminders(db: AsyncSession, now: datetime | None = None) -
             continue  # 오늘 목표를 이미 채움 — 달성감 보존, 알림 없음
         payload = reminder_payload(min(due, goal - done))
         for sub in user_subs:
-            if await send_to(sub, payload, settings):
+            result = await send_to(sub, payload, settings)
+            if result == "ok":
                 sub.last_sent_on = today
                 sent += 1
-            else:
+            elif result == "gone":
                 await db.delete(sub)
+            # "error" — 마킹하지 않고 유지, 다음 루프에서 재시도 (독스트링 계약)
     await db.flush()
     return sent

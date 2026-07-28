@@ -46,25 +46,24 @@ export function setFaviconBadge(count: number): void {
     canvas.height = size;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    // 탭 파비콘은 16px 로 축소돼 구석 배지는 판독 불가 (2026-07-28 피드백)
+    // — 안읽음이 있으면 파비콘 전체를 빨간 원+큰 숫자로 대체한다
     ctx.drawImage(img, 0, 0, size, size);
-
-    // 우상단 개수 배지 — 64px 캔버스에서 두 자리까지 판독 가능한 크기
     const label = String(shown);
-    const r = 17;
-    const cx = size - r - 1;
-    const cy = r + 1;
+    const cx = size / 2;
+    const cy = size / 2;
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.arc(cx, cy, size / 2 - 2, 0, Math.PI * 2);
     ctx.fillStyle = "#d01012";
     ctx.fill();
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 4;
     ctx.strokeStyle = "#ffffff";
     ctx.stroke();
     ctx.fillStyle = "#ffffff";
-    ctx.font = `bold ${label.length > 1 ? 20 : 26}px sans-serif`;
+    ctx.font = `bold ${label.length > 1 ? 38 : 46}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, cx, cy + 1);
+    ctx.fillText(label, cx, cy + 2);
 
     // 기존 아이콘 링크 전부 제거(apple-touch 제외) 후 전용 배지 링크 삽입
     for (const link of Array.from(

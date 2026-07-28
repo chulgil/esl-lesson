@@ -41,11 +41,13 @@ export function PushReminderCard() {
     setBusy(true);
     setMessage(null);
     try {
-      const sent = await sendTestPush();
+      const { sent, errors } = await sendTestPush();
       setMessage(
         sent > 0
           ? "테스트 알림을 보냈어요 — 잠시 후 도착해요."
-          : "등록된 기기가 없어요 — 알림을 다시 켜주세요.",
+          : errors > 0
+            ? "서버에서 푸시 발송에 실패했어요 — 서버 알림 설정(VAPID) 점검이 필요해요."
+            : "등록된 기기가 없어요 — 알림을 다시 켜주세요.",
       );
     } catch {
       setMessage("테스트 발송에 실패했어요.");

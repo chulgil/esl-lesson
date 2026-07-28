@@ -120,10 +120,15 @@ async def send_test(
         "tag": "push-test",
     }
     sent = 0
+    errors = 0
     for sub in subs:
-        if await push.send_to(sub, payload, settings):
+        result = await push.send_to(sub, payload, settings)
+        if result == "ok":
             sent += 1
-        else:
+        elif result == "gone":
             await db.delete(sub)
+        else:
+            errors += 1
     await db.commit()
-    return {"sent": sent}
+    # errors: 서버→푸시 서비스 발송 실패 수 — 프론트가 "보냈어요"와 구분해 안내
+    return {"sent": sent, "errors": errors}

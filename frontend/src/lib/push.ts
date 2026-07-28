@@ -91,12 +91,33 @@ export async function unsubscribePush(): Promise<void> {
   await sub.unsubscribe().catch(() => undefined);
 }
 
-export async function sendTestPush(): Promise<number> {
+export async function sendTestPush(): Promise<{
+  sent: number;
+  errors: number;
+}> {
   const res = await fetch("/api/push/test", {
     method: "POST",
     credentials: "same-origin",
   });
   if (!res.ok) throw new Error("test push failed");
   const body = await res.json();
-  return body.sent as number;
+  return { sent: body.sent as number, errors: (body.errors as number) ?? 0 };
+}
+
+/** 서버를 거치지 않는 로컬 알림 — OS/브라우저 표시 차단 여부를 분리 진단.
+ *  이게 안 보이면 서버 문제가 아니라 OS 알림 설정 문제다. */
+export async function showLocalTestNotification(): Promise<boolean> {
+  if (!supported() || Notification.permission !== "granted") return false;
+  const body = "로컬 테스트 — 이 알림이 보이면 브라우저 표시는 정상이에요";
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg) {
+      await reg.showNotification("ESL Lessonaza", { body, tag: "local-test" });
+    } else {
+      new Notification("ESL Lessonaza", { body, tag: "local-test" });
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -6,6 +6,7 @@ import {
   getPushState,
   type PushState,
   sendTestPush,
+  showLocalTestNotification,
   subscribePush,
   unsubscribePush,
 } from "@/lib/push";
@@ -43,13 +44,23 @@ export function ChatModeCard() {
   async function handleTest() {
     setBusy(true);
     setMessage(null);
+    // 로컬(서버 무관) + 서버 푸시를 함께 쏴서 어느 구간이 막혔는지 분리 진단
+    const localShown = await showLocalTestNotification();
     try {
-      const sent = await sendTestPush();
-      setMessage(
-        sent > 0
-          ? "테스트 알림을 보냈어요 — 잠시 후 도착해요. 안 보이면 OS 설정(macOS: 시스템 설정 > 알림 / Windows: 설정 > 알림)에서 이 브라우저의 알림이 허용됐는지 확인해주세요."
-          : "등록된 기기가 없어요 — 알림을 다시 켜주세요.",
-      );
+      const { sent, errors } = await sendTestPush();
+      if (sent > 0) {
+        setMessage(
+          localShown
+            ? "테스트 알림 2개(로컬·서버)를 보냈어요 — 하나도 안 보이면 OS 알림 설정(macOS: 시스템 설정 > 알림, Windows: 설정 > 알림)에서 이 브라우저를 허용하고 방해금지 모드를 꺼주세요."
+            : "서버 발송은 됐지만 로컬 표시가 실패했어요 — 브라우저 알림 권한을 확인해주세요.",
+        );
+      } else if (errors > 0) {
+        setMessage(
+          "서버에서 푸시 발송에 실패했어요 — 서버 알림 설정(VAPID) 점검이 필요해요. 로컬 알림이 보였다면 브라우저 쪽은 정상이에요.",
+        );
+      } else {
+        setMessage("등록된 기기가 없어요 — 알림을 다시 켜주세요.");
+      }
     } catch {
       setMessage("테스트 발송에 실패했어요.");
     }
