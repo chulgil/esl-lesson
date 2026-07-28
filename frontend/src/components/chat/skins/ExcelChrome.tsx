@@ -64,7 +64,7 @@ export function ExcelChrome({
   }, []);
 
   return (
-    <div className="flex h-dvh flex-col bg-white font-sans text-[13px] text-[#24292f]">
+    <div className="h-dvh-nav-safe flex flex-col bg-white font-sans text-[13px] text-[#24292f]">
       {/* 타이틀바 */}
       <div className="flex items-center gap-2.5 bg-[#185c37] px-3 py-1.5 text-white">
         <XlsIcon />

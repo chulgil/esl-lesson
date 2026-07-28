@@ -133,6 +133,19 @@ html[data-theme="lego"] .notebook-lines {
   box-shadow: inset 56px 0 0 -54px var(--color-margin-red);
 }
 
+/* AppNav(데스크톱 상단 sticky 헤더 62px / 모바일 하단 고정 탭바 66px, 실측치)에
+ * 가려지지 않는 전체화면 높이. h-dvh 는 뷰포트 100% 를 그대로 차지해 AppNav 만큼
+ * 하단(모바일: 겹침, 데스크톱: 헤더가 밀어낸 만큼 아래로 넘침) 이 잘려 보이는 문제 —
+ * 로그인 상태에서 h-dvh 전체화면을 쓰는 대화방(NoteSkin/ExcelChrome) 전용. */
+.h-dvh-nav-safe {
+  height: calc(100dvh - 66px);
+}
+@media (min-width: 640px) {
+  .h-dvh-nav-safe {
+    height: calc(100dvh - 62px);
+  }
+}
+
 /* 형광펜 하이라이트 (섹션 헤딩용) */
 .hl {
   background: linear-gradient(transparent 55%, var(--color-highlight) 55%, var(--color-highlight) 92%, transparent 92%);

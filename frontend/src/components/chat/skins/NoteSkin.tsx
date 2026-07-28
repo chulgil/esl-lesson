@@ -11,7 +11,7 @@ import type { ChatSkinProps } from "./types";
  *  내 글 = 파란 잉크, 상대 글 = 검정 잉크. 창은 화면 우측에 도킹(컴팩트 max-w-md)된다. */
 export function NoteSkin(p: ChatSkinProps) {
   return (
-    <main className="notebook-lines notebook-margin flex h-dvh flex-col">
+    <main className="notebook-lines notebook-margin h-dvh-nav-safe flex flex-col">
       <div className="ml-auto flex h-full w-full max-w-md flex-col border-l-2 border-ink/10 bg-paper/95 px-4 py-4 shadow-[-6px_0_20px_-10px_rgba(0,0,0,0.15)] sm:py-6">
         <header className="mb-2 flex items-center gap-3">
           <BackLink href="/chat" label="목록" />
