@@ -8,11 +8,11 @@ import type { ChatSkinProps } from "./types";
 
 /** 교환 노트 스킨 — 종이 테마(노트·캔디·레고·헤냥이) 공용 위장.
  *  말풍선 없이 필기 줄 형식: 힐끗 보면 학습 노트로 보인다 (docs/specs/chat.md).
- *  내 글 = 파란 잉크, 상대 글 = 검정 잉크. 창은 컴팩트(max-w-md)로 제한. */
+ *  내 글 = 파란 잉크, 상대 글 = 검정 잉크. 창은 화면 우측에 도킹(컴팩트 max-w-md)된다. */
 export function NoteSkin(p: ChatSkinProps) {
   return (
-    <main className="notebook-lines notebook-margin flex h-dvh flex-col items-center px-4 py-4 sm:py-6">
-      <div className="flex h-full w-full max-w-md flex-col">
+    <main className="notebook-lines notebook-margin flex h-dvh flex-col">
+      <div className="ml-auto flex h-full w-full max-w-md flex-col border-l-2 border-ink/10 bg-paper/95 px-4 py-4 shadow-[-6px_0_20px_-10px_rgba(0,0,0,0.15)] sm:py-6">
         <header className="mb-2 flex items-center gap-3">
           <BackLink href="/chat" label="목록" />
           <h1 className="flex items-center gap-2 font-hand text-xl font-bold">
@@ -49,6 +49,24 @@ export function NoteSkin(p: ChatSkinProps) {
                   mine ? "text-brick-blue" : "text-ink"
                 }`}
               >
+                <div className="mb-0.5 flex items-baseline gap-1.5 text-[10px] opacity-45">
+                  <b>{mine ? "나" : p.peerName}</b>
+                  {m.created_at && (
+                    <span>
+                      {new Date(m.created_at).toLocaleTimeString("ko-KR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  )}
+                  {/* 상대가 아직 안 읽은 내 글 — 작은 점으로만 표시 (위장 유지) */}
+                  {mine && m.id > p.otherRead && (
+                    <span
+                      aria-label="상대가 아직 읽지 않음"
+                      className="inline-block h-1.5 w-1.5 rounded-full bg-brick-yellow align-middle"
+                    />
+                  )}
+                </div>
                 {m.item_ref && (
                   <span className="mr-2 rounded bg-highlight/50 px-1.5 py-0.5 text-xs">
                     <b>{m.item_ref.en_text}</b>
@@ -69,21 +87,6 @@ export function NoteSkin(p: ChatSkinProps) {
                 )}
                 <span className="break-words whitespace-pre-wrap">
                   {m.body}
-                </span>
-                <span className="ml-2 align-baseline text-[10px] opacity-35">
-                  {mine ? "나" : p.peerName}
-                  {m.created_at &&
-                    ` · ${new Date(m.created_at).toLocaleTimeString("ko-KR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}`}
-                  {/* 상대가 아직 안 읽은 내 글 — 작은 점으로만 표시 (위장 유지) */}
-                  {mine && m.id > p.otherRead && (
-                    <span
-                      aria-label="상대가 아직 읽지 않음"
-                      className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-brick-yellow align-middle"
-                    />
-                  )}
                 </span>
               </div>
             );

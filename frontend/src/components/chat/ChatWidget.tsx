@@ -276,6 +276,19 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
                   : `border-ink/5 ${mine ? "text-brick-blue" : "text-ink"}`
               }`}
             >
+              <div
+                className={`mb-0.5 flex items-baseline gap-1 text-[10px] ${excel ? "text-[#aaa]" : "opacity-35"}`}
+              >
+                <b>{mine ? "나" : p.peerName}</b>
+                {mine && m.id > p.otherRead && (
+                  <span
+                    aria-label="상대가 아직 읽지 않음"
+                    className={`inline-block h-1.5 w-1.5 rounded-full align-middle ${
+                      excel ? "bg-[#bf8f00]" : "bg-brick-yellow"
+                    }`}
+                  />
+                )}
+              </div>
               {m.item_ref && (
                 <span
                   className={`mr-1.5 rounded px-1 text-xs ${
@@ -296,19 +309,6 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
                 </a>
               )}
               <span className="break-words whitespace-pre-wrap">{m.body}</span>
-              <span
-                className={`ml-1.5 text-[10px] ${excel ? "text-[#aaa]" : "opacity-35"}`}
-              >
-                {mine ? "나" : p.peerName}
-                {mine && m.id > p.otherRead && (
-                  <span
-                    aria-label="상대가 아직 읽지 않음"
-                    className={`ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${
-                      excel ? "bg-[#bf8f00]" : "bg-brick-yellow"
-                    }`}
-                  />
-                )}
-              </span>
             </div>
           );
         })}
