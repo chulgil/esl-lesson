@@ -1,10 +1,43 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { setChatFloating, useChatFloating } from "@/lib/chat-mode";
+import {
+  getPushState,
+  type PushState,
+  subscribePush,
+  unsubscribePush,
+} from "@/lib/push";
 
-/** 채팅창 표시 방식 — 플로팅(우하단 팝업, 기본) ↔ 도킹(화면 우측 상시 패널) */
+/** 채팅창 설정 — 표시 방식(플로팅/도킹) + 새 글 브라우저 알림.
+ *  알림 구독은 복습 리마인더와 같은 VAPID 구독을 공유한다 (docs/specs/chat.md). */
 export function ChatModeCard() {
   const floating = useChatFloating();
+  const [push, setPush] = useState<PushState | "loading">("loading");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    getPushState()
+      .then(setPush)
+      .catch(() => setPush("unsupported"));
+  }, []);
+
+  async function toggleNotify() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      if (push === "subscribed") {
+        await unsubscribePush();
+        setPush("idle");
+      } else {
+        setPush(await subscribePush());
+      }
+    } catch {
+      setMessage("알림 설정에 실패했어요 — 잠시 후 다시 시도해주세요.");
+    }
+    setBusy(false);
+  }
 
   return (
     <section className="mt-10 max-w-lg">
@@ -21,6 +54,40 @@ export function ChatModeCard() {
         />
         플로팅 (우하단 팝업)
       </label>
+
+      <p className="mt-5 mb-1 text-sm font-bold">새 글 알림</p>
+      <p className="mb-3 text-xs opacity-60">
+        켜두면 탭이 백그라운드이거나 브라우저를 닫아도 새 메시지를 브라우저
+        알림으로 받아요. (복습 리마인더와 같은 알림 설정을 사용해요)
+      </p>
+      {push === "unsupported" && (
+        <p className="rounded-md border-2 border-ink/10 bg-white p-3 text-xs opacity-70">
+          이 브라우저는 푸시 알림을 지원하지 않아요. iPhone은 사파리 공유 →
+          &ldquo;홈 화면에 추가&rdquo; 후 앱에서 켤 수 있어요.
+        </p>
+      )}
+      {push === "denied" && (
+        <p className="rounded-md border-2 border-ink/10 bg-white p-3 text-xs opacity-70">
+          알림이 차단되어 있어요 — 브라우저 주소창의 사이트 설정에서 알림을
+          허용한 뒤 다시 시도해주세요.
+        </p>
+      )}
+      {(push === "idle" || push === "subscribed") && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={toggleNotify}
+          aria-pressed={push === "subscribed"}
+          className={`min-h-11 rounded-md border-2 px-4 text-sm font-bold transition disabled:opacity-50 ${
+            push === "subscribed"
+              ? "border-brick-green bg-brick-green/10 text-brick-green"
+              : "border-ink/20 bg-white hover:border-ink/50"
+          }`}
+        >
+          {push === "subscribed" ? "새 글 알림 켜짐" : "새 글 알림 켜기"}
+        </button>
+      )}
+      {message && <p className="mt-2 text-xs opacity-70">{message}</p>}
     </section>
   );
 }
