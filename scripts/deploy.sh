@@ -96,8 +96,10 @@ canary_check() {
 }
 canary_check api-canary englesson-api-canary \
   "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=3).status==200 else 1)\""
+# Next standalone 은 Docker 가 주입한 HOSTNAME 인터페이스에만 바인딩 (localhost 불가,
+# 첫 red-green 런 30330657867 실측) — traefik 도 컨테이너 IP 로 붙는 것과 동일하게 확인
 canary_check web-canary englesson-web-canary \
-  "node -e \"fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+  "node -e \"fetch('http://'+(process.env.HOSTNAME||'localhost')+':3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
 
 echo "== 5. DB 마이그레이션 (하위호환 규칙 — deployment.md) =="
 $PROD run --rm api uv run --no-dev alembic upgrade head
