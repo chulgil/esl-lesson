@@ -19,6 +19,7 @@ from app.api.friends import router as friends_router
 from app.api.game import router as game_router
 from app.api.game import ws_router as game_ws_router
 from app.api.my_contents import router as my_contents_router
+from app.api.notifications import router as notifications_router
 from app.api.push import router as push_router
 from app.api.study import cards_router, settings_router
 from app.api.study import router as study_router
@@ -67,6 +68,7 @@ app.include_router(cards_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(friends_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 app.include_router(push_router, prefix="/api")
 app.include_router(game_router, prefix="/api")
 app.include_router(game_ws_router)  # /ws/game (traefik PathPrefix:/ws)

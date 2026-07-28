@@ -22,6 +22,7 @@ from app.services.game.quiz_royale import royale
 from app.services.game.scramble import scrambler
 from app.services.game.spectate import spectate_hub
 from app.services.game.typing_race import racer
+from app.services.notifications import notify
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
@@ -64,6 +65,10 @@ async def send_request(
         raise HTTPException(status.HTTP_409_CONFLICT, "already_requested_or_friends")
     row = Friendship(requester_id=user.id, addressee_id=target.id)
     db.add(row)
+    await db.flush()  # 알림 payload 에 요청 id 를 담기 위해 선확보
+    await notify(
+        db, target.id, "friend_request", {"from_name": user.nickname, "request_id": row.id}
+    )
     await db.commit()
     return {"id": row.id, "status": row.status}
 
@@ -78,6 +83,8 @@ async def accept_request(
     if row is None or row.addressee_id != user.id or row.status != "pending":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "request_not_found")
     row.status = "accepted"
+    # 수락 알림은 요청자에게 — 닉네임은 수락 시점 스냅샷
+    await notify(db, row.requester_id, "friend_accepted", {"from_name": user.nickname})
     await db.commit()
     return {"id": row.id, "status": row.status}
 
