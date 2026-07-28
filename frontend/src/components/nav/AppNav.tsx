@@ -189,12 +189,31 @@ export function AppNav() {
         </button>
       )}
 
-      {/* 모바일: 하단 탭바 고정 (채팅 진입은 우하단 ChatWidget 런처) */}
+      {/* 모바일: 상단 미니바 — 알림·채팅·설정은 상단, 이동 탭은 하단 (Jira 모바일 패턴).
+          하단 탭바 6개 과밀 해소를 위해 설정을 여기로 옮겼다 (2026-07-28 UX 개편) */}
+      <div className="mobile-topbar sticky top-0 z-40 flex h-12 items-center gap-1 border-b-2 border-ink/10 bg-paper/95 px-3 backdrop-blur sm:hidden">
+        <Link href="/" className="font-hand text-xl font-bold hover:opacity-80">
+          <span className="hl">ESL</span>
+        </Link>
+        <div className="ml-auto flex items-center gap-1">
+          <NotificationBell />
+          <ChatNavButton />
+          <Link
+            href="/settings"
+            aria-label="설정"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-md transition hover:bg-ink/10"
+          >
+            <SettingsIcon />
+          </Link>
+        </div>
+      </div>
+
+      {/* 모바일: 하단 탭바 고정 — 설정은 상단 미니바로 이동해 5개 유지 */}
       <nav
         aria-label="주요 메뉴"
         className="fixed inset-x-0 bottom-0 z-40 flex border-t-2 border-ink/15 bg-white sm:hidden"
       >
-        {TABS.map((tab) => {
+        {TABS.filter((tab) => tab.href !== "/settings").map((tab) => {
           const active = tab.match(pathname);
           return (
             <Link

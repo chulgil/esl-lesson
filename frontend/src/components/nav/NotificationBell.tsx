@@ -89,7 +89,7 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute top-full right-0 z-50 mt-2 max-h-96 w-80 overflow-y-auto rounded-lg border-2 border-ink/15 bg-white shadow-xl">
+        <div className="absolute top-full right-0 z-50 mt-2 max-h-96 w-80 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-lg border-2 border-ink/15 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-ink/10 px-3 py-2">
             <span className="text-sm font-bold">알림</span>
             <button

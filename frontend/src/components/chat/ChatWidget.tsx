@@ -139,7 +139,7 @@ export function ChatWidget() {
           ref={panelRef}
           className={
             effFloating
-              ? `fixed right-4 bottom-20 z-50 flex h-[30rem] w-[22.5rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg shadow-2xl ${
+              ? `fixed right-4 bottom-36 z-50 flex h-[30rem] w-[22.5rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg shadow-2xl sm:bottom-20 ${
                   excel
                     ? "border border-[#c9cfd6] bg-white font-sans text-[13px] text-[#24292f]"
                     : "border-2 border-ink/15 bg-paper"
@@ -217,8 +217,8 @@ export function ChatWidget() {
           aria-label={`대화 열기${unread > 0 ? ` — 새 글 ${unread}개` : ""}`}
           className={
             excel
-              ? "fixed right-4 bottom-4 z-50 flex min-h-10 items-center gap-1.5 rounded-full bg-[#185c37] px-4 font-sans text-xs font-bold text-white shadow-lg hover:bg-[#217346]"
-              : "fixed right-4 bottom-4 z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5"
+              ? "fixed right-4 bottom-20 z-50 flex min-h-10 items-center gap-1.5 rounded-full bg-[#185c37] px-4 font-sans text-xs font-bold text-white shadow-lg hover:bg-[#217346] sm:bottom-4"
+              : "fixed right-4 bottom-20 z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5 sm:bottom-4"
           }
         >
           {excel ? <span>메모</span> : <PencilNoteIcon />}
