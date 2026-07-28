@@ -102,26 +102,30 @@ frontend: npm ci → lint → typecheck → test → next build
 backend:  uv sync → ruff check → pytest
 ```
 
-### deploy.yml — main push 시 배포
+### deploy.yml — main push 시 배포 (red-green 검증된 승격, 2026-07-28)
+
+배포 본체는 리포의 **`scripts/deploy.sh`** — `git reset` 직후 실행되므로 항상 커밋과 같은 버전의 스크립트가 돈다. deploy.yml 은 SSH 진입 + 공개 헬스체크 + 실패 시 자동 롤백 호출만 담당한다.
 
 ```
-on: push(main), CI 성공 후
-jobs:
-  deploy:
-    - appleboy/ssh-action (secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY)
-    - script: |
-        cd ~/apps/eng-lesson
-        git fetch origin main && git reset --hard origin/main
-        docker-compose -f docker-compose.prod.yml build
-        docker-compose -f docker-compose.prod.yml run --rm api alembic upgrade head
-        docker-compose -f docker-compose.prod.yml up -d
-        docker image prune -f
-    - 헬스체크: curl -sf https://esladmin.lessonaza.app/api/health
+push(main) → CI 성공 → [deploy.yml SSH: git reset → bash scripts/deploy.sh]
+  1. 디스크 정리 (image prune + builder prune --keep-storage 2GB)
+  2. 롤백 포인트 캡처 — 서빙 중 컨테이너의 이미지 ID를 :prev 로 태그
+     (빌드가 :latest 를 덮어쓰기 전에 먼저)
+  3. 순차 빌드 + 신선도 게이트 (api=py 해시, web=BUILD_SHA)
+  4. 카나리(green) 검증 — docker-compose.canary.yml 로 트래픽 밖 부팅
+     · api-canary: postgresql_internal 만 가입(traefik 미노출), /api/health 폴링 60s
+     · web-canary: localhost:3000 200 확인. 순차 1개씩(RAM 보호), 검증 즉시 제거
+     · 실패 → 로그 출력 + 중단. 프로덕션 무접촉(red 유지)
+  5. alembic upgrade head (카나리 통과 후)
+  6. 승격: up -d --force-recreate (검증된 이미지 스왑 — 유일한 수 초 다운타임)
+→ [deploy.yml] 공개 헬스체크 12×10s
+→ 실패 시 [자동 롤백]: bash scripts/deploy.sh --rollback (:prev 재태그+재생성) 후 재검증
 ```
+
+- **트래픽 중첩형 blue-green 을 쓰지 않는 이유**: api 는 인프로세스 채팅 허브·게임 세션의 단일 인스턴스 전제(Redis 금지, 2026-07-27 결정) — 이중 기동 시 스플릿브레인. traefik 1.7 + compose v1(`container_name` 고정) 도 라벨 전환을 지원하지 않는다. traefik 2+/compose v2 이전 시 web(무상태)만 중첩형 재검토.
+- **서버 RAM 2GB 제약(2026-07-12)**: api+web 동시 빌드 OOM 이력 — 순차 빌드 + 카나리도 순차 1개씩.
 
 GitHub Secrets 등록 목록: `DEPLOY_HOST`(108.61.162.25), `DEPLOY_USER`(admin), `DEPLOY_SSH_KEY`(배포 전용 키 신규 발급 권장).
-
-**서버 RAM 2GB 제약(2026-07-12)**: api+web 동시 빌드가 OOM 으로 실패해 스테일 이미지가 남을 수 있다. 배포 스크립트는 서비스를 **순차 빌드**하고 `up -d --force-recreate` 로 항상 재생성한다. 여유가 되면 스왑 2GB 추가 권장.
 
 ## 배포 순서 (최초 1회 수동 준비)
 
@@ -135,9 +139,11 @@ GitHub Secrets 등록 목록: `DEPLOY_HOST`(108.61.162.25), `DEPLOY_USER`(admin)
 
 ## 헬스체크/롤백
 
-- `GET /api/health`: DB ping 포함. 배포 워크플로 마지막에 검증 — 실패 시 워크플로 실패로 표면화.
-- 롤백: `git reset --hard <직전 태그|커밋> && docker-compose up -d --build`. 마이그레이션이 포함된 릴리스는 파괴적 변경 금지 정책([database.md](database.md))으로 하위 호환 보장.
-- 로그: `docker logs -f englesson-api` / `englesson-web`.
+- `GET /api/health`: DB ping 포함. 카나리(내부)와 배포 워크플로 마지막(공개) 두 번 검증.
+- **자동 롤백**: 공개 헬스체크 실패 시 워크플로가 `scripts/deploy.sh --rollback` 을 호출 — `:prev` 이미지 재태그 + force-recreate + 재검증. `:prev` = 직전 배포에서 실제 서빙하던 이미지 ID (배포마다 빌드 전에 캡처).
+- **수동 롤백**: `ssh codenavi → cd ~/apps/eng-lesson && bash scripts/deploy.sh --rollback`. 재빌드 없이 즉시 복귀라 `git reset && build` 방식보다 빠르고 OOM 리스크 없음.
+- **마이그레이션 하위호환 규칙(필수)**: alembic 은 구버전이 아직 서빙 중일 때(승격 전) 적용되고, 롤백 시에도 스키마는 남는다 — **컬럼/테이블 제거·rename 은 "코드에서 참조 제거 배포 → 다음 배포에서 스키마 제거" 2단계**로. 추가(add column nullable/default)는 자유. ([database.md](database.md) 파괴적 변경 금지 정책과 동일 축)
+- 로그: `docker logs -f englesson-api` / `englesson-web`. 카나리 실패 로그는 액션 로그에 tail 50 출력됨.
 
 ## 백업
 

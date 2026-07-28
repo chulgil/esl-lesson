@@ -1,6 +1,8 @@
 name: Deploy
 
 # main push → CI 통과 후 codenavi 서버 배포 (docs/architecture/deployment.md)
+# 배포 본체는 리포의 scripts/deploy.sh — 커밋과 같은 버전의 스크립트가 실행된다.
+# 전략: red-green(검증된 승격) — 카나리 헬스 통과 시에만 교체, 실패 시 자동 롤백.
 on:
   workflow_run:
     workflows: [CI]
@@ -24,57 +26,24 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success' && vars.DEPLOY_ENABLED == 'true'
     environment: production
     steps:
-      - name: SSH deploy
+      - name: SSH deploy (red-green)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script_stop: true
           # VPS 사양상 Next.js 빌드가 10분(기본값)을 초과할 수 있음
           command_timeout: 30m
           script: |
             set -e
             cd ~/apps/eng-lesson
-            # 디스크 선확보 — dangling 이미지·BuildKit 캐시 누적으로 배포 3회 만에
-            # 디스크 풀 실패 (2026-07-15 run 29383033986 실측). 빌드 후 prune 만으로는
-            # 실패한 빌드의 캐시가 남아 다음 배포도 연쇄 실패한다.
-            docker image prune -f
-            docker builder prune -f --keep-storage 2GB
-            df -h / | tail -1
             git fetch origin main
             git reset --hard origin/main
-            export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
-            # 서버 RAM 이 2GB 로 빠듯해 api+web 동시 빌드가 OOM 으로 실패 → 스테일 이미지
-            # 원인(2026-07-12 실측). 서비스를 하나씩 순차 빌드하고, 이미지 소스 해시로
-            # 신선도를 확인해 불일치 시 무캐시 재빌드한다.
-            build_fresh() {
-              svc="$1"; img="$2"
-              docker-compose -f docker-compose.prod.yml build "$svc"
-              IMG=$(docker run --rm --entrypoint sh "$img" -c "find app -name '*.py' 2>/dev/null | sort | xargs cat 2>/dev/null | md5sum" | cut -d' ' -f1)
-              SRC=$(cd backend && find app -name '*.py' | sort | xargs cat | md5sum | cut -d' ' -f1)
-              if [ "$svc" = "api" ] && [ "$IMG" != "$SRC" ]; then
-                echo "[!] stale $svc image - rebuilding --no-cache"
-                docker-compose -f docker-compose.prod.yml build --no-cache "$svc"
-              fi
-            }
-            build_fresh api eng-lesson_api
-            # web 신선도: 이미지에 새긴 BUILD_SHA 와 현재 커밋 비교, 다르면 무캐시 재빌드
-            export GIT_SHA=$(git rev-parse HEAD)
-            docker-compose -f docker-compose.prod.yml build web
-            IMG_SHA=$(docker run --rm --entrypoint cat eng-lesson_web /app/BUILD_SHA 2>/dev/null || echo none)
-            if [ "$IMG_SHA" != "$GIT_SHA" ]; then
-              echo "[!] stale web image ($IMG_SHA != $GIT_SHA) - rebuilding --no-cache"
-              docker-compose -f docker-compose.prod.yml build --no-cache web
-            fi
-            docker-compose -f docker-compose.prod.yml run --rm api uv run --no-dev alembic upgrade head
-            # up -d 가 이미지 갱신에도 재생성 안 하는 v1 버그 → 항상 force-recreate
-            docker-compose -f docker-compose.prod.yml up -d --force-recreate
-            docker image prune -f
+            bash scripts/deploy.sh
 
-      - name: Health check
-        # 컨테이너 기동이 15초를 넘겨 단발 curl 이 오탐 (2026-07-16 run 29464170602)
-        # — 최대 2분 재시도 후에만 실패 판정
+      - name: Health check (fail -> auto rollback)
+        # 컨테이너 기동이 15초를 넘겨 단발 curl 이 오탐 (2026-07-16) — 최대 2분 재시도
+        id: health
         run: |
           for i in $(seq 1 12); do
             sleep 10
@@ -85,3 +54,26 @@ jobs:
             echo "health not ready ($i/12)"
           done
           exit 1
+
+      - name: Auto rollback on health failure
+        if: failure() && steps.health.outcome == 'failure'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            cd ~/apps/eng-lesson
+            bash scripts/deploy.sh --rollback
+            for i in $(seq 1 12); do
+              sleep 10
+              if curl -sf https://esl.lessonaza.app/api/health >/dev/null; then
+                echo "rollback health ok (try $i)"
+                exit 0
+              fi
+              echo "rollback health not ready ($i/12)"
+            done
+            echo "[!] rollback health failed - manual intervention required"
+            exit 1
