@@ -202,9 +202,20 @@ async def test_quest_progress_and_completion_ledger(client, db_session):
     )
     assert len(rows) == 1
 
-    # stats XP = 복습 10개(100) + 미션 보너스
+    # stats XP = 복습 10개(100) + 오늘 완료된 모든 미션 보너스 합
+    # (날짜·유저별로 picked 되는 나머지 2개 미션 중 하나가 같은 복습 액션으로
+    #  같이 달성될 수 있어 CORE_QUEST 한 건만으로 계산하면 날짜에 따라 깨진다)
+    all_rows = (
+        (
+            await db_session.execute(
+                select(QuestCompletion).where(QuestCompletion.user_id == user.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     stats = (await client.get("/api/study/stats")).json()
-    assert stats["xp"] == base_xp + 100 + rows[0].xp
+    assert stats["xp"] == base_xp + 100 + sum(r.xp for r in all_rows)
 
 
 async def test_quest_all_done_bonus(client, db_session):
