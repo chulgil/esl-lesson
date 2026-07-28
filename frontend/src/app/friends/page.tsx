@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
+import { onChatEvent } from "@/lib/chat-signals";
 import { friendsApi, type FriendsList } from "@/lib/friends-api";
 
 /** 친구 — 추가/수락/목록 관리의 단일 진입점 (2026-07-14 IA 정리).
@@ -26,7 +27,14 @@ export default function FriendsPage() {
   useEffect(() => {
     refresh();
     const timer = setInterval(refresh, 15000); // 학습 중 상태 갱신
-    return () => clearInterval(timer);
+    // 친구 접속/이탈 프레즌스는 WS 로 즉시 반영 (폴링 15초는 학습 중 판별용)
+    const off = onChatEvent((msg) => {
+      if (msg.t === "presence") refresh();
+    });
+    return () => {
+      clearInterval(timer);
+      off();
+    };
   }, [refresh]);
 
   async function addFriend() {
@@ -139,6 +147,11 @@ export default function FriendsPage() {
                 {f.studying ? (
                   <span className="rounded-full bg-brick-green/15 px-2 py-0.5 text-xs font-bold text-brick-green">
                     학습 중
+                  </span>
+                ) : f.online ? (
+                  <span className="flex items-center gap-1 rounded-full bg-brick-blue/10 px-2 py-0.5 text-xs font-bold text-brick-blue">
+                    <span className="h-1.5 w-1.5 rounded-full bg-brick-green" />
+                    접속 중
                   </span>
                 ) : (
                   <span className="rounded-full bg-ink/5 px-2 py-0.5 text-xs opacity-50">
