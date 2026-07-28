@@ -64,9 +64,21 @@ export function ChatWidget() {
     };
   }, [loggedIn]);
 
-  // 파비콘 배지 — 다른 탭을 보고 있어도 안읽음 개수를 인지 (2026-07-28 요청)
+  // 파비콘 배지 — 다른 탭을 보고 있어도 안읽음 개수를 인지 (2026-07-28 요청).
+  // 개수 변경 외에 라우팅·창 복귀 시에도 재적용해야 한다: Next 가 head 의 원래
+  // 아이콘 링크를 되살리거나 브라우저가 탭 복귀 때 캐시 파비콘으로 돌아가면
+  // 개수가 그대로여도 배지가 사라진다 (같은 날 후속 보고). 재적용은 멱등(가드).
   useEffect(() => {
     setFaviconBadge(unread);
+  }, [unread, pathname]);
+  useEffect(() => {
+    const reapply = () => setFaviconBadge(unread);
+    window.addEventListener("focus", reapply);
+    document.addEventListener("visibilitychange", reapply);
+    return () => {
+      window.removeEventListener("focus", reapply);
+      document.removeEventListener("visibilitychange", reapply);
+    };
   }, [unread]);
 
   // 도킹은 데스크톱에서만 실제 적용 — 모바일은 항상 플로팅으로 동작
@@ -194,12 +206,14 @@ export function ChatWidget() {
         </div>
       )}
 
-      {/* 런처 — 도킹 모드는 상시 열려있어 런처가 필요 없다. 오피스: 메모 pill / 그 외: 연필 노트 원형 */}
+      {/* 런처 — 도킹 모드는 상시 열려있어 런처가 필요 없다. 오피스: 메모 pill / 그 외: 연필 노트 원형.
+          열기 전용(토글 아님): 토글은 바깥클릭 닫힘과의 이벤트 순서 경합으로
+          "다시 열면 바로 닫히는" 간헐 증상을 만든다 (2026-07-28 보고). 닫기 = X·Esc·바깥클릭 */}
       {effFloating && (
         <button
           ref={launcherRef}
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen(true)}
           aria-label={`대화 열기${unread > 0 ? ` — 새 글 ${unread}개` : ""}`}
           className={
             excel
@@ -351,6 +365,15 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
                 }`}
               >
                 <b>{mine ? "나" : p.peerName}</b>
+                {/* 전체 페이지(NoteSkin)와 동일 사양 — 시각 표기 (2026-07-28 통일 요청) */}
+                {m.created_at && (
+                  <span>
+                    {new Date(m.created_at).toLocaleTimeString("ko-KR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                )}
                 {mine && m.id > p.otherRead && (
                   <span
                     aria-label="상대가 아직 읽지 않음"
