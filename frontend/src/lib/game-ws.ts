@@ -324,9 +324,17 @@ export type ChatServerMsg =
   | { t: "chat.typing"; from_user_id: number }
   | { t: "presence"; user_id: number; online: boolean };
 
+/** 알림 센터 — payload 는 타입별로 달라 인덱스 시그니처로 수용 (docs/specs/notifications.md) */
+export type NotifServerMsg = {
+  t: "notif.new";
+  type: string;
+  [key: string]: unknown;
+};
+
 export type ServerMsg =
   | IvMsg
   | ChatServerMsg
+  | NotifServerMsg
   | StateMsg
   | MatchFoundMsg
   | ClearResultMsg

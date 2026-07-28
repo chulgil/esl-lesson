@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChatNavButton } from "@/components/chat/ChatNavButton";
+import { NotificationBell } from "@/components/nav/NotificationBell";
 import { fetchMe, type Me } from "@/lib/api";
 import { useAppTheme } from "@/lib/theme";
 
@@ -136,6 +137,7 @@ export function AppNav() {
             );
           })}
           <div className="ml-auto flex items-center gap-3">
+            <NotificationBell />
             <ChatNavButton />
             {me?.role === "admin" && (
               <Link

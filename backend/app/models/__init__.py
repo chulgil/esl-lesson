@@ -21,6 +21,7 @@ from app.models.game import (
     TypingRace,
 )
 from app.models.item import ItemOccurrence, LearningItem, WordInsight
+from app.models.notification import Notification
 from app.models.push import PushSubscription
 from app.models.retention import QuestCompletion, StreakSaverUse
 from app.models.user import User, UserSettings
@@ -44,6 +45,7 @@ __all__ = [
     "TypingRace",
     "ItemOccurrence",
     "LearningItem",
+    "Notification",
     "PushSubscription",
     "QuestCompletion",
     "ReviewCard",

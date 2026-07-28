@@ -23,7 +23,14 @@ from app.core.security import (
     safe_next_path,
     verify_state_token,
 )
-from app.models import Content, ContentSubscription, PushSubscription, ReviewCard, ReviewLog
+from app.models import (
+    Content,
+    ContentSubscription,
+    Notification,
+    PushSubscription,
+    ReviewCard,
+    ReviewLog,
+)
 from app.models.user import ROLE_ADMIN, User, UserSettings
 from app.services.content_service import delete_content_row
 from app.services.nicknames import normalize_nickname, random_nickname
@@ -252,6 +259,7 @@ async def delete_me(
         (ReviewCard.__table__, ReviewCard.user_id),
         (ContentSubscription.__table__, ContentSubscription.user_id),
         (PushSubscription.__table__, PushSubscription.user_id),
+        (Notification.__table__, Notification.user_id),
         (UserSettings.__table__, UserSettings.user_id),
     ):
         await db.execute(table.delete().where(col == user.id))

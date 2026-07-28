@@ -36,6 +36,7 @@ from app.services.game.quiz_royale import royale
 from app.services.game.scramble import scrambler
 from app.services.game.spectate import spectate_hub
 from app.services.game.typing_race import racer
+from app.services.notifications import notify
 
 logger = logging.getLogger(__name__)
 
@@ -763,6 +764,13 @@ async def game_ws(websocket: WebSocket) -> None:
                         ):
                             # 접속 중이 아니면 웹 푸시 초대장 — 클릭 시 자동 입장
                             via = "push"
+                        # 토스트·푸시를 놓쳐도 벨에서 확인 — 알림 센터 적재
+                        await notify(
+                            invite_db,
+                            to_user_id,
+                            "game_invite",
+                            {"from_name": user.nickname, "game": game, "code": code},
+                        )
                         await invite_db.commit()
                 await send({"t": "iv.sent", "ok": via is not None, "via": via})
             else:
