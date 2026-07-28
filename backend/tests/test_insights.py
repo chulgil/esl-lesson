@@ -72,6 +72,26 @@ async def test_insight_api_endpoint(client, db_session):
     assert missing.status_code == 404
 
 
+async def test_insight_hidden_after_unsubscribe(client, db_session):
+    """구독 해제한 콘텐츠의 항목은 인사이트도 404 — LLM 생성 호출 자체를 차단."""
+    from app.models import ItemOccurrence
+    from app.services import insights
+
+    await login(client, db_session)
+    items = await seed_items(db_session, count=1)
+    content_id = (
+        await db_session.execute(
+            select(ItemOccurrence.content_id).where(ItemOccurrence.item_id == items[0].id)
+        )
+    ).scalar_one()
+    assert (await client.delete(f"/api/my/contents/{content_id}")).status_code == 204
+
+    with patch.object(insights, "_generate", new=AsyncMock(return_value=FAKE_PAYLOAD)) as gen:
+        res = await client.get(f"/api/study/items/{items[0].id}/insight")
+    assert res.status_code == 404
+    assert gen.await_count == 0  # 보이지 않는 항목엔 LLM 비용을 쓰지 않는다
+
+
 def test_parse_json_tolerates_fences():
     """모델이 ```json 펜스나 설명을 붙여도 JSON 만 뽑아낸다."""
     from app.services.insights import _parse_json

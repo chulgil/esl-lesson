@@ -390,9 +390,10 @@ async def daily_puzzle_state(
     play = await _load_play(db, user.id, day)
     if play is not None and play.answer:
         answer = play.answer
-        ko = (await daily_puzzle.candidates(db)).get(answer, "")
+        # 시작 후 구독을 빼도 오늘 판의 정답은 플레이 행에 고정 — 뜻도 무필터 조회
+        ko = await daily_puzzle.meaning_of(db, answer)
     else:
-        picked = await daily_puzzle.puzzle_of_day(db, day)
+        picked = await daily_puzzle.puzzle_of_day(db, day, user.id)
         if picked is None:
             return {"available": False}
         answer, ko = picked
@@ -417,7 +418,7 @@ async def daily_puzzle_guess(
     day = daily_puzzle.today_kst()
     play = await _load_play(db, user.id, day)
     if play is None:
-        picked = await daily_puzzle.puzzle_of_day(db, day)
+        picked = await daily_puzzle.puzzle_of_day(db, day, user.id)
         if picked is None:
             raise HTTPException(status.HTTP_409_CONFLICT, "puzzle_unavailable")
         answer, ko = picked
@@ -425,7 +426,8 @@ async def daily_puzzle_guess(
         db.add(play)
     else:
         answer = play.answer
-        ko = (await daily_puzzle.candidates(db)).get(answer, "")
+        # 진행 중 판의 정답은 행에 고정 — 구독 상태와 무관하게 뜻 유지
+        ko = await daily_puzzle.meaning_of(db, answer)
 
     guesses = list(play.guesses or [])
     if play.solved or len(guesses) >= daily_puzzle.MAX_TRIES:
@@ -455,7 +457,7 @@ async def puzzle_practice_start(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
-    words = await daily_puzzle.candidates(db)
+    words = await daily_puzzle.candidates(db, user.id)
     if not words:
         return {"available": False}
     # 오늘의 단어는 연습에서 제외 — 데일리 스포일 방지

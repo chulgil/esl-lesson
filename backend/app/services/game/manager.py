@@ -615,7 +615,7 @@ async def load_public_word_pool() -> list[tuple[int, str, str]]:
 
 
 async def load_word_pool(user_id: int) -> list[tuple[int, str, str]]:
-    """기본 풀: 내가 학습한 word 우선, 부족하면 공용 approved 로 보충."""
+    """기본 풀: 내가 학습한 word 우선(지금 담긴 것만), 부족하면 보이는 단어로 보충."""
     async with get_session_factory()() as db:
         learned = (
             (
@@ -626,6 +626,9 @@ async def load_word_pool(user_id: int) -> list[tuple[int, str, str]]:
                         ReviewCard.user_id == user_id,
                         LearningItem.item_type == "word",
                         LearningItem.review_status != "rejected",
+                        # 카드가 남아 있어도 구독 해제한 콘텐츠의 단어는 제외 —
+                        # 학습 재료 = 담은 콘텐츠 (content-governance.md)
+                        visible_item_clause(user_id),
                     )
                 )
             )

@@ -1,8 +1,32 @@
 """데일리 단어 퍼즐 — 채점·결정성·API 흐름 (docs/specs/daily-puzzle.md)."""
 
-from app.models import LearningItem
+from sqlalchemy import select
+
+from app.models import Content, ContentSubscription, ItemOccurrence, LearningItem, User
 from app.services import daily_puzzle as dp
 from tests.test_study import login
+
+
+async def seed_puzzle_words(db, words):
+    """답 풀은 담기(구독) 가시성을 따른다 — 공용 콘텐츠 출처 + 전 사용자 구독으로 시드."""
+    content = Content(source="manual", title="퍼즐 소재", visibility="public", status="ready")
+    db.add(content)
+    await db.flush()
+    for user_id in (await db.execute(select(User.id))).scalars().all():
+        db.add(ContentSubscription(content_id=content.id, user_id=user_id))
+    for w in words:
+        item = LearningItem(
+            item_type="word",
+            en_text=w,
+            ko_text=f"{w}뜻",
+            normalized_key=w,
+            review_status="approved",
+        )
+        db.add(item)
+        await db.flush()
+        db.add(ItemOccurrence(item_id=item.id, content_id=content.id))
+    await db.commit()
+    return content
 
 
 def test_grade_duplicate_letters():
@@ -23,19 +47,7 @@ def test_pick_word_deterministic_and_stable():
 
 async def test_puzzle_api_flow(client, db_session):
     await login(client, db_session)
-    db_session.add_all(
-        [
-            LearningItem(
-                item_type="word",
-                en_text=w,
-                ko_text=f"{w}뜻",
-                normalized_key=w,
-                review_status="approved",
-            )
-            for w in ("apple", "brave", "chair")
-        ]
-    )
-    await db_session.commit()
+    await seed_puzzle_words(db_session, ["apple", "brave", "chair"])
 
     state = (await client.get("/api/game/puzzle")).json()
     assert state["available"] is True and state["max_tries"] == 6
@@ -75,19 +87,7 @@ async def test_puzzle_api_flow(client, db_session):
 async def test_practice_mode_flow(client, db_session):
     """연습 모드 — 무상태 서명 토큰, 무제한, 기록 미저장 (하루 1판 가혹함 완화)."""
     await login(client, db_session)
-    db_session.add_all(
-        [
-            LearningItem(
-                item_type="word",
-                en_text=w,
-                ko_text=f"{w}뜻",
-                normalized_key=w,
-                review_status="approved",
-            )
-            for w in ("apple", "brave", "chair", "dream")
-        ]
-    )
-    await db_session.commit()
+    await seed_puzzle_words(db_session, ["apple", "brave", "chair", "dream"])
 
     start = (await client.get("/api/game/puzzle/practice")).json()
     assert start["available"] is True and start["max_tries"] == 6
@@ -134,3 +134,38 @@ async def test_practice_mode_flow(client, db_session):
         json={"token": token + "x", "word": wrong},
     )
     assert res.status_code == 400
+
+
+async def test_unsubscribed_words_leave_puzzle_pool(client, db_session):
+    """라이브러리에서 뺀 콘텐츠의 단어는 새 퍼즐(데일리·연습) 답 풀에서 빠진다."""
+    await login(client, db_session)
+    content = await seed_puzzle_words(db_session, ["apple", "brave", "chair"])
+
+    assert (await client.get("/api/game/puzzle")).json()["available"] is True
+
+    # 유일한 소재를 빼면 답 풀이 비어 퍼즐 자체가 내려간다
+    assert (await client.delete(f"/api/my/contents/{content.id}")).status_code == 204
+    assert (await client.get("/api/game/puzzle")).json()["available"] is False
+    assert (await client.get("/api/game/puzzle/practice")).json()["available"] is False
+
+    # 다시 담으면 그대로 복귀
+    assert (await client.post(f"/api/my/contents/{content.id}/subscribe")).status_code == 202
+    assert (await client.get("/api/game/puzzle")).json()["available"] is True
+
+
+async def test_started_play_keeps_fixed_answer_after_unsubscribe(client, db_session):
+    """이미 시작한 오늘 판은 구독을 빼도 유지 — 정답·뜻 힌트가 플레이 행에 고정."""
+    await login(client, db_session)
+    content = await seed_puzzle_words(db_session, ["apple", "brave", "chair"])
+
+    length = (await client.get("/api/game/puzzle")).json()["length"]
+    first = await client.post("/api/game/puzzle/guess", json={"word": "z" * length})
+    assert first.status_code == 200
+
+    assert (await client.delete(f"/api/my/contents/{content.id}")).status_code == 204
+    after = (await client.get("/api/game/puzzle")).json()
+    assert after["available"] is True
+    assert len(after["guesses"]) == 1
+    assert after["hint_ko"].endswith("뜻")  # 뜻 힌트도 무필터 조회로 유지
+    res = await client.post("/api/game/puzzle/guess", json={"word": "z" * length})
+    assert res.status_code == 200  # 진행 중 판은 계속 추측 가능

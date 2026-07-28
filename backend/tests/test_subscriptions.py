@@ -160,6 +160,118 @@ async def test_delete_preserves_practice_records(client, db_session):
     assert items[0].id not in visible
 
 
+async def test_resubscribe_restores_fsrs_state(client, db_session):
+    """재담기 시 FSRS 상태(reps/state/due_at) 그대로 복원 — 빼기는 구독 행만 지운다는 실증."""
+    from sqlalchemy import select as sa_select
+
+    from app.models import ItemOccurrence, ReviewCard
+
+    user = await login_as(client, db_session, "a@example.com")
+    items = await seed_items(db_session, count=1)
+    content_id = (
+        await db_session.execute(
+            sa_select(ItemOccurrence.content_id).where(ItemOccurrence.item_id == items[0].id)
+        )
+    ).scalar_one()
+
+    # 학습 1회로 FSRS 상태를 만든다 (reps 1, due_at 미래로 스케줄)
+    question = (await client.get("/api/study/queue")).json()["questions"][0]
+    correct = items[0].ko_text if question["quiz_mode"] == "choice_en2ko" else items[0].en_text
+    res = await client.post(
+        "/api/study/answer",
+        json={
+            "card_id": question["card_id"],
+            "quiz_mode": question["quiz_mode"],
+            "answer": correct,
+            "duration_ms": 3000,
+        },
+    )
+    assert res.status_code == 200
+
+    card = (
+        await db_session.execute(sa_select(ReviewCard).where(ReviewCard.user_id == user.id))
+    ).scalar_one()
+    before = (card.reps, card.state, card.due_at)
+    assert card.reps == 1
+
+    # 빼기 → 재담기: 카드 행이 삭제·초기화 없이 해제 전 상태 그대로
+    assert (await client.delete(f"/api/my/contents/{content_id}")).status_code == 204
+    assert (await client.post(f"/api/my/contents/{content_id}/subscribe")).status_code == 202
+    await db_session.refresh(card)
+    assert (card.reps, card.state, card.due_at) == before
+
+    from app.services.visibility import visible_item_clause
+
+    visible = (
+        (await db_session.execute(sa_select(LearningItem.id).where(visible_item_clause(user.id))))
+        .scalars()
+        .all()
+    )
+    assert items[0].id in visible
+
+
+async def test_stats_levels_exclude_unsubscribed_cards(client, db_session):
+    """컬렉션(레벨) 분자도 가시성 규칙 — 빼면 카드 수·분모가 함께 빠진다."""
+    from app.models import ItemOccurrence
+
+    await login_as(client, db_session, "a@example.com")
+    items = await seed_items(db_session, count=1)
+    content_id = (
+        await db_session.execute(
+            select(ItemOccurrence.content_id).where(ItemOccurrence.item_id == items[0].id)
+        )
+    ).scalar_one()
+    assert (await client.post("/api/cards", json={"item_id": items[0].id})).status_code == 200
+
+    def word_level(stats):
+        return next(lv for lv in stats["levels"] if lv["item_type"] == "word")
+
+    before = word_level((await client.get("/api/study/stats")).json())
+    assert before["cards"] == 1 and before["available_items"] == 1
+
+    assert (await client.delete(f"/api/my/contents/{content_id}")).status_code == 204
+    after = word_level((await client.get("/api/study/stats")).json())
+    assert after["cards"] == 0 and after["available_items"] == 0
+
+
+async def test_unsubscribed_words_leave_default_game_pool(wired_db):
+    """구독 해제한 콘텐츠의 학습 단어는 게임 기본 풀(테트리스·퀴즈 로얄)에서도 빠진다."""
+    from datetime import UTC, datetime
+
+    from app.models import ItemOccurrence, ReviewCard, User
+    from app.services.game.manager import load_word_pool
+
+    user = User(google_sub="g-a", email="a@x.com", name="A")
+    wired_db.add(user)
+    await wired_db.flush()
+    content = Content(source="manual", title="소재", status="ready", visibility="public")
+    wired_db.add(content)
+    await wired_db.flush()
+    sub = ContentSubscription(content_id=content.id, user_id=user.id)
+    wired_db.add(sub)
+    for i in range(3):
+        item = LearningItem(
+            item_type="word",
+            en_text=f"poolword{i}",
+            ko_text=f"뜻{i}",
+            normalized_key=f"poolword{i}",
+            review_status="approved",
+        )
+        wired_db.add(item)
+        await wired_db.flush()
+        wired_db.add(ItemOccurrence(item_id=item.id, content_id=content.id))
+        wired_db.add(
+            ReviewCard(user_id=user.id, item_id=item.id, state="new", due_at=datetime.now(UTC))
+        )
+    await wired_db.commit()
+
+    assert len(await load_word_pool(user.id)) == 3
+
+    await wired_db.delete(sub)
+    await wired_db.commit()
+    assert await load_word_pool(user.id) == []
+
+
 async def test_admin_registering_existing_private_promotes_to_public(admin_client, db_session):
     # 일반 사용자가 먼저 등록한 영상
     content = Content(

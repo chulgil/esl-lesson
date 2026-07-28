@@ -267,6 +267,15 @@ async def item_insight(
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     """단어 인사이트 — 최초 조회 시 LLM 생성 후 캐시 (docs/proposal/word-insight.md)."""
+    # 내게 보이는 항목만 — 구독 해제/타인 개인 항목의 인사이트 조회·LLM 생성 차단
+    # (try 밖에서 검사: 아래 except Exception 이 404 를 502 로 삼키지 않도록)
+    item_visible = (
+        await db.execute(
+            select(LearningItem.id).where(LearningItem.id == item_id, visible_item_clause(user.id))
+        )
+    ).scalar_one_or_none()
+    if item_visible is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "item_not_found")
     try:
         payload = await insights.get_or_generate(db, item_id)
     except Exception as exc:  # 생성 실패는 일시 오류 — 클라이언트 재시도 유도
@@ -443,11 +452,16 @@ async def get_stats(
     ).scalar_one()
 
     # 분자 = 학습 중 카드 (suspended 제외 — 사용자가 뺀 항목은 세지 않는다)
+    # 구독 해제 항목도 제외 — 분모(visible)와 같은 규칙이라 진행률이 100%를 넘지 않는다
     level_rows = (
         await db.execute(
             select(LearningItem.item_type, func.count(ReviewCard.id))
             .join(ReviewCard, ReviewCard.item_id == LearningItem.id)
-            .where(ReviewCard.user_id == user.id, ReviewCard.suspended.is_(False))
+            .where(
+                ReviewCard.user_id == user.id,
+                ReviewCard.suspended.is_(False),
+                visible_item_clause(user.id),
+            )
             .group_by(LearningItem.item_type)
         )
     ).all()
@@ -682,6 +696,9 @@ async def get_network(
             .where(
                 ReviewCard.user_id == user.id,
                 ReviewCard.suspended.is_(False),
+                # 구독 해제한 콘텐츠의 단어는 노드에서 제외 — 카드는 보존되므로
+                # 다시 담으면 그대로 복귀한다 (content-governance.md 가시성 규칙)
+                visible_item_clause(user.id),
                 LearningItem.item_type.in_(("word", "idiom")),
             )
             .order_by(ReviewCard.created_at.desc(), ReviewCard.id.desc())
