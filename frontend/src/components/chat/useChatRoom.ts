@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PendingMessage } from "@/components/chat/skins/types";
 import { fetchMe } from "@/lib/api";
-import { prepareImageForUpload, UnsupportedImageError } from "@/lib/image-utils";
+import {
+  prepareImageForUpload,
+  UnsupportedImageError,
+} from "@/lib/image-utils";
 import {
   chatApi,
   newClientMsgId,
@@ -65,6 +68,19 @@ export function useChatRoom(otherId: number) {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, []);
+
+  // 방 진입·위젯 재열림 시 항상 최신(최하단)부터 보여야 한다 (2026-07-28 보고).
+  // 초기 fetch 후 1회 스크롤만으로는 (a) 캐시 복원 렌더 (b) 이미지 로드로
+  // 높이가 늦게 자라는 경우 하단이 풀린다 — rAF + 지연 재고정 2회로 보강.
+  useEffect(() => {
+    requestAnimationFrame(scrollToBottom);
+    const t1 = setTimeout(scrollToBottom, 300);
+    const t2 = setTimeout(scrollToBottom, 900);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [otherId, scrollToBottom]);
 
   const markReadAndSignal = useCallback(() => {
     chatApi
@@ -173,7 +189,8 @@ export function useChatRoom(otherId: number) {
         const detail = e instanceof Error ? e.message : "";
         setError(
           {
-            unsupported_image_type: "이 형식은 보낼 수 없어요 — jpg·png·webp·gif 만 가능해요",
+            unsupported_image_type:
+              "이 형식은 보낼 수 없어요 — jpg·png·webp·gif 만 가능해요",
             image_too_large: "이미지가 너무 커요 — 5MB 이하로 줄여주세요",
           }[detail] ?? "이미지 업로드에 실패했어요 — 잠시 후 다시 시도해주세요",
         );
