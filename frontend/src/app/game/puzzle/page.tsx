@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { BackLink } from "@/components/nav/BackLink";
@@ -59,6 +59,16 @@ export default function DailyPuzzlePage() {
   const [firstOpen, setFirstOpen] = useState(false);
   const [howtoOpen, setHowtoOpen] = useState(false);
   const [practice, setPractice] = useState<PracticeState | null>(null);
+
+  // 결과가 화면 하단(완성된 칸 아래)에 묻혀 안 보이는 문제(모바일) —
+  // 완료 시 결과 박스를 상단으로 스크롤
+  const resultRef = useRef<HTMLDivElement>(null);
+  const resultShown = practice ? practice.finished : Boolean(state?.finished);
+  useEffect(() => {
+    if (resultShown) {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [resultShown]);
 
   // 연습 모드가 켜져 있으면 보드·키보드·힌트가 전부 연습 상태를 본다
   const length = practice?.length ?? state?.length ?? 5;
@@ -431,7 +441,10 @@ export default function DailyPuzzlePage() {
 
           {/* 연습 결과 — 무제한 재도전 */}
           {practice?.finished && (
-            <div className="w-full rounded-lg border-2 border-ink/10 bg-white p-4">
+            <div
+              ref={resultRef}
+              className="w-full rounded-lg border-2 border-ink/10 bg-white p-4"
+            >
               <p
                 className={`font-hand text-3xl font-bold ${
                   practice.solved ? "text-brick-green" : "text-brick-red"
@@ -460,7 +473,10 @@ export default function DailyPuzzlePage() {
 
           {/* 데일리 결과 */}
           {!practice && state.finished && (
-            <div className="w-full rounded-lg border-2 border-ink/10 bg-white p-4">
+            <div
+              ref={resultRef}
+              className="w-full rounded-lg border-2 border-ink/10 bg-white p-4"
+            >
               <p
                 className={`font-hand text-3xl font-bold ${
                   state.solved ? "text-brick-green" : "text-brick-red"

@@ -37,6 +37,13 @@ export default function GamePage() {
 function TetrisInner() {
   const joinCode = useSearchParams().get("join");
   const [phase, setPhase] = useState<Phase>("lobby");
+  // 결과가 화면 하단에 묻혀 안 보이는 문제(모바일) — 종료 시 결과 섹션을 상단으로 스크롤
+  const resultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (phase === "ended") {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [phase]);
   // 기본 Lv.2 — Lv.3(35WPM)는 실측상 초심자가 이기기 어려움 (2026-07-14 전적 데이터)
   const [botLevel, setBotLevel] = useState(2);
   const [roomCode, setRoomCode] = useState("");
@@ -308,12 +315,14 @@ function TetrisInner() {
       )}
 
       {phase === "ended" && endResult && (
-        <ResultPanel
-          result={endResult}
-          you={matchInfo?.you ?? 1}
-          opponent={matchInfo?.opponent ?? "상대"}
-          onAgain={playAgain}
-        />
+        <div ref={resultRef}>
+          <ResultPanel
+            result={endResult}
+            you={matchInfo?.you ?? 1}
+            opponent={matchInfo?.opponent ?? "상대"}
+            onAgain={playAgain}
+          />
+        </div>
       )}
     </main>
   );

@@ -31,6 +31,13 @@ export function QuizRoyale({
   onInvite?: (userId: number, code: string) => void;
 }) {
   const [phase, setPhase] = useState<Phase>("waiting");
+  // 결과가 화면 하단에 묻혀 안 보이는 문제(모바일) — 종료 시 결과 섹션을 상단으로 스크롤
+  const resultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (phase === "ended") {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [phase]);
   const [room, setRoom] = useState<QrRoomMsg | null>(null);
   const [round, setRound] = useState<QrRoundMsg | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
@@ -247,7 +254,10 @@ export function QuizRoyale({
       )}
 
       {phase === "ended" && end && (
-        <div className="flex flex-col gap-4 rounded-lg border-2 border-ink/10 bg-white p-6">
+        <div
+          ref={resultRef}
+          className="flex flex-col gap-4 rounded-lg border-2 border-ink/10 bg-white p-6"
+        >
           <h2 className="font-hand text-3xl font-bold">
             {end.ranking[0] && (
               <span className="hl">{end.ranking[0].name} 우승!</span>

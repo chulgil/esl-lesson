@@ -37,6 +37,13 @@ export default function TypingRacePage() {
 function TypingRaceInner() {
   const joinCode = useSearchParams().get("join");
   const [phase, setPhase] = useState<Phase>("lobby");
+  // 결과가 화면 하단에 묻혀 안 보이는 문제(모바일) — 종료 시 결과 섹션을 상단으로 스크롤
+  const resultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (phase === "ended") {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [phase]);
   const [code, setCode] = useState("");
   const [room, setRoom] = useState<{
     code: string | null;
@@ -496,7 +503,10 @@ function TypingRaceInner() {
       )}
 
       {phase === "ended" && end && (
-        <section className="flex max-w-md flex-col gap-4 rounded-lg border-2 border-ink/10 bg-white p-6">
+        <section
+          ref={resultRef}
+          className="flex max-w-md flex-col gap-4 rounded-lg border-2 border-ink/10 bg-white p-6"
+        >
           <h2 className="font-hand text-3xl font-bold">
             {end.winner ? (
               <span className="hl">{end.winner} 승리!</span>
