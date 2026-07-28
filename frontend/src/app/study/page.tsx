@@ -9,6 +9,7 @@ import {
   type Achievement,
   studyApi,
   type Stats,
+  type StudyDeck,
   type StudyRank,
 } from "@/lib/study-api";
 
@@ -21,11 +22,17 @@ export default function StudyHubPage() {
   } | null>(null);
   const [ranks, setRanks] = useState<StudyRank[]>([]);
   const [badges, setBadges] = useState<Achievement[]>([]);
+  // null = 아직 로딩/실패 (섹션 숨김) — 빈 배열은 "덱 0개" 빈 상태를 렌더링
+  const [decks, setDecks] = useState<StudyDeck[] | null>(null);
 
   useEffect(() => {
     studyApi
       .stats()
       .then(setStats)
+      .catch(() => undefined);
+    studyApi
+      .decks()
+      .then((res) => setDecks(res.items))
       .catch(() => undefined);
     studyApi
       .leaderboard()
@@ -99,6 +106,53 @@ export default function StudyHubPage() {
           </Brick>
         </div>
       </section>
+
+      {/* 내 덱 — 담은 콘텐츠 단위 학습 계획 (Anki 덱, docs/specs/study-decks.md) */}
+      {decks !== null && (
+        <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-blue/40 bg-white p-5 shadow-sm">
+          <h2 className="font-hand text-2xl font-bold">내 덱</h2>
+          <p className="mt-1 text-xs opacity-60">
+            담은 콘텐츠가 덱이 돼요 — 하나만 골라서 집중 학습할 수 있어요
+          </p>
+          {decks.length === 0 ? (
+            <div className="mt-3 flex flex-col items-start gap-3">
+              <p className="text-sm opacity-70">
+                아직 덱이 없어요 — 라이브러리에서 콘텐츠를 담아보세요
+              </p>
+              <Brick color="blue" href="/library">
+                라이브러리 둘러보기
+              </Brick>
+            </div>
+          ) : (
+            <ul className="mt-3 flex flex-col gap-2">
+              {decks.map((deck) => (
+                <li
+                  key={deck.content_id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border-2 border-ink/10 px-3 py-2"
+                >
+                  <div className="min-w-40 flex-1">
+                    <p className="text-sm font-bold">{deck.title}</p>
+                    <p className="mt-0.5 text-xs opacity-60">
+                      복습 {deck.due}개 · 새 카드 {deck.new_available}개
+                      {deck.total_cards > 0 && (
+                        <span className="ml-1.5 opacity-70">
+                          (학습 중 {deck.total_cards}장)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/study/session?content=${deck.content_id}`}
+                    className="inline-flex min-h-10 items-center rounded-md border-2 border-brick-green/60 bg-white px-3 text-sm font-bold text-brick-green transition hover:-translate-y-0.5 hover:border-brick-green"
+                  >
+                    이 콘텐츠만 학습
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <div className="mt-5 grid max-w-4xl gap-5 lg:grid-cols-2">
         <Link

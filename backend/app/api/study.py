@@ -33,7 +33,7 @@ from app.services import (
     retention,
     vocab_network,
 )
-from app.services.visibility import visible_item_clause
+from app.services.visibility import subscribed_content_ids, visible_item_clause
 
 logger = logging.getLogger(__name__)
 
@@ -65,17 +65,36 @@ def enabled_types(settings: UserSettings) -> list[str]:
     return [LEVEL_TYPES[level] for level in settings.levels_enabled if level in LEVEL_TYPES]
 
 
+def content_item_clause(content_id: int):
+    """덱 필터 — 이 콘텐츠에 등장하는 항목만 (item_occurrences 다대다, study-decks.md)."""
+    return LearningItem.id.in_(
+        select(ItemOccurrence.item_id).where(ItemOccurrence.content_id == content_id)
+    )
+
+
 @router.get("/queue")
 async def get_queue(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    content_id: int | None = None,
 ) -> dict:
     now = datetime.now(UTC)
     day_start = kst_day_start(now)
     settings = await get_user_settings(db, user)
     types = enabled_types(settings)
+
+    # 덱 한정 학습 — 구독한 콘텐츠만, 비구독은 존재 여부도 흘리지 않는 404 (my_contents 와 동일)
+    deck = None
+    deck_scope = []
+    if content_id is not None:
+        from app.api.my_contents import get_subscribed_content
+
+        content = await get_subscribed_content(db, content_id, user)
+        deck = {"content_id": content.id, "title": content.title}
+        deck_scope = [content_item_clause(content.id)]
+
     if not types:
-        return {"questions": [], "total_due": 0, "introduced_today": 0}
+        return {"questions": [], "total_due": 0, "introduced_today": 0, "deck": deck}
 
     reviews_today = (
         await db.execute(
@@ -97,6 +116,7 @@ async def get_queue(
                     ReviewCard.suspended.is_(False),
                     visible_item_clause(user.id),
                     LearningItem.item_type.in_(types),
+                    *deck_scope,
                 )
                 .order_by(ReviewCard.due_at)
                 .limit(review_budget)
@@ -123,6 +143,7 @@ async def get_queue(
                         visible_item_clause(user.id),
                         LearningItem.item_type.in_(types),
                         LearningItem.id.not_in(existing),
+                        *deck_scope,
                     )
                     .order_by(LearningItem.id.desc())
                     .limit(new_budget)
@@ -152,8 +173,94 @@ async def get_queue(
         "total_due": len(due_cards),
         "introduced_today": introduced_today + len(new_cards),
         "hint_delay_seconds": settings.hint_delay_seconds,
+        "deck": deck,
         "questions": questions,
     }
+
+
+@router.get("/decks")
+async def get_decks(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """덱 카운트 — 덱 = 담은 콘텐츠 1개 (docs/specs/study-decks.md).
+
+    같은 항목이 두 콘텐츠에 등장하면 양쪽 덱에 모두 집계된다 (다대다 — Anki 와
+    다른 점). 카운트는 모두 가시성 규칙을 통과한 항목만 — 구독 해제하면 덱과
+    함께 사라지고, 다시 담으면 카드 진행 상태 그대로 복귀한다.
+    """
+    now = datetime.now(UTC)
+    contents = (
+        await db.execute(
+            select(Content.id, Content.title).where(Content.id.in_(subscribed_content_ids(user.id)))
+        )
+    ).all()
+    if not contents:
+        return {"items": []}
+    ids = [c.id for c in contents]
+
+    # 같은 항목이 한 콘텐츠에 여러 세그먼트로 등장할 수 있어 카드/항목 기준 distinct
+    card_count = func.count(func.distinct(ReviewCard.id))
+    my_cards = select(ReviewCard.item_id).where(ReviewCard.user_id == user.id)
+    due_by_content = dict(
+        (
+            await db.execute(
+                select(ItemOccurrence.content_id, card_count)
+                .join(ReviewCard, ReviewCard.item_id == ItemOccurrence.item_id)
+                .join(LearningItem, LearningItem.id == ItemOccurrence.item_id)
+                .where(
+                    ItemOccurrence.content_id.in_(ids),
+                    ReviewCard.user_id == user.id,
+                    ReviewCard.due_at <= now,
+                    ReviewCard.suspended.is_(False),
+                    visible_item_clause(user.id),
+                )
+                .group_by(ItemOccurrence.content_id)
+            )
+        ).all()
+    )
+    total_by_content = dict(
+        (
+            await db.execute(
+                select(ItemOccurrence.content_id, card_count)
+                .join(ReviewCard, ReviewCard.item_id == ItemOccurrence.item_id)
+                .join(LearningItem, LearningItem.id == ItemOccurrence.item_id)
+                .where(
+                    ItemOccurrence.content_id.in_(ids),
+                    ReviewCard.user_id == user.id,
+                    visible_item_clause(user.id),
+                )
+                .group_by(ItemOccurrence.content_id)
+            )
+        ).all()
+    )
+    new_by_content = dict(
+        (
+            await db.execute(
+                select(ItemOccurrence.content_id, func.count(func.distinct(ItemOccurrence.item_id)))
+                .join(LearningItem, LearningItem.id == ItemOccurrence.item_id)
+                .where(
+                    ItemOccurrence.content_id.in_(ids),
+                    LearningItem.id.not_in(my_cards),
+                    visible_item_clause(user.id),
+                )
+                .group_by(ItemOccurrence.content_id)
+            )
+        ).all()
+    )
+
+    items = [
+        {
+            "content_id": cid,
+            "title": title,
+            "due": due_by_content.get(cid, 0),
+            "new_available": new_by_content.get(cid, 0),
+            "total_cards": total_by_content.get(cid, 0),
+        }
+        for cid, title in contents
+    ]
+    items.sort(key=lambda d: (-d["due"], d["title"]))
+    return {"items": items}
 
 
 async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: int) -> list[dict]:
