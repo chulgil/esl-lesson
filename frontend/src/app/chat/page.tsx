@@ -12,6 +12,7 @@ import { BackLink } from "@/components/nav/BackLink";
 import { chatApi, type ChatConversation } from "@/lib/chat-api";
 import { onChatEvent } from "@/lib/chat-signals";
 import { useAppTheme } from "@/lib/theme";
+import { timeAgo } from "@/lib/time";
 
 /** 대화 목록 — 테마별 위장 (docs/specs/chat.md 위장 테마).
  *  오피스 테마 = 공유 문서 목록(시트), 그 외 = 교환 노트 목록. */
@@ -153,16 +154,6 @@ function Avatar({ name }: { name: string }) {
       {name.slice(0, 1) || "?"}
     </span>
   );
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "방금";
-  if (min < 60) return `${min}분 전`;
-  const hours = Math.floor(min / 60);
-  if (hours < 24) return `${hours}시간 전`;
-  return `${Math.floor(hours / 24)}일 전`;
 }
 
 /* --- 공유 문서 목록 (오피스 테마 위장, ExcelChrome) ------------------------- */
