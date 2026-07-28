@@ -144,6 +144,10 @@ html[data-theme="lego"] .notebook-lines {
   .h-dvh-nav-safe {
     height: calc(100dvh - 62px);
   }
+  /* 데스크톱 헤더가 접힘(AppNav 가 body 에 토글) — 전체 높이 사용 */
+  body.nav-collapsed .h-dvh-nav-safe {
+    height: 100dvh;
+  }
 }
 
 /* 채팅 도킹 모드(ChatWidget) 전용 — 화면 우측에 fixed 로 상시 붙되 AppNav 를
@@ -158,6 +162,10 @@ html[data-theme="lego"] .notebook-lines {
   .dock-right-nav-safe {
     top: 62px;
     height: calc(100dvh - 62px);
+  }
+  body.nav-collapsed .dock-right-nav-safe {
+    top: 0;
+    height: 100dvh;
   }
 }
 
