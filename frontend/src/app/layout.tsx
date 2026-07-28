@@ -56,7 +56,7 @@ export default function RootLayout({
         {/* 전역 테마 부트 — 페인트 전에 data-theme 적용 (FOUC 방지) */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem("app.theme");if(t==="candy"||t==="lego"||t==="note"||t==="cat")document.documentElement.setAttribute("data-theme",t)}catch(e){}`,
+            __html: `try{var t=localStorage.getItem("app.theme");if(t==="candy"||t==="lego"||t==="note"||t==="cat"||t==="excel")document.documentElement.setAttribute("data-theme",t)}catch(e){}`,
           }}
         />
         <AppNav />
