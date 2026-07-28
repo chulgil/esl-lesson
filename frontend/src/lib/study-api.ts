@@ -137,6 +137,15 @@ export interface QuestBoard {
   all_done_xp: number;
 }
 
+/** 덱 = 담은 콘텐츠 — 덱별 학습 카운트 (docs/specs/study-decks.md) */
+export interface StudyDeck {
+  content_id: number;
+  title: string;
+  due: number;
+  new_available: number;
+  total_cards: number;
+}
+
 export interface LibraryContent {
   id: number;
   title: string;
@@ -183,13 +192,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const studyApi = {
-  queue: () =>
+  // contentId 지정 시 해당 덱(콘텐츠)만 학습 (docs/specs/study-decks.md)
+  queue: (contentId?: number) =>
     request<{
       total_due: number;
       introduced_today: number;
       hint_delay_seconds: number;
+      deck: { content_id: number; title: string } | null;
       questions: Question[];
-    }>("/api/study/queue"),
+    }>(
+      contentId != null
+        ? `/api/study/queue?content_id=${contentId}`
+        : "/api/study/queue",
+    ),
+  decks: () => request<{ items: StudyDeck[] }>("/api/study/decks"),
   getSettings: () =>
     request<{
       hint_delay_seconds: number;

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { InsightSheet } from "@/components/study/InsightSheet";
 import { SegmentPlayer } from "@/components/media/SegmentPlayer";
@@ -18,6 +19,20 @@ const STUDY_LEVELS = [
 ];
 
 export default function StudyPage() {
+  return (
+    // useSearchParams 는 Suspense 경계 필요 (Next.js — watch 페이지와 동일 패턴)
+    <Suspense>
+      <StudySessionInner />
+    </Suspense>
+  );
+}
+
+function StudySessionInner() {
+  // ?content=ID — 덱(콘텐츠) 한정 학습, 없으면 전체 (docs/specs/study-decks.md)
+  const params = useSearchParams();
+  const contentParam = params.get("content");
+  const contentId = contentParam ? Number(contentParam) : undefined;
+
   const [queue, setQueue] = useState<Question[]>([]);
   const [idx, setIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>("loading");
@@ -28,14 +43,16 @@ export default function StudyPage() {
   const [hintDelay, setHintDelay] = useState(0);
   const [studyLevel, setStudyLevel] = useState(2);
   const [showSettings, setShowSettings] = useState(false);
+  const [deckTitle, setDeckTitle] = useState<string | null>(null);
   const startedAt = useRef(Date.now());
 
   useEffect(() => {
     studyApi
-      .queue()
+      .queue(contentId)
       .then((res) => {
         setQueue(res.questions);
         setHintDelay(res.hint_delay_seconds ?? 0);
+        setDeckTitle(res.deck?.title ?? null);
         setPhase(res.questions.length ? "question" : "empty");
         startedAt.current = Date.now();
       })
@@ -44,7 +61,7 @@ export default function StudyPage() {
       .getSettings()
       .then((s) => setStudyLevel(s.study_level))
       .catch(() => undefined);
-  }, []);
+  }, [contentId]);
 
   const question = queue[idx];
 
@@ -142,9 +159,14 @@ export default function StudyPage() {
           </svg>
           <span className="hidden sm:inline">나가기</span>
         </Link>
-        {/* 모바일 좁은 헤더에서 글자 단위 줄바꿈 방지 — 축소 폰트 + nowrap */}
-        <h1 className="font-hand text-xl font-bold whitespace-nowrap sm:text-3xl">
-          <span className="hl">오늘의 학습</span>
+        {/* 모바일 좁은 헤더에서 글자 단위 줄바꿈 방지 — 축소 폰트 + nowrap.
+            덱 한정 학습이면 덱(콘텐츠) 이름 표기 — 긴 제목은 말줄임 */}
+        <h1
+          className={`font-hand text-xl font-bold whitespace-nowrap sm:text-3xl ${
+            deckTitle ? "max-w-[38vw] truncate sm:max-w-sm" : ""
+          }`}
+        >
+          <span className="hl">{deckTitle ?? "오늘의 학습"}</span>
         </h1>
         {(phase === "question" || phase === "feedback") && (
           <span className="ml-auto rounded-full bg-white px-3 py-1 text-sm font-bold whitespace-nowrap shadow-sm">
