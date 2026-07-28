@@ -153,7 +153,8 @@ export function AppNav() {
               title={collapsed ? "메뉴 고정 펼치기" : "메뉴 접기"}
               className="flex min-h-9 min-w-9 items-center justify-center rounded-md opacity-40 transition hover:bg-ink/10 hover:opacity-100"
             >
-              <ChevronUpIcon />
+              {/* 방향 = 앞으로 일어날 동작: 펼침 상태 ∧(위로 접기) / 접힘·피크 ∨(아래로 고정 펼치기) */}
+              {collapsed ? <ChevronDownIcon /> : <ChevronUpIcon />}
             </button>
           </div>
         </header>
@@ -224,6 +225,14 @@ function ChevronUpIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" {...stroke} aria-hidden>
       <path d="m18 15-6-6-6 6" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" {...stroke} aria-hidden>
+      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }

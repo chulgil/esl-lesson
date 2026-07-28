@@ -44,10 +44,15 @@ export function NoteSkin(p: ChatSkinProps) {
               <div
                 key={m.id}
                 className={`border-b border-ink/5 py-1.5 text-sm leading-relaxed ${
-                  mine ? "text-brick-blue" : "text-ink"
+                  // 상대 글이 더 잘 읽혀야 한다 (2026-07-28 요청) — 내 글은 흐리게
+                  mine ? "text-brick-blue/60" : "font-medium text-ink"
                 }`}
               >
-                <div className="mb-0.5 flex items-baseline gap-1.5 text-[10px] opacity-45">
+                <div
+                  className={`mb-0.5 flex items-baseline gap-1.5 text-[10px] ${
+                    mine ? "opacity-40" : "opacity-70"
+                  }`}
+                >
                   <b>{mine ? "나" : p.peerName}</b>
                   {m.created_at && (
                     <span>

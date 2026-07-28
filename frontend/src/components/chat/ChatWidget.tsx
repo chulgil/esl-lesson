@@ -333,13 +333,22 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
             <div
               key={m.id}
               className={`border-b py-1 text-[13px] leading-relaxed ${
+                // 상대 글이 더 잘 읽혀야 한다 (2026-07-28 요청) — 내 글은 흐리게
                 excel
-                  ? `border-[#f0f2f4] ${mine ? "text-[#217346]" : ""}`
-                  : `border-ink/5 ${mine ? "text-brick-blue" : "text-ink"}`
+                  ? `border-[#f0f2f4] ${mine ? "text-[#217346]/60" : "font-medium text-[#24292f]"}`
+                  : `border-ink/5 ${mine ? "text-brick-blue/60" : "font-medium text-ink"}`
               }`}
             >
               <div
-                className={`mb-0.5 flex items-baseline gap-1 text-[10px] ${excel ? "text-[#aaa]" : "opacity-35"}`}
+                className={`mb-0.5 flex items-baseline gap-1 text-[10px] ${
+                  excel
+                    ? mine
+                      ? "text-[#b3b8bf]"
+                      : "text-[#666]"
+                    : mine
+                      ? "opacity-35"
+                      : "opacity-70"
+                }`}
               >
                 <b>{mine ? "나" : p.peerName}</b>
                 {mine && m.id > p.otherRead && (

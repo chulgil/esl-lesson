@@ -61,11 +61,16 @@ export function ExcelSkin(p: ChatSkinProps) {
                 <div
                   key={m.id}
                   className={`border-b border-[#f0f2f4] py-1.5 text-[13px] leading-relaxed ${
-                    mine ? "text-[#217346]" : "text-[#24292f]"
+                    // 상대 글이 더 잘 읽혀야 한다 (2026-07-28 요청) — 내 글은 흐리게
+                    mine ? "text-[#217346]/60" : "font-medium text-[#24292f]"
                   }`}
                 >
-                  <div className="mb-0.5 flex items-baseline gap-1.5 text-[10px] text-[#8a8f98]">
-                    <b className={mine ? "text-[#217346]" : "text-[#444]"}>
+                  <div
+                    className={`mb-0.5 flex items-baseline gap-1.5 text-[10px] ${
+                      mine ? "text-[#b3b8bf]" : "text-[#666]"
+                    }`}
+                  >
+                    <b className={mine ? "text-[#217346]/60" : "text-[#333]"}>
                       {mine ? "본인" : p.peerName}
                     </b>
                     {m.created_at && (
