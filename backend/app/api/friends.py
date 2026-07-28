@@ -15,10 +15,21 @@ from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import User
 from app.models.friend import Friendship
+from app.services.game.dictation import dictator
 from app.services.game.invites import invite_hub
+from app.services.game.manager import manager
+from app.services.game.quiz_royale import royale
+from app.services.game.scramble import scrambler
 from app.services.game.spectate import spectate_hub
+from app.services.game.typing_race import racer
 
 router = APIRouter(prefix="/friends", tags=["friends"])
+
+
+def _in_game(user_id: int) -> bool:
+    """5개 게임 허브 중 한 곳에라도 활성 세션이 있는가 — by_user 는 종료·이탈 시
+    각 허브가 정리하므로 존재 자체가 진행 중 신호다 (친구 목록 '게임 중' 표기)."""
+    return any(user_id in hub.by_user for hub in (manager, royale, racer, scrambler, dictator))
 
 
 class FriendRequestBody(BaseModel):
@@ -150,6 +161,7 @@ async def list_friends(
                     "studying": code is not None,
                     "watch_code": code,
                     "online": invite_hub.online(other.id),
+                    "gaming": _in_game(other.id),
                 }
             )
         elif r.addressee_id == user.id:

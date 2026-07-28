@@ -7,6 +7,7 @@ export interface FriendEntry {
   studying: boolean;
   watch_code: string | null;
   online: boolean;
+  gaming: boolean;
 }
 
 export interface FriendRequestEntry {

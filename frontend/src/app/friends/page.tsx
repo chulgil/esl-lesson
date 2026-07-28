@@ -148,6 +148,10 @@ export default function FriendsPage() {
                   <span className="rounded-full bg-brick-green/15 px-2 py-0.5 text-xs font-bold text-brick-green">
                     학습 중
                   </span>
+                ) : f.gaming ? (
+                  <span className="rounded-full bg-brick-yellow/25 px-2 py-0.5 text-xs font-bold text-ink">
+                    게임 중
+                  </span>
                 ) : f.online ? (
                   <span className="flex items-center gap-1 rounded-full bg-brick-blue/10 px-2 py-0.5 text-xs font-bold text-brick-blue">
                     <span className="h-1.5 w-1.5 rounded-full bg-brick-green" />
