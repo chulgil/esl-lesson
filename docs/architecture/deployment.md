@@ -102,25 +102,30 @@ frontend: npm ci → lint → typecheck → test → next build
 backend:  uv sync → ruff check → pytest
 ```
 
-### deploy.yml — main push 시 배포 (red-green 검증된 승격, 2026-07-28)
+### deploy.yml — main push 시 배포 (red-green 검증된 승격 + 러너 빌드, 2026-07-28)
 
-배포 본체는 리포의 **`scripts/deploy.sh`** — `git reset` 직후 실행되므로 항상 커밋과 같은 버전의 스크립트가 돈다. deploy.yml 은 SSH 진입 + 공개 헬스체크 + 실패 시 자동 롤백 호출만 담당한다.
+배포 본체는 리포의 **`scripts/deploy.sh`** — `git reset` 직후 실행되므로 항상 커밋과 같은 버전의 스크립트가 돈다. **이미지 빌드는 GitHub Actions 러너(7GB)에서 수행** — 2GB 서버에서 빌드하면 4~6분간 라이브 서비스가 질식한다(2026-07-28 실사용 보고로 이전). 서버는 load→카나리→교체만 하므로 배포 중에도 서비스가 정상 응답하고, 중단은 승격 스왑 수 초뿐이다.
 
 ```
-push(main) → CI 성공 → [deploy.yml SSH: git reset → bash scripts/deploy.sh]
-  1. 디스크 정리 (image prune + builder prune --keep-storage 2GB)
-  2. 롤백 포인트 캡처 — 서빙 중 컨테이너의 이미지 ID를 :prev 로 태그
-     (빌드가 :latest 를 덮어쓰기 전에 먼저)
-  3. 순차 빌드 + 신선도 게이트 (api=py 해시, web=BUILD_SHA)
-  4. 카나리(green) 검증 — docker-compose.canary.yml 로 트래픽 밖 부팅
-     · api-canary: postgresql_internal 만 가입(traefik 미노출), /api/health 폴링 60s
-     · web-canary: localhost:3000 200 확인. 순차 1개씩(RAM 보호), 검증 즉시 제거
-     · 실패 → 로그 출력 + 중단. 프로덕션 무접촉(red 유지)
-  5. alembic upgrade head (카나리 통과 후)
-  6. 승격: up -d --force-recreate (검증된 이미지 스왑 — 유일한 수 초 다운타임)
+push(main) → CI 성공 → [deploy.yml]
+  A. (러너) checkout @ CI 통과 SHA → docker buildx (linux/amd64)
+     api=eng-lesson_api:ci, web=eng-lesson_web:ci(GIT_SHA 마커), GHA 캐시
+  B. (러너) docker save|gzip → scp 로 서버 ~/apps/eng-lesson/.deploy/images.tar.gz
+  C. (서버 SSH) git reset --hard <빌드된 SHA> → bash scripts/deploy.sh
+     1. 디스크 정리 (image prune + builder prune --keep-storage 2GB)
+     2. 롤백 포인트 캡처 — 서빙 중 컨테이너의 이미지 ID를 :prev 로 태그
+     3. .deploy/images.tar.gz load + :ci→:latest 재태그 (부재 시 로컬 빌드 폴백)
+     4. 카나리(green) 검증 — docker-compose.canary.yml 로 트래픽 밖 부팅
+        · api-canary: postgresql_internal 만 가입(traefik 미노출), /api/health 폴링 60s
+        · web-canary: HOSTNAME:3000 200 확인. 순차 1개씩(RAM 보호), 검증 즉시 제거
+        · 실패 → 로그 출력 + 중단. 프로덕션 무접촉(red 유지)
+     5. alembic upgrade head (카나리 통과 후)
+     6. 승격: up -d --force-recreate (검증된 이미지 스왑 — 유일한 수 초 다운타임)
 → [deploy.yml] 공개 헬스체크 12×10s
 → 실패 시 [자동 롤백]: bash scripts/deploy.sh --rollback (:prev 재태그+재생성) 후 재검증
 ```
+
+**"파드 2개 동시 전환" 구조가 아닌 이유**: 카나리는 트래픽 밖 검증용 임시 컨테이너로, 검증 후 제거된다. api 는 인프로세스 채팅 허브·게임 세션의 단일 인스턴스 전제(Redis 금지)라 두 인스턴스가 동시에 트래픽을 받으면 스플릿브레인 — traefik 1.7/compose v1 의 정적 라벨도 무중단 전환을 지원하지 않는다. 러너 빌드 이전으로 체감 문제(빌드 중 질식)가 제거되면 스왑 수 초는 허용 범위.
 
 - **트래픽 중첩형 blue-green 을 쓰지 않는 이유**: api 는 인프로세스 채팅 허브·게임 세션의 단일 인스턴스 전제(Redis 금지, 2026-07-27 결정) — 이중 기동 시 스플릿브레인. traefik 1.7 + compose v1(`container_name` 고정) 도 라벨 전환을 지원하지 않는다. traefik 2+/compose v2 이전 시 web(무상태)만 중첩형 재검토.
 - **서버 RAM 2GB 제약(2026-07-12)**: api+web 동시 빌드 OOM 이력 — 순차 빌드 + 카나리도 순차 1개씩.

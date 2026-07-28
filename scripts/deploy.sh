@@ -54,26 +54,36 @@ for svc in api web; do
   fi
 done
 
-echo "== 3. 순차 빌드 (2GB 서버 — 동시 빌드 금지) =="
-# 이미지 소스 해시로 신선도 확인, 불일치 시 무캐시 재빌드 (스테일 캐시 이력)
-build_fresh() {
-  svc="$1"; img="$2"
-  $PROD build "$svc"
-  IMG=$(docker run --rm --entrypoint sh "$img" -c "find app -name '*.py' 2>/dev/null | sort | xargs cat 2>/dev/null | md5sum" | cut -d' ' -f1)
-  SRC=$(cd backend && find app -name '*.py' | sort | xargs cat | md5sum | cut -d' ' -f1)
-  if [ "$svc" = "api" ] && [ "$IMG" != "$SRC" ]; then
-    echo "[!] stale $svc image - rebuilding --no-cache"
-    $PROD build --no-cache "$svc"
+IMAGES_TAR=".deploy/images.tar.gz"
+if [ -f "$IMAGES_TAR" ]; then
+  echo "== 3. 러너 빌드 이미지 load (서버 무부하 — 2026-07-28 빌드 질식 해소) =="
+  gunzip -c "$IMAGES_TAR" | docker load
+  docker tag eng-lesson_api:ci eng-lesson_api:latest
+  docker tag eng-lesson_web:ci eng-lesson_web:latest
+  rm -f "$IMAGES_TAR"
+  # 러너가 CI 통과 SHA 로 빌드했고 서버도 같은 SHA 로 리셋됨 — 신선도 게이트 불필요
+else
+  echo "== 3. 순차 로컬 빌드 (폴백 — 수동 배포 등 러너 이미지 부재 시) =="
+  # 이미지 소스 해시로 신선도 확인, 불일치 시 무캐시 재빌드 (스테일 캐시 이력)
+  build_fresh() {
+    svc="$1"; img="$2"
+    $PROD build "$svc"
+    IMG=$(docker run --rm --entrypoint sh "$img" -c "find app -name '*.py' 2>/dev/null | sort | xargs cat 2>/dev/null | md5sum" | cut -d' ' -f1)
+    SRC=$(cd backend && find app -name '*.py' | sort | xargs cat | md5sum | cut -d' ' -f1)
+    if [ "$svc" = "api" ] && [ "$IMG" != "$SRC" ]; then
+      echo "[!] stale $svc image - rebuilding --no-cache"
+      $PROD build --no-cache "$svc"
+    fi
+  }
+  build_fresh api eng-lesson_api
+  GIT_SHA=$(git rev-parse HEAD)
+  export GIT_SHA
+  $PROD build web
+  IMG_SHA=$(docker run --rm --entrypoint cat eng-lesson_web /app/BUILD_SHA 2>/dev/null || echo none)
+  if [ "$IMG_SHA" != "$GIT_SHA" ]; then
+    echo "[!] stale web image ($IMG_SHA != $GIT_SHA) - rebuilding --no-cache"
+    $PROD build --no-cache web
   fi
-}
-build_fresh api eng-lesson_api
-GIT_SHA=$(git rev-parse HEAD)
-export GIT_SHA
-$PROD build web
-IMG_SHA=$(docker run --rm --entrypoint cat eng-lesson_web /app/BUILD_SHA 2>/dev/null || echo none)
-if [ "$IMG_SHA" != "$GIT_SHA" ]; then
-  echo "[!] stale web image ($IMG_SHA != $GIT_SHA) - rebuilding --no-cache"
-  $PROD build --no-cache web
 fi
 
 echo "== 4. 카나리(green) 검증 — 트래픽 밖 부팅 실증 =="

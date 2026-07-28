@@ -1,8 +1,9 @@
 name: Deploy
 
 # main push → CI 통과 후 codenavi 서버 배포 (docs/architecture/deployment.md)
-# 배포 본체는 리포의 scripts/deploy.sh — 커밋과 같은 버전의 스크립트가 실행된다.
-# 전략: red-green(검증된 승격) — 카나리 헬스 통과 시에만 교체, 실패 시 자동 롤백.
+# 전략: red-green(검증된 승격) — 러너에서 이미지 빌드(서버 무부하) → scp 전송 →
+# 서버는 load→카나리 검증→교체만. 실패 시 자동 롤백.
+# 빌드를 서버(2GB)에서 돌리면 라이브 서비스가 질식한다 (2026-07-28 실사용 보고).
 on:
   workflow_run:
     workflows: [CI]
@@ -26,19 +27,61 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success' && vars.DEPLOY_ENABLED == 'true'
     environment: production
     steps:
+      # CI 를 통과한 바로 그 커밋을 빌드 — 서버도 같은 SHA 로 리셋해 정합 보장
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build api image (linux/amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          platforms: linux/amd64
+          tags: eng-lesson_api:ci
+          push: false
+          load: true
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build web image (linux/amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          platforms: linux/amd64
+          tags: eng-lesson_web:ci
+          push: false
+          load: true
+          build-args: |
+            GIT_SHA=${{ github.event.workflow_run.head_sha }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Package images
+        run: docker save eng-lesson_api:ci eng-lesson_web:ci | gzip -1 > images.tar.gz
+
+      - name: Upload images to server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: images.tar.gz
+          target: ~/apps/eng-lesson/.deploy/
+
       - name: SSH deploy (red-green)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          # VPS 사양상 Next.js 빌드가 10분(기본값)을 초과할 수 있음
           command_timeout: 30m
           script: |
             set -e
             cd ~/apps/eng-lesson
-            git fetch origin main
-            git reset --hard origin/main
+            git fetch origin
+            git reset --hard ${{ github.event.workflow_run.head_sha }}
             bash scripts/deploy.sh
 
       - name: Health check (fail -> auto rollback)
