@@ -81,7 +81,7 @@ async def test_send_to_user_delivers_and_prunes_dead_subs(db_session, vapid_keys
     await db_session.commit()
 
     async def fake_send_to(sub, payload, settings):
-        return sub.endpoint != "https://dead"
+        return "ok" if sub.endpoint != "https://dead" else "gone"
 
     monkeypatch.setattr(push, "send_to", fake_send_to)
 

@@ -68,7 +68,7 @@ async def test_reminder_message_is_goal_remainder_not_full_backlog(
 
     async def fake_send(sub, payload, settings):
         sent.append(payload)
-        return True
+        return "ok"
 
     monkeypatch.setattr(push, "send_to", fake_send)
     evening = datetime.now(UTC).astimezone(push.KST).replace(hour=20, minute=30)
@@ -93,7 +93,7 @@ async def test_reminder_skipped_when_goal_met(
 
     async def fake_send(sub, payload, settings):
         sent.append(payload)
-        return True
+        return "ok"
 
     monkeypatch.setattr(push, "send_to", fake_send)
     evening = datetime.now(UTC).astimezone(push.KST).replace(hour=20, minute=30)
