@@ -3,16 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChatNavButton } from "@/components/chat/ChatNavButton";
 import { NotificationBell } from "@/components/nav/NotificationBell";
+import { ProfileMenu } from "@/components/nav/ProfileMenu";
 import { fetchMe, type Me } from "@/lib/api";
 import { useAppTheme } from "@/lib/theme";
 
-/** 전역 내비게이션 (듀오링고 패턴 차용 — docs/specs/ui-design.md 내비게이션)
- *  데스크톱: 상단 고정 헤더 / 모바일: 하단 탭바 고정. 현재 위치 하이라이트.
- *  데스크톱 헤더는 접기 지원 (2026-07-28 요청) — 접으면 테마별 손잡이
- *  (종이 테마 = 책갈피 리본, 오피스 = 리본 탭)만 남고, 마우스를 대면
- *  살짝 펼쳐지고(피크) 손잡이를 클릭하면 고정 해제된다.
+/** 전역 내비게이션 (2026-07-28 재설계 — 표준 SaaS 패턴)
+ *  이동 탭 5개(홈·학습·라이브러리·채팅·게임)는 좌측(데스크톱)/하단(모바일),
+ *  우측 상단은 알림 벨 + 프로필 메뉴(닉네임·설정·백오피스·로그아웃) 일관 배치.
+ *  데스크톱 헤더는 접기 지원 — 접으면 테마별 손잡이(종이 = 책갈피 리본,
+ *  오피스 = 리본 탭)만 남고, hover 피크 / 클릭 고정 해제.
  */
 
 const NAV_COLLAPSE_KEY = "app.nav-collapsed";
@@ -31,23 +31,20 @@ const TABS = [
     match: (p: string) => p.startsWith("/library"),
     icon: LibraryIcon,
   },
+  // "내 콘텐츠" 자리에 채팅 (2026-07-28) — 유튜브 URL 등록은 관리자 전용
+  // 사양으로 변경돼 탭 슬롯이 비었고, 채팅을 주 메뉴로 승격(우상단 아이콘 제거).
+  // /my 라우트는 딥링크·기존 데이터 열람용으로 남아 있음
   {
-    href: "/my",
-    label: "내 콘텐츠",
-    match: (p: string) => p.startsWith("/my"),
-    icon: MyIcon,
+    href: "/chat",
+    label: "채팅",
+    match: (p: string) => p.startsWith("/chat"),
+    icon: ChatTabIcon,
   },
   {
     href: "/game",
     label: "게임",
     match: (p: string) => p.startsWith("/game"),
     icon: GameIcon,
-  },
-  {
-    href: "/settings",
-    label: "설정",
-    match: (p: string) => p.startsWith("/settings"),
-    icon: SettingsIcon,
   },
 ];
 
@@ -136,18 +133,9 @@ export function AppNav() {
               </Link>
             );
           })}
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2">
             <NotificationBell />
-            <ChatNavButton />
-            {me?.role === "admin" && (
-              <Link
-                href="/admin"
-                className="flex min-h-11 items-center rounded-md bg-brick-yellow/50 px-4 font-bold hover:bg-brick-yellow/80"
-              >
-                백오피스
-              </Link>
-            )}
-            <span className="text-sm opacity-60">{me?.nickname}</span>
+            {me && <ProfileMenu me={me} />}
             <button
               type="button"
               onClick={() => persistCollapsed(!collapsed)}
@@ -189,31 +177,24 @@ export function AppNav() {
         </button>
       )}
 
-      {/* 모바일: 상단 미니바 — 알림·채팅·설정은 상단, 이동 탭은 하단 (Jira 모바일 패턴).
-          하단 탭바 6개 과밀 해소를 위해 설정을 여기로 옮겼다 (2026-07-28 UX 개편) */}
+      {/* 모바일: 상단 미니바 — 알림 벨 + 프로필 메뉴 (Jira 모바일 패턴).
+          이동 탭은 하단, 계정성 메뉴(설정·로그아웃)는 프로필 드롭다운으로 */}
       <div className="mobile-topbar sticky top-0 z-40 flex h-12 items-center gap-1 border-b-2 border-ink/10 bg-paper/95 px-3 backdrop-blur sm:hidden">
         <Link href="/" className="font-hand text-xl font-bold hover:opacity-80">
           <span className="hl">ESL</span>
         </Link>
         <div className="ml-auto flex items-center gap-1">
           <NotificationBell />
-          <ChatNavButton />
-          <Link
-            href="/settings"
-            aria-label="설정"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-md transition hover:bg-ink/10"
-          >
-            <SettingsIcon />
-          </Link>
+          {me && <ProfileMenu me={me} />}
         </div>
       </div>
 
-      {/* 모바일: 하단 탭바 고정 — 설정은 상단 미니바로 이동해 5개 유지 */}
+      {/* 모바일: 하단 탭바 고정 — 이동 5탭 (계정성 메뉴는 상단 프로필) */}
       <nav
         aria-label="주요 메뉴"
         className="fixed inset-x-0 bottom-0 z-40 flex border-t-2 border-ink/15 bg-white sm:hidden"
       >
-        {TABS.filter((tab) => tab.href !== "/settings").map((tab) => {
+        {TABS.map((tab) => {
           const active = tab.match(pathname);
           return (
             <Link
@@ -287,11 +268,10 @@ function LibraryIcon() {
   );
 }
 
-function MyIcon() {
+function ChatTabIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" {...stroke} aria-hidden>
-      <rect x="3" y="3" width="18" height="18" rx="3" />
-      <path d="M12 8v8M8 12h8" />
+      <path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z" />
     </svg>
   );
 }
@@ -305,11 +285,3 @@ function GameIcon() {
   );
 }
 
-function SettingsIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" {...stroke} aria-hidden>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01A1.7 1.7 0 0 0 10 4.09V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51.95Z" />
-    </svg>
-  );
-}

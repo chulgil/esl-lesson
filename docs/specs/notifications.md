@@ -51,6 +51,7 @@ notifications
 - 갱신: 마운트 + 60초 폴링 + `notif.new`/`chat.message`/`chat.read` 이벤트
 
 - 모바일: 상단 미니바(AppNav `mobile-topbar` — 로고·벨·채팅·설정, 2026-07-28 UX 개편)에 표시. 하단 탭바는 이동 5탭 전용
+- **배지 일원화** (2026-07-28): 벨 배지 = 알림 unread + 채팅 unread 합산. 채팅 메뉴(ChatNavButton)의 숫자 배지는 제거 — 헤더에 숫자 배지 두 개면 시선 분산·중복 계산 혼란
 
 ## 범위 밖 (후속)
 

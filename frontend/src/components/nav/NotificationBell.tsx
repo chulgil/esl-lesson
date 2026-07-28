@@ -11,8 +11,9 @@ import {
 import { timeAgo } from "@/lib/time";
 
 /** 네비 알림 벨 — 친구 요청·수락·게임 초대 알림 센터 (docs/specs/notifications.md).
- *  배지는 알림 unread 만 센다 — 채팅 안읽음은 ChatNavButton 배지가 담당하므로
- *  합산하면 이중 계산. 채팅은 드롭다운 첫 행 "새 메시지 N개" 요약으로만 안내. */
+ *  배지 = 알림 unread + 채팅 unread 합산 (2026-07-28 배지 일원화 —
+ *  채팅 탭에는 배지가 없어 이중 계산 없음). 채팅 상세는 드롭다운
+ *  첫 행 "새 메시지 N개" 요약으로 안내. */
 export function NotificationBell() {
   const router = useRouter();
   const [unread, setUnread] = useState(0);
@@ -76,14 +77,14 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="알림"
+        aria-label={`알림${unread + chatUnread > 0 ? ` — ${unread + chatUnread}건` : ""}`}
         aria-expanded={open}
         className="relative flex min-h-11 min-w-11 items-center justify-center rounded-md transition hover:bg-ink/10"
       >
         <BellIcon />
-        {unread > 0 && (
+        {unread + chatUnread > 0 && (
           <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brick-red px-1 text-[10px] font-bold text-white">
-            {unread > 99 ? "99+" : unread}
+            {unread + chatUnread > 99 ? "99+" : unread + chatUnread}
           </span>
         )}
       </button>
