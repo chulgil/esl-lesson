@@ -3,38 +3,28 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { friendsApi } from "@/lib/friends-api";
-import { myApi } from "@/lib/my-api";
 import type { Stats } from "@/lib/study-api";
 
-/** 시작 체크리스트 — 신규 사용자가 빈 화면에서 길을 잃지 않게 (P2 온보딩) */
+/** 시작 체크리스트 — 신규 사용자가 빈 화면에서 길을 잃지 않게 (P2 온보딩).
+ *  "영상 등록" 단계는 제거 (2026-07-28) — 유튜브 등록이 관리자 전용 사양으로
+ *  바뀌어 일반 사용자는 달성 불가(영구 미완료로 남던 문제). */
 export function OnboardingChecklist({ stats }: { stats: Stats }) {
-  const [contentCount, setContentCount] = useState<number | null>(null);
   const [friendCount, setFriendCount] = useState<number | null>(null);
 
   useEffect(() => {
-    myApi
-      .list()
-      .then((res) => setContentCount(res.items.length))
-      .catch(() => setContentCount(0));
     friendsApi
       .list()
       .then((res) => setFriendCount(res.friends.length))
       .catch(() => setFriendCount(0));
   }, []);
 
-  if (contentCount === null || friendCount === null) return null;
+  if (friendCount === null) return null;
 
   const totalCards = stats.levels.reduce((sum, lv) => sum + lv.cards, 0);
   const steps = [
     {
-      label: "유튜브 영상 등록하기",
-      desc: "보고 싶은 영상 링크만 붙여넣으면 학습 자료가 돼요",
-      href: "/my",
-      done: contentCount > 0,
-    },
-    {
       label: "첫 학습 시작하기",
-      desc: "추출된 단어·문장이 복습 카드로 나와요",
+      desc: "라이브러리 영상에서 추출된 단어·문장이 복습 카드로 나와요",
       href: "/study/session",
       done: totalCards > 0,
     },
@@ -54,7 +44,7 @@ export function OnboardingChecklist({ stats }: { stats: Stats }) {
     <section className="max-w-xl rounded-lg border-2 border-brick-blue/40 bg-white p-4">
       <p className="text-sm font-bold">
         시작 체크리스트
-        <span className="ml-2 font-normal opacity-60">{doneCount}/3 완료</span>
+        <span className="ml-2 font-normal opacity-60">{doneCount}/2 완료</span>
       </p>
       <ul className="mt-2 flex flex-col gap-1.5">
         {steps.map((step) => (

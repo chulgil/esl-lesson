@@ -69,7 +69,13 @@ export function NotificationBell() {
     // 읽음 처리 후 이동 — 서버가 내 알림만 갱신하므로 무조건 호출해도 안전 (멱등)
     await notificationsApi.markRead({ ids: [n.id] }).catch(() => {});
     load();
-    router.push(notifTarget(n));
+    const target = notifTarget(n);
+    // 이미 대상 페이지면 push 가 무변화라 "이동 안 됨"으로 보인다 — 새로고침으로 반응
+    if (window.location.pathname + window.location.search === target) {
+      router.refresh();
+    } else {
+      router.push(target);
+    }
   }
 
   return (

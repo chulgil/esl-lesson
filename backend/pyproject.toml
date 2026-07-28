@@ -29,6 +29,9 @@ dev = [
 ]
 align = [
     "stable-ts>=2.17.0",
+    # py3.13 휠이 있는 numba 를 강제 — 하한 없으면 resolver 가 0.53(llvmlite 소스빌드
+    # 실패)을 골라 uv sync --group align 이 깨진다 (2026-07-28 실측)
+    "numba>=0.61",
 ]
 
 [tool.pytest.ini_options]

@@ -100,8 +100,9 @@ function Dashboard({ me }: { me: Me }) {
         <Brick color="blue" href="/library">
           콘텐츠 라이브러리
         </Brick>
-        <Brick color="yellow" href="/my">
-          내 콘텐츠
+        {/* "내 콘텐츠" 제거 (2026-07-28) — 유튜브 등록은 관리자 전용 사양 */}
+        <Brick color="yellow" href="/chat">
+          채팅
         </Brick>
         <Brick color="red" href="/game">
           게임
