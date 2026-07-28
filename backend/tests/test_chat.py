@@ -300,6 +300,34 @@ async def test_push_only_when_offline_with_throttle(client, db_session, monkeypa
     assert len(pushed) == 1
 
 
+async def test_push_falls_back_when_all_sockets_dead(client, db_session, monkeypatch):
+    """좀비 소켓(등록됐지만 전송 실패)만 남은 수신자 — WS 전달 실패로 보고
+    웹푸시 폴백이 발동해야 한다. 이전엔 소켓 존재만으로 delivered 처리되어
+    알림이 통째로 유실됐다 (2026-07-28 사용자 보고)."""
+    a, b = await two_friends(client, db_session)
+    pushed = []
+
+    async def fake_push(db, user_id, payload):
+        pushed.append(user_id)
+        return True
+
+    import app.api.chat as chat_api
+
+    monkeypatch.setattr(chat_api.push_service, "send_to_user", fake_push)
+
+    async def dead_send(message):
+        raise RuntimeError("socket closed")
+
+    invite_hub.attach(b.id, "B", dead_send)
+    try:
+        await login(client, db_session, a)
+        await client.post("/api/chat/messages", json=send_body(b.id, "zomb", "cid-zombie001"))
+    finally:
+        invite_hub.detach(b.id, dead_send)
+
+    assert pushed == [b.id]
+
+
 # --- 프레즌스·입력중 -------------------------------------------------------------
 
 
@@ -413,9 +441,7 @@ PNG_1PX = bytes.fromhex(
 
 
 async def upload_png(client):
-    res = await client.post(
-        "/api/chat/uploads", files={"file": ("x.png", PNG_1PX, "image/png")}
-    )
+    res = await client.post("/api/chat/uploads", files={"file": ("x.png", PNG_1PX, "image/png")})
     assert res.status_code == 201
     return res.json()["image_id"]
 

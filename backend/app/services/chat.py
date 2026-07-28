@@ -423,16 +423,21 @@ async def get_read_positions(db: AsyncSession, conversation_id: int) -> dict[int
 
 
 async def deliver_ws(user_id: int, message: dict) -> bool:
-    """접속 중인 사용자의 모든 소켓에 전달 (invite_hub 레지스트리 재사용)."""
+    """접속 중인 사용자의 모든 소켓에 전달 (invite_hub 레지스트리 재사용).
+
+    True 는 최소 1개 소켓에 실제 전송 성공했을 때만 — 좀비 소켓(등록만 남고
+    전송 실패)뿐이면 False 를 반환해 호출자가 웹푸시로 폴백하게 한다."""
     sends = list(invite_hub.sockets.get(user_id, []))
     if not sends:
         return False
+    delivered = False
     for send in sends:
         try:
             await send(message)
+            delivered = True
         except Exception:  # noqa: BLE001 — 한 소켓 실패가 나머지를 막으면 안 됨
             logger.warning("chat ws deliver failed user=%s", user_id)
-    return True
+    return delivered
 
 
 def should_push(conversation_id: int, to_user_id: int) -> bool:

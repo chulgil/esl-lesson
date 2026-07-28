@@ -55,17 +55,31 @@ export function NotifyEnableButton({
   }
 
   return (
-    <button
-      type="button"
-      disabled={state === "loading"}
-      onClick={enable}
-      className={
-        variant === "excel"
-          ? "min-h-7 rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] px-2.5 text-xs hover:bg-[#e2efda] disabled:opacity-40"
-          : "min-h-10 rounded-md border-2 border-brick-blue/40 bg-white px-3 text-sm font-bold text-brick-blue transition hover:border-brick-blue disabled:opacity-40"
-      }
-    >
-      {state === "loading" ? "..." : label}
-    </button>
+    <span className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={state === "loading"}
+        onClick={enable}
+        className={
+          variant === "excel"
+            ? "min-h-7 rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] px-2.5 text-xs hover:bg-[#e2efda] disabled:opacity-40"
+            : "min-h-10 rounded-md border-2 border-brick-blue/40 bg-white px-3 text-sm font-bold text-brick-blue transition hover:border-brick-blue disabled:opacity-40"
+        }
+      >
+        {state === "loading" ? "..." : label}
+      </button>
+      {/* 실패를 조용히 삼키면 켜진 줄 착각한다 — 재시도 유도 문구 필수 (2026-07-28 보고) */}
+      {state === "error" && (
+        <span
+          className={
+            variant === "excel"
+              ? "text-xs text-[#c0504d]"
+              : "text-xs text-brick-red"
+          }
+        >
+          알림 설정에 실패했어요 — 다시 눌러주세요
+        </span>
+      )}
+    </span>
   );
 }

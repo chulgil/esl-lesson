@@ -3,7 +3,11 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMe } from "@/lib/api";
-import { dispatchChatEvent, getActiveChatRoom, setChatSocket } from "@/lib/chat-signals";
+import {
+  dispatchChatEvent,
+  getActiveChatRoom,
+  setChatSocket,
+} from "@/lib/chat-signals";
 import { getAppTheme } from "@/lib/theme";
 import { GameSocket, type ServerMsg } from "@/lib/game-ws";
 
@@ -46,8 +50,14 @@ export function InviteToaster() {
         pathRef.current === `/chat/${msg.sender_id}` ||
         getActiveChatRoom() === msg.sender_id;
       const body = msg.body || (msg.image_url ? "[사진]" : "[단어 카드]");
-      // 탭이 백그라운드면 OS 알림 (알림 켜기 수락 시) — 오피스 테마는 문서 알림으로 위장
-      if (document.hidden && Notification.permission === "granted") {
+      // 탭이 백그라운드거나 창이 포커스를 잃었으면 OS 알림 (알림 켜기 수락 시)
+      // — hidden 만 보면 "브라우저 창은 보이는데 다른 앱 사용 중"(hasFocus=false,
+      //   회사에서 가장 흔한 상황)에 알림이 토스트로만 흘러 놓친다 (2026-07-28 보고).
+      //   오피스 테마는 문서 알림으로 위장
+      if (
+        (document.hidden || !document.hasFocus()) &&
+        Notification.permission === "granted"
+      ) {
         const excel = getAppTheme() === "excel";
         notifyOs(
           excel ? "공유 문서" : msg.from_name,
