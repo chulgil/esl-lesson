@@ -146,6 +146,21 @@ html[data-theme="lego"] .notebook-lines {
   }
 }
 
+/* 채팅 도킹 모드(ChatWidget) 전용 — 화면 우측에 fixed 로 상시 붙되 AppNav 를
+ * 가리거나 가려지지 않도록 top/height 를 함께 보정한다. */
+.dock-right-nav-safe {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: calc(100dvh - 66px);
+}
+@media (min-width: 640px) {
+  .dock-right-nav-safe {
+    top: 62px;
+    height: calc(100dvh - 62px);
+  }
+}
+
 /* 형광펜 하이라이트 (섹션 헤딩용) */
 .hl {
   background: linear-gradient(transparent 55%, var(--color-highlight) 55%, var(--color-highlight) 92%, transparent 92%);

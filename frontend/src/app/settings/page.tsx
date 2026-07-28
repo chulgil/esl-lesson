@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { ChatModeCard } from "@/components/settings/ChatModeCard";
 import { DailyGoalSetting } from "@/components/settings/DailyGoalSetting";
 import { NicknameCard } from "@/components/settings/NicknameCard";
 import { PushReminderCard } from "@/components/settings/PushReminderCard";
@@ -58,6 +59,7 @@ export default function SettingsPage() {
       </section>
 
       <PushReminderCard />
+      <ChatModeCard />
       <DangerZone />
     </main>
   );

@@ -1,8 +1,6 @@
 "use client";
 
-import { ImageAttachButton } from "@/components/chat/ImageAttachButton";
-import { KaomojiPicker } from "@/components/chat/KaomojiPicker";
-import { WordSharePicker } from "@/components/chat/WordSharePicker";
+import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { BackLink } from "@/components/nav/BackLink";
 import type { ChatSkinProps } from "./types";
 
@@ -174,14 +172,26 @@ export function NoteSkin(p: ChatSkinProps) {
         )}
 
         <div className="mt-2 flex items-end gap-1.5">
-          <WordSharePicker onPick={p.onAttachItem} />
-          <ImageAttachButton onPick={p.onAttachImageFile} />
-          <KaomojiPicker onPick={p.onPickKaomoji} />
+          <ChatToolsMenu
+            onPickItem={p.onAttachItem}
+            onPickImage={p.onAttachImageFile}
+            onPickKaomoji={p.onPickKaomoji}
+          />
           <input
             value={p.input}
             onChange={(e) => p.onInputChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.nativeEvent.isComposing) p.onSend();
+            }}
+            onPaste={(e) => {
+              // 클립보드 이미지 붙여넣기 → 파일 첨부와 같은 업로드 파이프라인
+              const file = Array.from(e.clipboardData.files).find((f) =>
+                f.type.startsWith("image/"),
+              );
+              if (file) {
+                e.preventDefault();
+                p.onAttachImageFile(file);
+              }
             }}
             placeholder="한 줄 적기..."
             maxLength={2000}

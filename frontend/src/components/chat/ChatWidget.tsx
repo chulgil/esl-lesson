@@ -1,29 +1,33 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ImageAttachButton } from "@/components/chat/ImageAttachButton";
+import { useEffect, useRef, useState } from "react";
+import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
-import { KaomojiPicker } from "@/components/chat/KaomojiPicker";
 import { useChatRoom } from "@/components/chat/useChatRoom";
-import { WordSharePicker } from "@/components/chat/WordSharePicker";
 import { fetchMe } from "@/lib/api";
 import { chatApi, type ChatConversation } from "@/lib/chat-api";
 import { onChatEvent, setActiveChatRoom } from "@/lib/chat-signals";
+import { useChatFloating } from "@/lib/chat-mode";
+import { setFaviconBadge } from "@/lib/favicon-badge";
 import { useAppTheme } from "@/lib/theme";
 
-/** 플로팅 채팅 위젯 — excelkospi 우하단 버튼 컨셉 (docs/specs/chat.md 위장 테마).
- *  어느 화면에서든 작은 팝업으로 대화. 페이지(/chat)는 푸시 딥링크·모바일용으로 유지.
- *  Esc 한 번 = 즉시 닫기 (빠른 숨김). 오피스 테마 = "메모" 패널로 위장. */
+/** 채팅 위젯 — excelkospi 우하단 버튼 컨셉 (docs/specs/chat.md 위장 테마).
+ *  설정(플로팅 체크) 에 따라 두 가지로 표시된다:
+ *  - 플로팅(기본): 우하단 작은 팝업. Esc 또는 바깥 클릭으로 닫힘.
+ *  - 도킹: 화면 우측에 상시 고정된 패널(닫기 없음, excelkospi 채팅 레일 컨셉).
+ *  페이지(/chat)는 푸시 딥링크·모바일용으로 유지. 오피스 테마 = "메모" 패널로 위장. */
 export function ChatWidget() {
   const pathname = usePathname();
   const theme = useAppTheme();
+  const floating = useChatFloating();
   const [loggedIn, setLoggedIn] = useState(false);
   const [open, setOpen] = useState(false);
   const [room, setRoom] = useState<{ userId: number; name: string } | null>(
     null,
   );
   const [unread, setUnread] = useState(0);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchMe().then((me) => setLoggedIn(Boolean(me)));
@@ -48,21 +52,41 @@ export function ChatWidget() {
     };
   }, [loggedIn]);
 
-  // Esc 한 번으로 즉시 닫기 (빠른 숨김)
+  // 파비콘 배지 — 다른 탭을 보고 있어도 안읽음 개수를 인지 (2026-07-28 요청)
   useEffect(() => {
-    if (!open) return;
+    setFaviconBadge(unread);
+  }, [unread]);
+
+  // 도킹 모드는 항상 열려있음(닫기 없음) — 플로팅일 때만 open 상태를 따른다
+  const panelOpen = floating ? open : true;
+
+  // Esc 한 번으로 즉시 닫기 — 플로팅 전용 (빠른 숨김)
+  useEffect(() => {
+    if (!floating || !open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [floating, open]);
+
+  // 바깥 영역 클릭 시 닫기 — 플로팅 전용
+  useEffect(() => {
+    if (!floating || !open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [floating, open]);
 
   // 열린 대화방 추적 — 전역 토스트·OS 알림 중복 억제
   useEffect(() => {
-    setActiveChatRoom(open && room ? room.userId : null);
+    setActiveChatRoom(panelOpen && room ? room.userId : null);
     return () => setActiveChatRoom(null);
-  }, [open, room]);
+  }, [panelOpen, room]);
 
   // 채팅 전체 페이지·관리자·로그인 화면에서는 숨김
   if (
@@ -78,14 +102,27 @@ export function ChatWidget() {
 
   return (
     <>
-      {open && (
+      {panelOpen && (
         <div
-          className={`fixed right-4 bottom-20 z-50 flex h-[30rem] w-[22.5rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg shadow-2xl ${
-            excel
-              ? "border border-[#c9cfd6] bg-white font-sans text-[13px] text-[#24292f]"
-              : "border-2 border-ink/15 bg-paper"
-          }`}
-          style={{ maxHeight: "min(30rem, calc(100dvh - 7rem))" }}
+          ref={panelRef}
+          className={
+            floating
+              ? `fixed right-4 bottom-20 z-50 flex h-[30rem] w-[22.5rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg shadow-2xl ${
+                  excel
+                    ? "border border-[#c9cfd6] bg-white font-sans text-[13px] text-[#24292f]"
+                    : "border-2 border-ink/15 bg-paper"
+                }`
+              : `dock-right-nav-safe z-40 flex w-full max-w-md flex-col overflow-hidden border-l-2 shadow-[-6px_0_20px_-10px_rgba(0,0,0,0.15)] ${
+                  excel
+                    ? "border-[#c9cfd6] bg-white font-sans text-[13px] text-[#24292f]"
+                    : "border-ink/15 bg-paper"
+                }`
+          }
+          style={
+            floating
+              ? { maxHeight: "min(30rem, calc(100dvh - 7rem))" }
+              : undefined
+          }
         >
           {/* 헤더 */}
           <div
@@ -114,14 +151,16 @@ export function ChatWidget() {
                   ? `${room.name} 와의 교환 노트`
                   : "교환 노트"}
             </b>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              aria-label="닫기 (Esc)"
-              className="ml-auto opacity-60 hover:opacity-100"
-            >
-              ×
-            </button>
+            {floating && (
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="닫기 (Esc)"
+                className="ml-auto opacity-60 hover:opacity-100"
+              >
+                ×
+              </button>
+            )}
           </div>
 
           {room ? (
@@ -135,30 +174,32 @@ export function ChatWidget() {
         </div>
       )}
 
-      {/* 런처 — 오피스: 메모 pill / 그 외: 연필 노트 원형 */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={`대화 열기${unread > 0 ? ` — 새 글 ${unread}개` : ""}`}
-        className={
-          excel
-            ? "fixed right-4 bottom-4 z-50 flex min-h-10 items-center gap-1.5 rounded-full bg-[#185c37] px-4 font-sans text-xs font-bold text-white shadow-lg hover:bg-[#217346]"
-            : "fixed right-4 bottom-4 z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5"
-        }
-      >
-        {excel ? <span>메모</span> : <PencilNoteIcon />}
-        {unread > 0 && (
-          <span
-            className={
-              excel
-                ? "rounded-full bg-white/25 px-1.5 text-[10px]"
-                : "absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brick-red px-1 text-[10px] font-bold text-white"
-            }
-          >
-            {unread > 99 ? "99+" : unread}
-          </span>
-        )}
-      </button>
+      {/* 런처 — 도킹 모드는 상시 열려있어 런처가 필요 없다. 오피스: 메모 pill / 그 외: 연필 노트 원형 */}
+      {floating && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label={`대화 열기${unread > 0 ? ` — 새 글 ${unread}개` : ""}`}
+          className={
+            excel
+              ? "fixed right-4 bottom-4 z-50 flex min-h-10 items-center gap-1.5 rounded-full bg-[#185c37] px-4 font-sans text-xs font-bold text-white shadow-lg hover:bg-[#217346]"
+              : "fixed right-4 bottom-4 z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5"
+          }
+        >
+          {excel ? <span>메모</span> : <PencilNoteIcon />}
+          {unread > 0 && (
+            <span
+              className={
+                excel
+                  ? "rounded-full bg-white/25 px-1.5 text-[10px]"
+                  : "absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brick-red px-1 text-[10px] font-bold text-white"
+              }
+            >
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
+        </button>
+      )}
     </>
   );
 }
@@ -403,17 +444,27 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
           excel ? "border-[#d8dde3]" : "border-ink/10 bg-white"
         }`}
       >
-        <WordSharePicker onPick={p.onAttachItem} />
-        <ImageAttachButton
-          onPick={p.onAttachImageFile}
+        <ChatToolsMenu
           variant={excel ? "excel" : "note"}
+          onPickItem={p.onAttachItem}
+          onPickImage={p.onAttachImageFile}
+          onPickKaomoji={p.onPickKaomoji}
         />
-        <KaomojiPicker onPick={p.onPickKaomoji} />
         <input
           value={p.input}
           onChange={(e) => p.onInputChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.nativeEvent.isComposing) p.onSend();
+          }}
+          onPaste={(e) => {
+            // 클립보드 이미지 붙여넣기 → 파일 첨부와 같은 업로드 파이프라인
+            const file = Array.from(e.clipboardData.files).find((f) =>
+              f.type.startsWith("image/"),
+            );
+            if (file) {
+              e.preventDefault();
+              p.onAttachImageFile(file);
+            }
           }}
           placeholder={excel ? "내용 입력" : "한 줄 적기..."}
           maxLength={2000}

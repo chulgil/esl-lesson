@@ -1,9 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ImageAttachButton } from "@/components/chat/ImageAttachButton";
-import { KaomojiPicker } from "@/components/chat/KaomojiPicker";
-import { WordSharePicker } from "@/components/chat/WordSharePicker";
+import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { BlankSheet, ExcelChrome, fakeFilename } from "./ExcelChrome";
 import type { ChatSkinProps } from "./types";
 
@@ -189,20 +187,33 @@ export function ExcelSkin(p: ChatSkinProps) {
 
           {/* 입력줄 — excelkospi 의 "입력 후 Enter" 바 컨셉, 리스트 하단에 고정 */}
           <div className="flex items-center gap-1.5 border-t border-[#d8dde3] bg-white px-2 py-1.5">
+            <ChatToolsMenu
+              variant="excel"
+              onPickItem={p.onAttachItem}
+              onPickImage={p.onAttachImageFile}
+              onPickKaomoji={p.onPickKaomoji}
+            />
             <input
               value={p.input}
               onChange={(e) => p.onInputChange(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) p.onSend();
               }}
+              onPaste={(e) => {
+                // 클립보드 이미지 붙여넣기 → 파일 첨부와 같은 업로드 파이프라인
+                const file = Array.from(e.clipboardData.files).find((f) =>
+                  f.type.startsWith("image/"),
+                );
+                if (file) {
+                  e.preventDefault();
+                  p.onAttachImageFile(file);
+                }
+              }}
               placeholder="내용 입력 후 Enter"
               maxLength={2000}
               aria-label="내용 입력"
               className="min-h-9 flex-1 rounded-sm border border-[#c9cfd6] px-2.5 text-[13px] focus:border-[#217346] focus:outline-none"
             />
-            <WordSharePicker onPick={p.onAttachItem} />
-            <ImageAttachButton onPick={p.onAttachImageFile} variant="excel" />
-            <KaomojiPicker onPick={p.onPickKaomoji} />
             <button
               type="button"
               onClick={p.onSend}
