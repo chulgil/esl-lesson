@@ -28,6 +28,18 @@ export function ChatWidget() {
   );
   const [unread, setUnread] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+
+  // 도킹은 데스크톱 전용 — 모바일에서 우측 상시 패널은 화면 전체를 덮고
+  // 닫을 방법이 없다 (2026-07-28 검증에서 발견). 모바일은 항상 플로팅.
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   useEffect(() => {
     fetchMe().then((me) => setLoggedIn(Boolean(me)));
@@ -57,30 +69,38 @@ export function ChatWidget() {
     setFaviconBadge(unread);
   }, [unread]);
 
+  // 도킹은 데스크톱에서만 실제 적용 — 모바일은 항상 플로팅으로 동작
+  const effFloating = floating || !isDesktop;
   // 도킹 모드는 항상 열려있음(닫기 없음) — 플로팅일 때만 open 상태를 따른다
-  const panelOpen = floating ? open : true;
+  const panelOpen = effFloating ? open : true;
 
   // Esc 한 번으로 즉시 닫기 — 플로팅 전용 (빠른 숨김)
   useEffect(() => {
-    if (!floating || !open) return;
+    if (!effFloating || !open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [floating, open]);
+  }, [effFloating, open]);
 
-  // 바깥 영역 클릭 시 닫기 — 플로팅 전용
+  // 바깥 영역 클릭 시 닫기 — 플로팅 전용. 런처는 제외해야 한다:
+  // pointerdown(닫힘) 직후 런처의 click 토글이 다시 열어 닫기가 무력화됨
   useEffect(() => {
-    if (!floating || !open) return;
+    if (!effFloating || !open) return;
     function onPointerDown(e: PointerEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(target) &&
+        !launcherRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     }
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [floating, open]);
+  }, [effFloating, open]);
 
   // 열린 대화방 추적 — 전역 토스트·OS 알림 중복 억제
   useEffect(() => {
@@ -106,7 +126,7 @@ export function ChatWidget() {
         <div
           ref={panelRef}
           className={
-            floating
+            effFloating
               ? `fixed right-4 bottom-20 z-50 flex h-[30rem] w-[22.5rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg shadow-2xl ${
                   excel
                     ? "border border-[#c9cfd6] bg-white font-sans text-[13px] text-[#24292f]"
@@ -119,7 +139,7 @@ export function ChatWidget() {
                 }`
           }
           style={
-            floating
+            effFloating
               ? { maxHeight: "min(30rem, calc(100dvh - 7rem))" }
               : undefined
           }
@@ -151,7 +171,7 @@ export function ChatWidget() {
                   ? `${room.name} 와의 교환 노트`
                   : "교환 노트"}
             </b>
-            {floating && (
+            {effFloating && (
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -175,8 +195,9 @@ export function ChatWidget() {
       )}
 
       {/* 런처 — 도킹 모드는 상시 열려있어 런처가 필요 없다. 오피스: 메모 pill / 그 외: 연필 노트 원형 */}
-      {floating && (
+      {effFloating && (
         <button
+          ref={launcherRef}
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-label={`대화 열기${unread > 0 ? ` — 새 글 ${unread}개` : ""}`}

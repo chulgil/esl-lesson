@@ -20,9 +20,13 @@ export function setFaviconBadge(count: number): void {
   const shown = Math.min(Math.max(count, 0), 99);
   const badge = document.getElementById(BADGE_ID);
   // Next 가 라우팅 중 원래 아이콘 링크를 되살릴 수 있어, 배지가 살아있고
-  // 원래 링크가 다시 나타나지 않았을 때만 스킵한다
+  // 원래 링크가 다시 나타나지 않았을 때만 스킵한다.
+  // 주의: rel*="icon" 은 남겨두는 apple-touch-icon 까지 매치해 스킵이 항상
+  // 무효가 된다 — 제거 대상과 같은 셀렉터만 검사 (2026-07-28 검증에서 발견)
   const originalsBack = Boolean(
-    document.querySelector(`link[rel*="icon"]:not(#${BADGE_ID})`),
+    document.querySelector(
+      `link[rel="icon"]:not(#${BADGE_ID}), link[rel="shortcut icon"]`,
+    ),
   );
   if (shown === lastCount && (shown === 0 || (badge && !originalsBack))) return;
   lastCount = shown;
