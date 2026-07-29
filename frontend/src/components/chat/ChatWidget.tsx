@@ -530,6 +530,7 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
               p.onAttachImageFile(file);
             }
           }}
+          data-chat-input="1"
           placeholder={excel ? "내용 입력" : "한 줄 적기..."}
           maxLength={2000}
           className={`min-h-11 min-w-0 flex-1 px-2 text-base focus:outline-none sm:min-h-9 sm:text-[13px] ${

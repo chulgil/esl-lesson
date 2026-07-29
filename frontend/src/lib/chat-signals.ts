@@ -21,6 +21,17 @@ export function getActiveChatRoom(): number | null {
   return activeRoomUserId;
 }
 
+/** 채팅 입력창에 커서가 있는가 — "실제로 대화 중" 판정 (docs/specs/chat.md 알림).
+ *  대화방이 열려 있어도 입력창 밖이면 자리 비움으로 보고 알림을 보낸다
+ *  (2026-07-29 보고: 방만 켜두고 다른 일 하는 동안 알림 유실).
+ *  입력창들은 data-chat-input 마커를 단다 — 상태 배선 없이 activeElement 로 판정. */
+export function isChatInputFocused(): boolean {
+  return (
+    typeof document !== "undefined" &&
+    document.activeElement?.getAttribute("data-chat-input") === "1"
+  );
+}
+
 export function setChatSocket(s: GameSocket | null): void {
   socket = s;
 }

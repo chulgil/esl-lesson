@@ -214,6 +214,7 @@ export function ExcelSkin(p: ChatSkinProps) {
                   p.onAttachImageFile(file);
                 }
               }}
+              data-chat-input="1"
               placeholder="내용 입력 후 Enter"
               maxLength={2000}
               aria-label="내용 입력"

@@ -6,6 +6,7 @@ import { fetchMe } from "@/lib/api";
 import {
   dispatchChatEvent,
   getActiveChatRoom,
+  isChatInputFocused,
   setChatSocket,
 } from "@/lib/chat-signals";
 import { getAppTheme } from "@/lib/theme";
@@ -50,14 +51,17 @@ export function InviteToaster() {
         pathRef.current === `/chat/${msg.sender_id}` ||
         getActiveChatRoom() === msg.sender_id;
       const body = msg.body || (msg.image_url ? "[사진]" : "[단어 카드]");
-      // 탭이 백그라운드거나 창이 포커스를 잃었으면 OS 알림 (알림 켜기 수락 시)
-      // — hidden 만 보면 "브라우저 창은 보이는데 다른 앱 사용 중"(hasFocus=false,
-      //   회사에서 가장 흔한 상황)에 알림이 토스트로만 흘러 놓친다 (2026-07-28 보고).
-      //   오피스 테마는 문서 알림으로 위장
-      if (
-        (document.hidden || !document.hasFocus()) &&
-        Notification.permission === "granted"
-      ) {
+      // "실제로 대화 중"일 때만 알림 생략 = 그 방을 보는 중 + 탭 전면 + 창 포커스
+      // + 입력창에 커서. 대화방을 켜두고 커서가 입력창 밖이면 자리 비움으로 보고
+      // 알림을 보낸다 (2026-07-29 보고: 방만 켜둔 채 다른 일 하는 동안 유실).
+      // hidden 만 보면 "브라우저는 보이는데 다른 앱 사용 중"도 놓친다 (07-28).
+      // 오피스 테마는 문서 알림으로 위장
+      const engaged =
+        viewing &&
+        !document.hidden &&
+        document.hasFocus() &&
+        isChatInputFocused();
+      if (!engaged && Notification.permission === "granted") {
         const excel = getAppTheme() === "excel";
         notifyOs(
           excel ? "공유 문서" : msg.from_name,
@@ -170,9 +174,15 @@ export function InviteToaster() {
   );
 }
 
-/** 백그라운드 탭 OS 알림 — SW 우선, 미등록이면 페이지 Notification 폴백 */
+/** 백그라운드 탭 OS 알림 — SW 우선, 미등록이면 페이지 Notification 폴백.
+ *  renotify: 같은 tag 의 후속 알림이 소리 없이 대체되지 않고 다시 알리게 */
 function notifyOs(title: string, body: string, url: string) {
-  const options: NotificationOptions = { body, tag: "esl-chat", data: { url } };
+  const options: NotificationOptions & { renotify?: boolean } = {
+    body,
+    tag: "esl-chat",
+    renotify: true,
+    data: { url },
+  };
   navigator.serviceWorker
     ?.getRegistration()
     .then((reg) => {
