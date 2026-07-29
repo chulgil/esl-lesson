@@ -92,6 +92,7 @@ license != creativeCommons 또는 미확인 → content_permissions 필수, 없�
 | DELETE `/api/my/contents/{id}` | 유지 (빼기). 개인 콘텐츠는 마지막 구독자 이탈 시 본체 삭제 |
 | POST `/api/my/contents/{id}/retry` | **개인(private) 콘텐츠로 제한** — 담기가 열리면서 사용자가 관리자 콘텐츠의 재추출(AI 비용)을 트리거할 수 있게 되는 구멍을 막는다 |
 | POST `/api/admin/contents` | `allow_non_cc` 제거, `permission` 객체 추가 |
+| GET `/api/admin/youtube/cc-search?q=` | **신규 (2026-07-29)** — Data API `search.list`(`videoLicense=creativeCommon` + `videoCaption=closedCaption`)로 CC·자막 보유 영상만 검색. 등록 화면 "CC 영상 찾기" — 선택 시 URL 자동 채움. 검색 필터는 후보용이고 등록 시 `fetch_license` 재확인(이중 게이트). 키 없으면 503, 구글 오류 502. search.list 쿼터 100단위/호출(관리자 전용이라 무해) |
 | GET `/api/admin/contents/{id}` | 응답에 `permission` 포함 (검수 화면 표시용) |
 | GET `/api/contents` | 항목에 `subscribed` 플래그 추가 (담기 버튼 상태) |
 

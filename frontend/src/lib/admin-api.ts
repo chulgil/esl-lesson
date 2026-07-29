@@ -45,6 +45,14 @@ export interface ContentDetail extends ContentSummary {
   items: Item[];
 }
 
+export interface CcSearchItem {
+  video_id: string;
+  title: string;
+  channel_title: string;
+  published_at: string;
+  thumbnail_url: string;
+}
+
 export interface AdminUser {
   id: number;
   email: string;
@@ -98,6 +106,12 @@ export const adminApi = {
 
   getContent: (id: number) =>
     request<ContentDetail>(`/api/admin/contents/${id}`),
+
+  /** CC(creativeCommon)·자막 보유 영상만 검색 — 등록 후보 (content-governance.md) */
+  ccSearch: (q: string) =>
+    request<{ items: CcSearchItem[] }>(
+      `/api/admin/youtube/cc-search?q=${encodeURIComponent(q)}`,
+    ),
 
   createContent: (body: {
     source: "youtube" | "manual";

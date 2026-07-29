@@ -33,6 +33,23 @@ from app.workers.queue import enqueue
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
 
+@router.get("/youtube/cc-search")
+async def cc_search(
+    q: Annotated[str, Query(min_length=1, max_length=100)],
+) -> dict:
+    """CC(creativeCommon)·자막 보유 영상만 검색 — 등록 후보 제시.
+
+    검색 필터는 후보용이고, 등록(POST /contents) 시 fetch_license 가
+    라이선스를 서버에서 재확인한다 (허위/변경 대비 이중 게이트)."""
+    try:
+        items = await youtube.search_cc_videos(q)
+    except Exception as exc:  # noqa: BLE001 — 쿼터 초과 등 구글 API 오류
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "youtube_search_failed") from exc
+    if items is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "youtube_api_key_missing")
+    return {"items": items}
+
+
 async def get_public_content(db: AsyncSession, content_id: int) -> Content:
     content = await db.get(Content, content_id)
     if content is None or content.visibility != "public":

@@ -73,6 +73,56 @@ async def fetch_license(video_id: str) -> str | None:
         return None
 
 
+DATA_API_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+
+
+async def search_cc_videos(query: str, max_results: int = 12) -> list[dict] | None:
+    """Data API 검색 — CC(creativeCommon) + 자막 보유 영상만.
+
+    백오피스 "CC 영상 찾기"용 (docs/specs/content-governance.md). None = API 키
+    미설정. videoCaption=closedCaption 으로 자막 없는 영상을 사전에 거른다
+    (파이프라인이 자막 전제). 등록 시 fetch_license 가 라이선스를 재확인하므로
+    검색 필터는 후보 제시용이다. search.list 쿼터 100단위/호출 — 관리자 전용.
+    """
+    from app.core.config import get_settings
+
+    api_key = get_settings().youtube_api_key
+    if not api_key:
+        return None
+    async with httpx.AsyncClient(timeout=10) as client:
+        res = await client.get(
+            DATA_API_SEARCH_URL,
+            params={
+                "part": "snippet",
+                "q": query,
+                "type": "video",
+                "videoLicense": "creativeCommon",
+                "videoCaption": "closedCaption",
+                "relevanceLanguage": "en",
+                "maxResults": max_results,
+                "key": api_key,
+            },
+        )
+        res.raise_for_status()
+        items = res.json().get("items", [])
+    results = []
+    for item in items:
+        video_id = item.get("id", {}).get("videoId")
+        snippet = item.get("snippet", {})
+        if not video_id:
+            continue
+        results.append(
+            {
+                "video_id": video_id,
+                "title": snippet.get("title", ""),
+                "channel_title": snippet.get("channelTitle", ""),
+                "published_at": snippet.get("publishedAt", ""),
+                "thumbnail_url": (snippet.get("thumbnails", {}).get("medium") or {}).get("url", ""),
+            }
+        )
+    return results
+
+
 @dataclass
 class Snippet:
     text: str

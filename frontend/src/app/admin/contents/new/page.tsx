@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Brick } from "@/components/brick/Brick";
-import { adminApi, type ContentPermission } from "@/lib/admin-api";
+import {
+  adminApi,
+  type CcSearchItem,
+  type ContentPermission,
+} from "@/lib/admin-api";
 
 type Tab = "youtube" | "manual";
 
@@ -30,6 +34,11 @@ export default function NewContentPage() {
   const [submitting, setSubmitting] = useState(false);
   // CC 게이트(cc_required) — 비 CC 는 허락 증빙을 남겨야 등록된다
   const [ccBlocked, setCcBlocked] = useState(false);
+  // CC 영상 찾기 — creativeCommon+자막 보유만 검색해 후보에서 바로 등록
+  const [ccQuery, setCcQuery] = useState("");
+  const [ccItems, setCcItems] = useState<CcSearchItem[] | null>(null);
+  const [ccSearching, setCcSearching] = useState(false);
+  const [ccError, setCcError] = useState<string | null>(null);
   const [permission, setPermission] =
     useState<ContentPermission>(EMPTY_PERMISSION);
 
@@ -77,6 +86,27 @@ export default function NewContentPage() {
     }
   }
 
+  async function searchCc() {
+    if (!ccQuery.trim()) return;
+    setCcSearching(true);
+    setCcError(null);
+    try {
+      const res = await adminApi.ccSearch(ccQuery.trim());
+      setCcItems(res.items);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "검색 실패";
+      setCcError(
+        {
+          youtube_api_key_missing:
+            "서버에 YOUTUBE_API_KEY 가 없어요 — .env.api 설정 후 재생성 필요",
+          youtube_search_failed:
+            "유튜브 검색에 실패했어요 — 쿼터 초과이거나 일시 오류예요",
+        }[message] ?? message,
+      );
+    }
+    setCcSearching(false);
+  }
+
   function setPerm<K extends keyof ContentPermission>(
     key: K,
     value: ContentPermission[K],
@@ -105,19 +135,105 @@ export default function NewContentPage() {
 
       <div className="mt-4 flex flex-col gap-4 rounded-lg border-2 border-ink/10 bg-white p-6">
         {tab === "youtube" ? (
-          <label className="flex flex-col gap-1 text-sm">
-            유튜브 URL
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://youtu.be/..."
-              className="rounded border-2 border-ink/20 px-3 py-2"
-            />
-            <span className="text-xs opacity-60">
-              제목과 영어/한글 스크립트는 자동으로 추출됩니다.
-            </span>
-          </label>
+          <>
+            <label className="flex flex-col gap-1 text-sm">
+              유튜브 URL
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://youtu.be/..."
+                className="rounded border-2 border-ink/20 px-3 py-2"
+              />
+              <span className="text-xs opacity-60">
+                제목과 영어/한글 스크립트는 자동으로 추출됩니다.
+              </span>
+            </label>
+
+            {/* CC 영상 찾기 — 검색 필터는 후보용, 등록 시 서버가 라이선스 재확인 */}
+            <div className="mt-2 rounded-md border-2 border-brick-green/30 bg-brick-green/5 p-3">
+              <p className="text-sm font-bold">CC(재사용 허용) 영상 찾기</p>
+              <p className="mb-2 text-xs opacity-60">
+                크리에이티브 커먼즈 + 자막 보유 영상만 검색돼요 — 선택하면 URL이
+                채워집니다
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={ccQuery}
+                  onChange={(e) => setCcQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      searchCc();
+                    }
+                  }}
+                  placeholder="검색어 (예: english conversation)"
+                  className="min-w-0 flex-1 rounded border-2 border-ink/20 px-3 py-2"
+                />
+                <button
+                  type="button"
+                  onClick={searchCc}
+                  disabled={ccSearching || !ccQuery.trim()}
+                  className="shrink-0 rounded-md border-2 border-brick-green bg-white px-3 text-sm font-bold text-brick-green disabled:opacity-40"
+                >
+                  {ccSearching ? "검색 중..." : "검색"}
+                </button>
+              </div>
+              {ccError && (
+                <p className="mt-2 text-xs text-brick-red">{ccError}</p>
+              )}
+              {ccItems && ccItems.length === 0 && (
+                <p className="mt-2 text-xs opacity-60">검색 결과가 없어요</p>
+              )}
+              {ccItems && ccItems.length > 0 && (
+                <ul className="mt-3 flex max-h-80 flex-col gap-2 overflow-y-auto">
+                  {ccItems.map((v) => {
+                    const videoUrl = `https://www.youtube.com/watch?v=${v.video_id}`;
+                    const selected = url === videoUrl;
+                    return (
+                      <li key={v.video_id}>
+                        <button
+                          type="button"
+                          onClick={() => setUrl(videoUrl)}
+                          className={`flex w-full items-center gap-3 rounded-md border-2 p-2 text-left transition ${
+                            selected
+                              ? "border-brick-green bg-brick-green/10"
+                              : "border-ink/10 bg-white hover:border-brick-green/50"
+                          }`}
+                        >
+                          {v.thumbnail_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={v.thumbnail_url}
+                              alt=""
+                              className="h-14 w-24 shrink-0 rounded object-cover"
+                            />
+                          ) : (
+                            <span className="h-14 w-24 shrink-0 rounded bg-ink/10" />
+                          )}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-bold">
+                              {v.title}
+                            </span>
+                            <span className="block truncate text-xs opacity-60">
+                              {v.channel_title}
+                              {v.published_at &&
+                                ` · ${v.published_at.slice(0, 10)}`}
+                            </span>
+                          </span>
+                          {selected && (
+                            <span className="shrink-0 text-xs font-bold text-brick-green">
+                              선택됨
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </>
         ) : (
           <>
             <label className="flex flex-col gap-1 text-sm">

@@ -206,3 +206,53 @@ async def test_approve_all_skips_hintless_sentences(admin_client, db_session):
     res = await admin_client.post(f"/api/admin/contents/{content.id}/approve-all")
     assert res.status_code == 200
     assert res.json() == {"approved": 1, "skipped": 1}
+
+
+async def test_cc_search_returns_mapped_items(admin_client, monkeypatch):
+    """CC 검색 — Data API 응답을 등록 후보 형태로 매핑."""
+    from app.api import admin_contents
+
+    async def fake_search(query, max_results=12):
+        assert query == "cooking"
+        return [
+            {
+                "video_id": "abc123def45",
+                "title": "CC Cooking",
+                "channel_title": "Chef",
+                "published_at": "2026-01-01T00:00:00Z",
+                "thumbnail_url": "https://i.ytimg.com/vi/abc123def45/mqdefault.jpg",
+            }
+        ]
+
+    monkeypatch.setattr(admin_contents.youtube, "search_cc_videos", fake_search)
+    res = await admin_client.get("/api/admin/youtube/cc-search", params={"q": "cooking"})
+    assert res.status_code == 200
+    items = res.json()["items"]
+    assert items[0]["video_id"] == "abc123def45"
+    assert items[0]["channel_title"] == "Chef"
+
+
+async def test_cc_search_without_api_key_returns_503(admin_client, monkeypatch):
+    from app.api import admin_contents
+
+    async def no_key(query, max_results=12):
+        return None
+
+    monkeypatch.setattr(admin_contents.youtube, "search_cc_videos", no_key)
+    res = await admin_client.get("/api/admin/youtube/cc-search", params={"q": "x"})
+    assert res.status_code == 503
+
+
+async def test_cc_search_requires_admin(client, db_session):
+    from app.api.auth import upsert_google_user
+    from app.core.config import get_settings
+    from app.core.security import SESSION_COOKIE, create_session_token
+
+    learner = await upsert_google_user(
+        db_session,
+        {"sub": "g-cc", "email": "cc@example.com", "email_verified": True, "name": "C"},
+        get_settings(),
+    )
+    client.cookies.set(SESSION_COOKIE, create_session_token(learner))
+    res = await client.get("/api/admin/youtube/cc-search", params={"q": "x"})
+    assert res.status_code == 403
