@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Me } from "@/lib/api";
 
@@ -8,8 +9,14 @@ import type { Me } from "@/lib/api";
  *  아바타(닉네임 이니셜) 클릭 → 닉네임·설정·백오피스(관리자)·로그아웃 드롭다운.
  *  구글 프로필 사진은 실명 노출 위험으로 쓰지 않는다 (chat 아바타와 동일 원칙). */
 export function ProfileMenu({ me }: { me: Me }) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // 라우트가 바뀌면 닫기 — 이동 후 열린 채 남으면 다음 클릭을 삼킨다
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   // 바깥 클릭으로 닫기
   useEffect(() => {

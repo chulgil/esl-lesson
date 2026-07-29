@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { chatApi } from "@/lib/chat-api";
 import { onChatEvent } from "@/lib/chat-signals";
@@ -16,6 +16,7 @@ import { timeAgo } from "@/lib/time";
  *  첫 행 "새 메시지 N개" 요약으로 안내. */
 export function NotificationBell() {
   const router = useRouter();
+  const pathname = usePathname();
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -54,6 +55,12 @@ export function NotificationBell() {
     };
   }, [load]);
 
+  // 라우트가 바뀌면 닫기 — 레이아웃에 상주해 이동 후에도 열린 채 남으면
+  // 다음 클릭이 드롭다운 닫기에 소모돼 "메뉴가 안 눌린다"로 체감 (2026-07-29)
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
   // 바깥 클릭으로 닫기
   useEffect(() => {
     if (!open) return;
@@ -64,11 +71,14 @@ export function NotificationBell() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  async function openItem(n: NotificationItem) {
+  function openItem(n: NotificationItem) {
     setOpen(false);
-    // 읽음 처리 후 이동 — 서버가 내 알림만 갱신하므로 무조건 호출해도 안전 (멱등)
-    await notificationsApi.markRead({ ids: [n.id] }).catch(() => {});
-    load();
+    // 이동을 막지 않도록 읽음 처리는 비동기 — await 하면 느린 네트워크에서
+    // 클릭이 죽은 것처럼 보인다 (2026-07-29 메뉴 이동 불편 보고)
+    notificationsApi
+      .markRead({ ids: [n.id] })
+      .then(load)
+      .catch(() => {});
     const target = notifTarget(n);
     // 이미 대상 페이지면 push 가 무변화라 "이동 안 됨"으로 보인다 — 새로고침으로 반응
     if (window.location.pathname + window.location.search === target) {
