@@ -44,6 +44,12 @@ export default function LibraryPage() {
                     내 것
                   </span>
                 )}
+                {/* CC 배지 — 재사용 허용 영상 표시 (consult-brief §5 저작자표시 보강) */}
+                {c.youtube_license === "creativeCommons" && (
+                  <span className="rounded bg-brick-green/15 px-1.5 py-0.5 font-bold text-brick-green">
+                    CC BY
+                  </span>
+                )}
               </p>
               <p className="mt-1 font-bold">{c.title}</p>
               <p className="mt-2 text-xs opacity-60">

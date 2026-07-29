@@ -96,6 +96,24 @@ function ContentsInner() {
                 </td>
                 <td className="p-2">
                   {c.source === "youtube" ? "유튜브" : "수기"}
+                  {/* 라이선스 배지 — CC/표준/미확인 한눈에 (저작권 관리) */}
+                  {c.source === "youtube" && (
+                    <span
+                      className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                        c.youtube_license === "creativeCommons"
+                          ? "bg-brick-green/15 text-brick-green"
+                          : c.youtube_license === "youtube"
+                            ? "bg-ink/10 text-ink/70"
+                            : "bg-brick-red/10 text-brick-red"
+                      }`}
+                    >
+                      {c.youtube_license === "creativeCommons"
+                        ? "CC BY"
+                        : c.youtube_license === "youtube"
+                          ? "표준"
+                          : "미확인"}
+                    </span>
+                  )}
                 </td>
                 <td className="p-2">
                   <StatusBadge status={c.status} />

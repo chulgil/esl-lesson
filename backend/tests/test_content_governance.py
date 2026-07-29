@@ -170,3 +170,21 @@ async def test_cc_video_needs_no_permission(admin_client, db_session, monkeypatc
     res = await admin_client.post("/api/admin/contents", json={"source": "youtube", "url": YT})
     assert res.status_code == 202
     assert (await db_session.execute(select(ContentPermission.id))).scalars().all() == []
+
+
+async def test_library_exposes_license_for_cc_badge(client, db_session):
+    """라이선스가 목록·상세에 노출 — CC 배지·저작자표시용 (consult-brief §5)."""
+    from tests.test_my_contents import login_as
+    from tests.test_subscriptions import make_public_content
+
+    await login_as(client, db_session, "lic@example.com")
+    content = await make_public_content(db_session, title="CC 영상")
+    content.youtube_license = "creativeCommons"
+    await db_session.commit()
+
+    listed = (await client.get("/api/contents")).json()
+    row = next(c for c in listed["items"] if c["id"] == content.id)
+    assert row["youtube_license"] == "creativeCommons"
+
+    detail = (await client.get(f"/api/contents/{content.id}")).json()
+    assert detail["youtube_license"] == "creativeCommons"

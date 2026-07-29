@@ -153,6 +153,8 @@ export interface LibraryContent {
   url: string | null;
   mine: boolean;
   subscribed: boolean;
+  /** "creativeCommons" | "youtube"(표준) | null(미확인) — CC 배지·저작자표시용 */
+  youtube_license: string | null;
   item_count: number;
 }
 
@@ -167,6 +169,7 @@ export interface LibraryDetail {
   title: string;
   source: string;
   subscribed: boolean;
+  youtube_license: string | null;
   youtube_video_id: string | null;
   segments: {
     seq: number;

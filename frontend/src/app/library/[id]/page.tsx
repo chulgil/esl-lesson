@@ -232,6 +232,19 @@ export default function LibraryDetailPage() {
         <h1 className="font-hand text-xl leading-snug font-bold sm:text-2xl">
           <span className="hl">{detail.title}</span>
         </h1>
+        {/* CC 저작자표시 — 라이선스 명칭+링크 표시 (consult-brief §5 요건 보강).
+            원저작자·원본 링크는 유튜브 임베드가 담당, 채널명 표기는 후속(스키마) */}
+        {detail.youtube_license === "creativeCommons" && (
+          <a
+            href="https://creativecommons.org/licenses/by/4.0/deed.ko"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded bg-brick-green/15 px-2 py-0.5 text-xs font-bold text-brick-green hover:underline"
+            title="이 영상은 크리에이티브 커먼즈 저작자표시(CC BY) 라이선스로 제공돼요"
+          >
+            CC BY
+          </a>
+        )}
         <div className="ml-auto">
           <SubscribeButton
             contentId={detail.id}

@@ -81,6 +81,8 @@ async def list_ready_contents(
                 "url": c.url,
                 "mine": c.visibility == "private",
                 "subscribed": c.id in subscribed,
+                # CC 배지·저작자표시용 (consult-brief §5 — 라이선스 명칭 표시 요건)
+                "youtube_license": c.youtube_license,
                 "item_count": item_counts.get(c.id, 0),
                 "created_at": c.created_at,
             }
@@ -141,6 +143,7 @@ async def get_ready_content(
         "url": content.url,
         "mine": content.visibility == "private",
         "subscribed": subscribed,
+        "youtube_license": content.youtube_license,
         "youtube_video_id": content.youtube_video_id,
         "segments": [
             {

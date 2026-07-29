@@ -204,6 +204,7 @@ def content_summary(content: Content) -> dict:
         "title": content.title,
         "status": content.status,
         "youtube_video_id": content.youtube_video_id,
+        "youtube_license": content.youtube_license,
         "error_message": content.error_message,
         "created_at": content.created_at,
     }
