@@ -200,7 +200,7 @@ export function NoteSkin(p: ChatSkinProps) {
             }}
             placeholder="한 줄 적기..."
             maxLength={2000}
-            className="min-h-11 flex-1 rounded-md border-2 border-ink/20 px-3 text-sm transition-colors focus:border-brick-blue focus:outline-none"
+            className="min-h-11 flex-1 rounded-md border-2 border-ink/20 px-3 text-base transition-colors focus:border-brick-blue focus:outline-none sm:text-sm"
           />
           <button
             type="button"

@@ -120,6 +120,15 @@ export function ChatWidget() {
     return () => setActiveChatRoom(null);
   }, [panelOpen, room]);
 
+  // 모바일 전체 화면 시트가 열리면 대화방 페이지와 동일한 집중 모드
+  // (하단 탭바 숨김 + 바디 스크롤 잠금 — globals.css chat-focus)
+  useEffect(() => {
+    if (!isDesktop && panelOpen) {
+      document.body.classList.add("chat-focus");
+      return () => document.body.classList.remove("chat-focus");
+    }
+  }, [isDesktop, panelOpen]);
+
   // 채팅 전체 페이지·관리자·로그인 화면에서는 숨김
   if (
     !loggedIn ||
@@ -139,7 +148,9 @@ export function ChatWidget() {
           ref={panelRef}
           className={
             effFloating
-              ? `fixed right-4 bottom-36 z-50 flex h-[30rem] w-[22.5rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg shadow-2xl sm:bottom-20 ${
+              ? // 모바일 = 전체 화면 시트 (좁은 팝업은 키보드가 열리면 못 쓴다 —
+                // 2026-07-28 모바일 채팅 UX), sm 이상 = 우하단 팝업
+                `fixed inset-0 z-50 flex flex-col overflow-hidden shadow-2xl sm:inset-auto sm:right-4 sm:bottom-20 sm:h-[30rem] sm:w-[22.5rem] sm:rounded-lg ${
                   excel
                     ? "border border-[#c9cfd6] bg-white font-sans text-[13px] text-[#24292f]"
                     : "border-2 border-ink/15 bg-paper"
@@ -151,7 +162,7 @@ export function ChatWidget() {
                 }`
           }
           style={
-            effFloating
+            effFloating && isDesktop
               ? { maxHeight: "min(30rem, calc(100dvh - 7rem))" }
               : undefined
           }
@@ -209,7 +220,7 @@ export function ChatWidget() {
       {/* 런처 — 도킹 모드는 상시 열려있어 런처가 필요 없다. 오피스: 메모 pill / 그 외: 연필 노트 원형.
           열기 전용(토글 아님): 토글은 바깥클릭 닫힘과의 이벤트 순서 경합으로
           "다시 열면 바로 닫히는" 간헐 증상을 만든다 (2026-07-28 보고). 닫기 = X·Esc·바깥클릭 */}
-      {effFloating && (
+      {effFloating && (isDesktop || !open) && (
         <button
           ref={launcherRef}
           type="button"
@@ -521,7 +532,7 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
           }}
           placeholder={excel ? "내용 입력" : "한 줄 적기..."}
           maxLength={2000}
-          className={`min-h-9 min-w-0 flex-1 px-2 text-[13px] focus:outline-none ${
+          className={`min-h-11 min-w-0 flex-1 px-2 text-base focus:outline-none sm:min-h-9 sm:text-[13px] ${
             excel
               ? "rounded-sm border border-[#c9cfd6] focus:border-[#217346]"
               : "rounded-md border-2 border-ink/20 focus:border-brick-blue"

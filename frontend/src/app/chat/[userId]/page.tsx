@@ -28,6 +28,12 @@ export default function ChatRoomPage() {
     };
   }, [theme]);
 
+  // 모바일 대화방 집중 모드 — 하단 탭바 숨김 + 바디 스크롤 잠금 (globals.css)
+  useEffect(() => {
+    document.body.classList.add("chat-focus");
+    return () => document.body.classList.remove("chat-focus");
+  }, []);
+
   if (!Number.isFinite(otherId)) {
     return (
       <main className="p-8">

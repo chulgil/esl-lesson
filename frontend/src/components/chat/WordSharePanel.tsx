@@ -30,7 +30,7 @@ export function WordSharePanel({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="내 단어 검색..."
-        className="mb-1.5 w-full rounded-md border-2 border-ink/15 px-2 py-1.5 text-sm focus:border-brick-blue focus:outline-none"
+        className="mb-1.5 w-full rounded-md border-2 border-ink/15 px-2 py-1.5 text-base focus:border-brick-blue focus:outline-none sm:text-sm"
       />
       <div className="flex max-h-44 flex-col overflow-y-auto">
         {items.map((item) => (

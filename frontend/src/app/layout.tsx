@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Gaegu, IBM_Plex_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { AppNav } from "@/components/nav/AppNav";
@@ -21,6 +21,16 @@ const body = IBM_Plex_Sans_KR({
 const TITLE = "ESL Lessonaza — 유튜브로 배우는 영어";
 const DESCRIPTION =
   "유튜브 스크립트에서 단어·숙어·패턴·문장을 추출해 망각곡선으로 복습하는 영어 학습 서비스";
+
+// 모바일 키보드가 열리면 레이아웃 뷰포트를 줄여(resizes-content) 채팅 입력줄이
+// 키보드 위로 따라오게 한다 (2026-07-28 모바일 채팅 UX). 확대 자체를 막는
+// maximum-scale=1 은 접근성 훼손이라 쓰지 않는다 — iOS 자동 줌은 입력창
+// 16px 폰트로 해결 (chat 입력줄 text-base).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  interactiveWidget: "resizes-content",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://esl.lessonaza.app"),

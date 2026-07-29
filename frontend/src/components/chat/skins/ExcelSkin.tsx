@@ -217,7 +217,7 @@ export function ExcelSkin(p: ChatSkinProps) {
               placeholder="내용 입력 후 Enter"
               maxLength={2000}
               aria-label="내용 입력"
-              className="min-h-9 flex-1 rounded-sm border border-[#c9cfd6] px-2.5 text-[13px] focus:border-[#217346] focus:outline-none"
+              className="min-h-11 flex-1 rounded-sm border border-[#c9cfd6] px-2.5 text-base focus:border-[#217346] focus:outline-none sm:min-h-9 sm:text-[13px]"
             />
             <button
               type="button"

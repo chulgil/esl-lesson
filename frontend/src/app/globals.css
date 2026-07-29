@@ -279,6 +279,24 @@ html[data-theme="candy"] .brick-studs::before {
   body.game-focus .mobile-topbar {
     display: none;
   }
+
+  /* 모바일 대화방(chat-focus) — 메신저 관례: 하단 탭바를 치우고 입력줄이
+   * 화면 바닥(키보드 위)을 차지한다. 바디 스크롤·바운스를 잠가 채팅 리스트만
+   * 스크롤되게 한다 (2026-07-28 모바일 채팅 UX) */
+  body.chat-focus nav[aria-label="주요 메뉴"] {
+    display: none;
+  }
+  body.chat-focus {
+    overflow: hidden;
+    overscroll-behavior: none;
+    padding-bottom: 0; /* with-bottom-nav 여백 해제 — 탭바가 숨었으므로 */
+  }
+  body.chat-focus .h-dvh-nav-safe {
+    height: calc(100dvh - 48px); /* 상단 미니바만 남음 */
+  }
+  body.chat-focus .henyang-peek {
+    display: none; /* 입력줄 시야 확보 — 게임 집중 모드와 동일 취지 */
+  }
 }
 
 /* 랜딩 타이포 배경 — 잉크가 종이 위에서 숨쉬는 느낌 */
