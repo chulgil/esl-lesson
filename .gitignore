@@ -5,3 +5,6 @@
 .claude/
 .gstack/
 .deploy/
+.cg/
+.harness/
+.cg-harness-backup-*/
