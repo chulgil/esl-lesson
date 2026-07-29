@@ -32,7 +32,12 @@ export function ProfileMenu({ me }: { me: Me }) {
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        // 누르는 순간 토글 — press~release 사이 리렌더로 click 이 유실될 여지를
+        // 원천 제거 (2026-07-29 간헐 무반응 보고). 키보드는 click(detail 0)으로
+        onPointerDown={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          if (e.detail === 0) setOpen((v) => !v);
+        }}
         aria-label="내 계정 메뉴"
         aria-expanded={open}
         className="flex min-h-11 min-w-11 items-center justify-center"
