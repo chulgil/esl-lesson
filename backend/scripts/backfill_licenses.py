@@ -37,7 +37,7 @@ async def main() -> None:
                 continue
             content.youtube_license = license_
             updated += 1
-            marker = "CC" if license_ == "creativeCommons" else "표준"
+            marker = "CC" if license_ == "creativeCommon" else "표준"
             print(f"  [o] #{content.id} {content.title[:40]}: {marker}")
         await db.commit()
         print(f"{updated}건 저장 완료")

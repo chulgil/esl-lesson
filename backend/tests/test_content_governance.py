@@ -164,7 +164,7 @@ async def test_cc_video_needs_no_permission(admin_client, db_session, monkeypatc
     from app.services import youtube
 
     async def fake_license(video_id):
-        return "creativeCommons"
+        return "creativeCommon"
 
     monkeypatch.setattr(youtube, "fetch_license", fake_license)
     res = await admin_client.post("/api/admin/contents", json={"source": "youtube", "url": YT})
@@ -179,12 +179,12 @@ async def test_library_exposes_license_for_cc_badge(client, db_session):
 
     await login_as(client, db_session, "lic@example.com")
     content = await make_public_content(db_session, title="CC 영상")
-    content.youtube_license = "creativeCommons"
+    content.youtube_license = "creativeCommon"
     await db_session.commit()
 
     listed = (await client.get("/api/contents")).json()
     row = next(c for c in listed["items"] if c["id"] == content.id)
-    assert row["youtube_license"] == "creativeCommons"
+    assert row["youtube_license"] == "creativeCommon"
 
     detail = (await client.get(f"/api/contents/{content.id}")).json()
-    assert detail["youtube_license"] == "creativeCommons"
+    assert detail["youtube_license"] == "creativeCommon"

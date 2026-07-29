@@ -153,7 +153,7 @@ export interface LibraryContent {
   url: string | null;
   mine: boolean;
   subscribed: boolean;
-  /** "creativeCommons" | "youtube"(표준) | null(미확인) — CC 배지·저작자표시용 */
+  /** "creativeCommon" | "youtube"(표준) | null(미확인) — CC 배지·저작자표시용 */
   youtube_license: string | null;
   item_count: number;
 }

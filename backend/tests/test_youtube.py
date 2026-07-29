@@ -137,14 +137,14 @@ async def test_fetch_license_parses_and_skips_without_key(monkeypatch):
 
         settings.youtube_api_key = "test-key"
         res = MagicMock()
-        res.json.return_value = {"items": [{"status": {"license": "creativeCommons"}}]}
+        res.json.return_value = {"items": [{"status": {"license": "creativeCommon"}}]}
         res.raise_for_status.return_value = None
         http = MagicMock()
         http.__aenter__ = AsyncMock(return_value=http)
         http.__aexit__ = AsyncMock(return_value=False)
         http.get = AsyncMock(return_value=res)
         with patch.object(youtube.httpx, "AsyncClient", return_value=http):
-            assert await youtube.fetch_license("abc123def45") == "creativeCommons"
+            assert await youtube.fetch_license("abc123def45") == "creativeCommon"
 
         # 조회 실패는 None (게이트가 안전 기본값으로 차단)
         http.get = AsyncMock(side_effect=RuntimeError("boom"))

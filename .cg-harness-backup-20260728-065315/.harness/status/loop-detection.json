@@ -1,0 +1,187 @@
+{
+  "files": {
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/components/settings/ChatModeCard.tsx": {
+      "count": 3,
+      "first_seen": 1785209030,
+      "last_seen": 1785209052,
+      "hashes": [
+        "45404bb06c8e",
+        "f634a6d52864",
+        "cad29de94ad3"
+      ]
+    },
+    "/Users/r00360/.claude/projects/-Users-r00360-Dev-personal-development-app-eng-lesson/memory/eng-lesson-project.md": {
+      "count": 1,
+      "first_seen": 1785219758,
+      "last_seen": 1785219758,
+      "hashes": [
+        "0ba54dc2a7a1"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/lib/favicon-badge.ts": {
+      "count": 2,
+      "first_seen": 1785213340,
+      "last_seen": 1785213370,
+      "hashes": [
+        "adc2d00ede7f",
+        "72deb60ece70"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/app/friends/page.tsx": {
+      "count": 4,
+      "first_seen": 1785209188,
+      "last_seen": 1785209969,
+      "hashes": [
+        "0a5c45ca6a8a",
+        "f05c95cfa26f",
+        "bc3dc955e860",
+        "4ba9693a3f9a"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/backend/app/api/friends.py": {
+      "count": 2,
+      "first_seen": 1785209944,
+      "last_seen": 1785209952,
+      "hashes": [
+        "12f89b9cc872",
+        "2e1d5fa49896"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/lib/friends-api.ts": {
+      "count": 1,
+      "first_seen": 1785209962,
+      "last_seen": 1785209962,
+      "hashes": [
+        "7a40f29f2f89"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/backend/app/services/push.py": {
+      "count": 2,
+      "first_seen": 1785212130,
+      "last_seen": 1785212140,
+      "hashes": [
+        "b6c5bc19e1b2",
+        "3dedf6f36575"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/backend/app/api/push.py": {
+      "count": 1,
+      "first_seen": 1785212149,
+      "last_seen": 1785212149,
+      "hashes": [
+        "06dcb84145bf"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/components/chat/skins/NoteSkin.tsx": {
+      "count": 1,
+      "first_seen": 1785213956,
+      "last_seen": 1785213956,
+      "hashes": [
+        "8c86bee71ac1"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/components/chat/skins/ExcelSkin.tsx": {
+      "count": 1,
+      "first_seen": 1785213968,
+      "last_seen": 1785213968,
+      "hashes": [
+        "92da2b1a6b10"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/components/chat/ChatWidget.tsx": {
+      "count": 1,
+      "first_seen": 1785218200,
+      "last_seen": 1785218200,
+      "hashes": [
+        "b01de2c925bc"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/components/nav/AppNav.tsx": {
+      "count": 1,
+      "first_seen": 1785218172,
+      "last_seen": 1785218172,
+      "hashes": [
+        "a3099e24b802"
+      ]
+    },
+    "/Users/r00360/.claude/plans/rustling-dreaming-horizon.md": {
+      "count": 1,
+      "first_seen": 1785218040,
+      "last_seen": 1785218040,
+      "hashes": [
+        "aeb6107a5723"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/docker-compose.canary.yml": {
+      "count": 1,
+      "first_seen": 1785214938,
+      "last_seen": 1785214938,
+      "hashes": [
+        "35e550da6187"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/scripts/deploy.sh": {
+      "count": 4,
+      "first_seen": 1785214978,
+      "last_seen": 1785215386,
+      "hashes": [
+        "9f0d2c737c12",
+        "58402706fd19",
+        "41b7ecaaa1f5",
+        "cc3ed9f3ca17"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/.github/workflows/deploy.yml": {
+      "count": 1,
+      "first_seen": 1785215030,
+      "last_seen": 1785215030,
+      "hashes": [
+        "2795c6d8fe0b"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/docs/architecture/deployment.md": {
+      "count": 2,
+      "first_seen": 1785215089,
+      "last_seen": 1785215103,
+      "hashes": [
+        "ca1aa19b6429",
+        "1888dae88f16"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/docs/specs/notifications.md": {
+      "count": 1,
+      "first_seen": 1785221410,
+      "last_seen": 1785221410,
+      "hashes": [
+        "43ba25178f82"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/components/chat/useChatRoom.ts": {
+      "count": 1,
+      "first_seen": 1785219083,
+      "last_seen": 1785219083,
+      "hashes": [
+        "ea9f8b663c75"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/components/chat/ChatNavButton.tsx": {
+      "count": 1,
+      "first_seen": 1785221379,
+      "last_seen": 1785221379,
+      "hashes": [
+        "c4de6cd22e3f"
+      ]
+    },
+    "/Users/r00360/Dev/personal/development/app/eng-lesson/frontend/src/components/nav/NotificationBell.tsx": {
+      "count": 3,
+      "first_seen": 1785221390,
+      "last_seen": 1785221593,
+      "hashes": [
+        "8b251f2cafd1",
+        "b91f65a2888f",
+        "47066f6feb0b"
+      ]
+    }
+  },
+  "updated_at": 1785221593
+}

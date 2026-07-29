@@ -22,7 +22,7 @@
 
 공용 = 전 회원 제공이므로 **크리에이티브 커먼즈(CC BY) 영상만 증빙 없이 허용**한다.
 
-- `contents.youtube_license` (Data API `status.license`: `creativeCommons` | `youtube` |
+- `contents.youtube_license` (Data API `status.license`: `creativeCommon` | `youtube` |
   NULL 미확인). 파이프라인 metadata 단계에서 자동 조회 (`YOUTUBE_API_KEY` 필요,
   미설정 시 NULL 유지 — 공식 Data API 라 약관 안전)
 - CC 가 아니면(미확인 포함) **409 `cc_required`** — `content_permissions` 허락 증빙을

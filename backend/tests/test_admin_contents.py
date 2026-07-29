@@ -59,7 +59,7 @@ async def test_create_youtube_content_validates_and_dedups(admin_client, db_sess
     assert bad.status_code == 400
 
     with patch.object(
-        admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="creativeCommons")
+        admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="creativeCommon")
     ):
         ok = await admin_client.post(
             "/api/admin/contents",
@@ -143,7 +143,7 @@ async def test_private_promotion_also_gated_by_cc(admin_client, db_session):
         assert blocked.status_code == 409
 
     with patch.object(
-        admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="creativeCommons")
+        admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="creativeCommon")
     ):
         promoted = await admin_client.post(
             "/api/admin/contents",
@@ -153,7 +153,7 @@ async def test_private_promotion_also_gated_by_cc(admin_client, db_session):
         assert promoted.json()["promoted"] is True
     await db_session.refresh(private)
     assert private.visibility == "public"
-    assert private.youtube_license == "creativeCommons"
+    assert private.youtube_license == "creativeCommon"
 
 
 async def test_sentence_approval_requires_thinking_hint(admin_client, db_session):

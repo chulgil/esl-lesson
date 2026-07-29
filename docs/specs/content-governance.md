@@ -77,8 +77,8 @@
 ### CC 게이트와의 관계
 
 ```
-license == creativeCommons        → 허락 증빙 없이 등록 가능 (CC 자체가 이용허락)
-license != creativeCommons 또는 미확인 → content_permissions 필수, 없으면 409 cc_required
+license == creativeCommon        → 허락 증빙 없이 등록 가능 (CC 자체가 이용허락)
+license != creativeCommon 또는 미확인 → content_permissions 필수, 없으면 409 cc_required
 ```
 
 기존 `allow_non_cc: bool` 오버라이드는 제거한다. 체크박스 하나로 게이트를 뚫으면 분쟁 시 "허락받았다"를 입증할 데이터가 서비스에 남지 않는다.

@@ -6,7 +6,7 @@ export interface ContentSummary {
   title: string;
   status: "pending" | "extracting" | "ready" | "failed";
   youtube_video_id: string | null;
-  /** "creativeCommons" | "youtube"(표준) | null(미확인) */
+  /** "creativeCommon" | "youtube"(표준) | null(미확인) */
   youtube_license: string | null;
   error_message: string | null;
   created_at: string;

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS launchd 스케줄 템플릿 — 취침 시각에 야간 러너 기동.
+  설치:
+    1) __PROJECT_DIR__ 를 프로젝트 절대경로로 치환
+    2) cp 후 ~/Library/LaunchAgents/com.cg.night.plist 로 저장
+    3) launchctl load ~/Library/LaunchAgents/com.cg.night.plist
+    4) 테스트:  launchctl start com.cg.night   (즉시 1회 실행)
+    5) 해제:    launchctl unload ~/Library/LaunchAgents/com.cg.night.plist
+  launchd 는 cron 과 달리 절전/깨어남을 존중하고, 놓친 작업을 깨어날 때 실행한다.
+  주의: 격리 worktree + 가드훅 + push 금지 가 전제다. 러너를 먼저 수동(드라이런)으로 검증하라.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cg.night</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd __PROJECT_DIR__ &amp;&amp; ./.harness/night/cg-night-run.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__PROJECT_DIR__/.harness/status/launchd-night.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__PROJECT_DIR__/.harness/status/launchd-night.err.log</string>
+</dict>
+</plist>

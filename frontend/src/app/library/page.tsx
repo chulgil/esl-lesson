@@ -45,7 +45,7 @@ export default function LibraryPage() {
                   </span>
                 )}
                 {/* CC 배지 — 재사용 허용 영상 표시 (consult-brief §5 저작자표시 보강) */}
-                {c.youtube_license === "creativeCommons" && (
+                {c.youtube_license === "creativeCommon" && (
                   <span className="rounded bg-brick-green/15 px-1.5 py-0.5 font-bold text-brick-green">
                     CC BY
                   </span>

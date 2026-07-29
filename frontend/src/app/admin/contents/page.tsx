@@ -100,14 +100,14 @@ function ContentsInner() {
                   {c.source === "youtube" && (
                     <span
                       className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                        c.youtube_license === "creativeCommons"
+                        c.youtube_license === "creativeCommon"
                           ? "bg-brick-green/15 text-brick-green"
                           : c.youtube_license === "youtube"
                             ? "bg-ink/10 text-ink/70"
                             : "bg-brick-red/10 text-brick-red"
                       }`}
                     >
-                      {c.youtube_license === "creativeCommons"
+                      {c.youtube_license === "creativeCommon"
                         ? "CC BY"
                         : c.youtube_license === "youtube"
                           ? "표준"

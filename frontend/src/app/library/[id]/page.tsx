@@ -234,7 +234,7 @@ export default function LibraryDetailPage() {
         </h1>
         {/* CC 저작자표시 — 라이선스 명칭+링크 표시 (consult-brief §5 요건 보강).
             원저작자·원본 링크는 유튜브 임베드가 담당, 채널명 표기는 후속(스키마) */}
-        {detail.youtube_license === "creativeCommons" && (
+        {detail.youtube_license === "creativeCommon" && (
           <a
             href="https://creativecommons.org/licenses/by/4.0/deed.ko"
             target="_blank"

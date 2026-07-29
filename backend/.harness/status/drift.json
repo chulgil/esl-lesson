@@ -1,0 +1,15 @@
+{
+  "updated_at": 1785229242,
+  "hashes": {},
+  "ac_files": [],
+  "changed": [],
+  "summary": {
+    "changed_spec_files": 0,
+    "changed_total_files": 0,
+    "ac_files_present": 0,
+    "ac_touched": false,
+    "spec_changed_without_ac_update": false,
+    "journal_stale": true,
+    "warnings": []
+  }
+}

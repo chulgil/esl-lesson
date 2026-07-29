@@ -1,0 +1,17 @@
+# knot 지식 그물 설정 — 공유 vault 연결 + 기계 lint 프로파일.
+#
+# vault 해석 우선순위: cg knot --vault 인자 > 이 파일의 vault >
+# $KNOT_VAULT 환경변수 > ~/.config/knot/vault 파일.
+# 아래 vault 주석을 해제하고 경로를 채우면 cg knot 명령이 자동으로 사용한다.
+
+# vault = "~/Dev/mybrain"
+
+# 기계 lint 프로파일 (strict — knot-native scaffold 기본).
+# 공유 vault(기존 PARA/Zettel) 는 vault 루트 .knot.toml 의 [lint] 로 완화한다.
+[lint]
+wiki_globs = ["wiki/*.md"]
+allowed_types = ["source", "entity", "concept", "note"]
+require_fields = ["type", "created", "updated", "sources"]
+date_strict = true
+check_index = true
+check_stubs = true

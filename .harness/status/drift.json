@@ -1,0 +1,18 @@
+{
+  "updated_at": 1785309411,
+  "hashes": {
+    ".harness/spec/constitution.md": "79678f8231c9c6e5fa6481124168cd8289e33b5e",
+    ".harness/harness/current.md": "729d8cbb43f26f0e974eeecb9b5b4f744114b302"
+  },
+  "ac_files": [],
+  "changed": [],
+  "summary": {
+    "changed_spec_files": 0,
+    "changed_total_files": 0,
+    "ac_files_present": 0,
+    "ac_touched": false,
+    "spec_changed_without_ac_update": false,
+    "journal_stale": true,
+    "warnings": []
+  }
+}

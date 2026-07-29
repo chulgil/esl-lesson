@@ -48,7 +48,7 @@ DATA_API_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 
 
 async def fetch_license(video_id: str) -> str | None:
-    """Data API 로 라이선스 조회 — 'creativeCommons' | 'youtube' | None(키 없음/실패).
+    """Data API 로 라이선스 조회 — 'creativeCommon' | 'youtube' | None(키 없음/실패).
 
     공용 승격 CC 게이트용 (docs/specs/content-pipeline.md). 공식 API 라 약관 안전.
     """
