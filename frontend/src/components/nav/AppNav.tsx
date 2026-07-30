@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { NotificationBell } from "@/components/nav/NotificationBell";
 import { ProfileMenu } from "@/components/nav/ProfileMenu";
 import { fetchMe, type Me } from "@/lib/api";
-import { useAppTheme } from "@/lib/theme";
+import { getAppTheme, setAppTheme, useAppTheme } from "@/lib/theme";
+import { themeApi } from "@/lib/theme-api";
 
 /** 전역 내비게이션 (2026-07-28 재설계 — 표준 SaaS 패턴)
  *  이동 탭 5개(홈·학습·라이브러리·채팅·게임)는 좌측(데스크톱)/하단(모바일),
@@ -60,6 +61,18 @@ export function AppNav() {
 
   useEffect(() => {
     fetchMe().then(setMe);
+    // 테마 엔타이틀먼트 가드 — localStorage 로 몰래 제한 테마를 유지하는 우회
+    // 차단 (설정 화면을 안 거쳐도 원복). 테마는 코스메틱이라 서버 CSS 강제까지는
+    // 불필요 — 클라 가드로 충분 (docs/specs/theme-mall.md)
+    themeApi
+      .themes()
+      .then((res) => {
+        const ok = new Set(
+          res.items.filter((i) => i.allowed).map((i) => i.key),
+        );
+        if (!ok.has(getAppTheme())) setAppTheme("note");
+      })
+      .catch(() => {});
     try {
       setCollapsed(localStorage.getItem(NAV_COLLAPSE_KEY) === "true");
     } catch {
@@ -284,4 +297,3 @@ function GameIcon() {
     </svg>
   );
 }
-
