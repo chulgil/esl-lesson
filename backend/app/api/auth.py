@@ -30,6 +30,7 @@ from app.models import (
     PushSubscription,
     ReviewCard,
     ReviewLog,
+    ThemeGrant,
 )
 from app.models.user import ROLE_ADMIN, User, UserSettings
 from app.services.content_service import delete_content_row
@@ -260,6 +261,7 @@ async def delete_me(
         (ContentSubscription.__table__, ContentSubscription.user_id),
         (PushSubscription.__table__, PushSubscription.user_id),
         (Notification.__table__, Notification.user_id),
+        (ThemeGrant.__table__, ThemeGrant.user_id),
         (UserSettings.__table__, UserSettings.user_id),
     ):
         await db.execute(table.delete().where(col == user.id))
