@@ -1,6 +1,6 @@
-# 스펙: 워드 테트리스 (페이즈 2 — 네트워크 영어 게임)
+# 스펙: 워드 테트리스 (네트워크 영어 게임)
 
-> 최종 수정: 2026-07-11
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
 테트리스 스타일 UI/이펙트의 1:1 대전 타이핑 게임. 단어 브릭이 위에서 내려오고, 플레이어가 해당 단어(또는 뜻)를 빠르게 타이핑해 쳐낸다. 사람 vs 사람(PvP), 사람 vs AI(PvE) 모두 지원.
 
@@ -151,6 +151,10 @@
 
 - `seq`로 입력-결과 매칭 (지연 중 연타 대응).
 - 재접속: match_id + 토큰으로 10초 내 재합류 → 서버가 전체 상태 재전송.
+- 위 목록 외 보조 메시지: `queue.waiting`, `room.created`, `item.gained`,
+  `iv.invited`(친구 초대 — `services/game/invites.py`). `state` 페이로드의 보드
+  필드 전체 정의는 `frontend/src/lib/game-ws.ts` 의 `BoardState` 타입이 정본
+  (chips/direction/input_mode/frozen/shield/items/ko 등 포함).
 
 ## 매치메이킹
 
@@ -208,7 +212,9 @@
 | 메서드/경로 | 설명 |
 |-------------|------|
 | GET `/api/game/profile` | 내 전적/최고 기록 |
-| GET `/api/game/leaderboard` | 주간 리더보드 |
+| GET `/api/game/bests` | 게임별 내 최고 기록 (허브 카드) |
+| GET `/api/game/leaderboard` | 주간 리더보드 (테트리스) |
+| GET `/api/game/leaderboards` | 게임별 주간 명예의 전당 통합 |
 | WS `/ws/game` | 대전 (위 프로토콜) |
 
 ## 페이즈 2 구현 순서

@@ -1,6 +1,6 @@
 # 스펙: 학습 관전 — 친구 기반 + 2중 동의
 
-> 최종 수정: 2026-07-14 · P1 구현 완료
+> 최종 검증: 2026-07-30 (코드 대조 완료) · P1 구현 완료
 
 친구가 학습 중이면 관전을 요청하고, **학습자가 수락해야만** 실시간 화면을 본다.
 
@@ -31,6 +31,12 @@
 - 관전자: `st.request{code}` → `st.requested` → `st.approved`(+최근 화면 즉시 재생) /
   `st.denied` → 이후 `st.event` 스트림, 종료 시 `st.end`
 - 구현: `services/game/spectate.py` `SpectateHub` (인메모리, DB 없음)
+- **호스트 테마 동봉** (2026-07-30): `StEventPayload` 에 `theme?: string`
+  (`frontend/src/lib/game-ws.ts`) — `stEvent` 전송 시 호스트의 `getAppTheme()` 을
+  자동 첨부한다. `/study/watch` 는 이 값으로 `<html data-theme>` 만 **일시
+  오버라이드**하고 언마운트 시 이전 값을 복원한다. `setAppTheme` 은 쓰지 않는다 —
+  localStorage 에 저장되어 관전자의 테마 선택·엔타이틀먼트 가드(theme-mall.md)를
+  오염시키기 때문.
 
 ## 화면
 

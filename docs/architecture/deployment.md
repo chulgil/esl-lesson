@@ -1,8 +1,8 @@
 # 배포 아키텍처
 
-> 최종 수정: 2026-07-11
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
-git push(main) → GitHub Actions → SSH → codenavi 서버에서 pull + docker-compose 재기동. 서버의 기존 배포 패턴(lessonaza)과 동일한 방식을 따른다.
+git push(main) → CI → GitHub Actions 러너에서 이미지 빌드 → scp 전송 → SSH 로 서버에서 `scripts/deploy.sh` (load → 카나리 검증 → 승격, red-green). 실패 시 `:prev` 이미지로 자동 롤백.
 
 ## 서버 현황 (codenavi, 2026-07-11 확인)
 
@@ -36,13 +36,13 @@ traefik (기존) ── traefiknet ──┬── englesson-web  (Next.js, :300
 postgres (기존) ── 기존 db 네트워크 ── englesson-api
 ```
 
-## docker-compose.prod.yml (설계)
+## docker-compose.prod.yml (요지 — 정본은 리포 루트 파일)
 
 ```yaml
 version: "3.7"
 services:
   web:
-    build: ./frontend
+    build: { context: ./frontend, args: { GIT_SHA: ${GIT_SHA:-dev} } }  # 이미지 신선도 마커
     container_name: englesson-web
     restart: unless-stopped
     env_file: .env.web
@@ -59,6 +59,10 @@ services:
     container_name: englesson-api
     restart: unless-stopped
     env_file: .env.api
+    environment:
+      CHAT_UPLOAD_DIR: /data/chat-uploads
+    volumes:
+      - ./data/chat-uploads:/data/chat-uploads   # 채팅 이미지 영속 (docs/specs/chat.md)
     networks: [traefiknet, postgresql_internal]
     labels:
       traefik.enable: "true"
@@ -80,13 +84,21 @@ postgres 컨테이너 네트워크는 `postgresql_internal`로 확인 완료 (20
 
 ## 환경변수 (.env.api — 서버에만 존재, git 미포함)
 
+전체 정의는 `backend/app/core/config.py` (pydantic-settings) — 아래는 운영 필수/주요 변수.
+
 | 변수 | 용도 |
 |------|------|
 | DATABASE_URL | `postgresql+asyncpg://englesson:***@postgres:5432/englesson` |
 | GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET | Google OAuth |
-| JWT_SECRET | 세션 JWT 서명 키 |
+| JWT_SECRET | 세션 JWT 서명 키 (운영에서 미설정 시 기동 차단) |
 | ANTHROPIC_API_KEY | AI 추출 |
-| ANTHROPIC_MODEL | 기본 `claude-sonnet-5` |
+| ANTHROPIC_MODEL / ANTHROPIC_TRANSLATE_MODEL / ANTHROPIC_INSIGHT_MODEL | 기본 `claude-sonnet-5` / 번역·인사이트 `claude-haiku-4-5-20251001` |
+| VOYAGE_EMBEDDING_SECRET / VOYAGE_EMBEDDING_MODEL | 단어 임베딩 (`voyage-3.5-lite`). 미설정 시 임베딩 기능 스킵 |
+| YOUTUBE_API_KEY | 라이선스 조회·CC 검색 (미설정 시 스킵) |
+| VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT | 웹 푸시. 미설정 시 푸시 비활성 |
+| WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD / YT_PROXY_URL | 유튜브 자막 프록시 |
+| AGENT_TOKEN | 로컬 자막 수집기 인증 (미설정 시 `/api/agent/*` 비활성) |
+| CHAT_UPLOAD_DIR | 채팅 이미지 저장 경로 (운영: `/data/chat-uploads` 볼륨) |
 | ADMIN_EMAILS | 최초 관리자 이메일 (콤마 구분) |
 | COOKIE_DOMAIN | `.lessonaza.app` |
 | PUBLIC_SERVICE_URL / PUBLIC_ADMIN_URL | OAuth redirect 구성 |

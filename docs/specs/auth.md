@@ -1,8 +1,8 @@
 # 스펙: 인증 (Google SSO)
 
-> 최종 수정: 2026-07-11
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
-Google OAuth 2.0 Authorization Code 흐름을 백엔드(FastAPI)가 직접 처리하고, 자체 JWT를 httpOnly 쿠키로 발급한다. 서비스(esl)와 백오피스(esladmin) 두 도메인이 세션을 공유한다.
+Google OAuth 2.0 Authorization Code 흐름을 백엔드(FastAPI)가 직접 처리하고, 자체 JWT를 httpOnly 쿠키로 발급한다. 백오피스는 단일 도메인 `/admin` 경로로 통합됐고(2026-07-12), `esladmin.*` 는 하위호환 rewrite 만 유지 — 쿠키 Domain 공유는 그대로 유효하다.
 
 ## 역할 모델
 
@@ -44,7 +44,7 @@ Google OAuth 2.0 Authorization Code 흐름을 백엔드(FastAPI)가 직접 처�
 
 - role은 편의상 클레임에 넣되, **admin 전용 API는 매 요청 DB에서 role 재확인** (강등 즉시 반영).
 - 로그아웃: `POST /api/auth/logout` → 쿠키 삭제.
-- WebSocket(페이즈 2): 핸드셰이크 시 같은 쿠키로 인증.
+- WebSocket(`/ws/game`): 핸드셰이크 시 같은 쿠키로 인증 (만료/무효 시 close 4401).
 
 ## 인가 규칙
 
@@ -53,7 +53,7 @@ Google OAuth 2.0 Authorization Code 흐름을 백엔드(FastAPI)가 직접 처�
 | `/api/auth/*`, `/api/health` | 공개 |
 | `/api/study/*`, `/api/contents/*`(읽기), `/api/game/*` | 로그인 |
 | `/api/admin/*` | admin (DB 재확인) |
-| 프론트 `/admin/*` 라우트 | middleware에서 role 확인, 미달 시 서비스 홈으로 |
+| 프론트 `/admin/*` 라우트 | `middleware.ts` 는 접근을 막지 않는다 — `AdminLayout` 이 role 확인 후 비관리자 안내 (보안 경계는 백엔드 API) |
 
 프론트 가드는 UX용이고, **보안 경계는 항상 백엔드 API**다.
 
@@ -62,9 +62,11 @@ Google OAuth 2.0 Authorization Code 흐름을 백엔드(FastAPI)가 직접 처�
 | 메서드/경로 | 설명 |
 |-------------|------|
 | GET `/api/auth/login` | Google 인가 URL 302 |
-| GET `/api/auth/callback` | 코드 교환 + 세션 발급 |
+| GET `/api/auth/callback` | 코드 교환 + 세션 발급 (신규 가입 시 랜덤 닉네임 자동 부여) |
 | POST `/api/auth/logout` | 세션 쿠키 삭제 |
-| GET `/api/me` | 현재 사용자 (id, name, email, avatar, role, settings) |
+| GET `/api/me` | 현재 사용자 `{id, email, name, nickname, avatar_url, role}` |
+| PATCH `/api/me` | 닉네임 변경 — 다른 사용자에게 보이는 유일한 이름 (실명 비노출) |
+| DELETE `/api/me` | 회원탈퇴 — 개인정보·학습 기록 즉시 파기, 마지막 구독 개인 콘텐츠 본체 삭제 |
 
 ## 보안 고려사항
 

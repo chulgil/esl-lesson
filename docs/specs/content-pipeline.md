@@ -1,6 +1,6 @@
 # 스펙: 콘텐츠 파이프라인 (유튜브 추출 + AI 학습 항목 추출)
 
-> 최종 수정: 2026-07-11
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
 유튜브 URL 또는 수기 입력으로 등록된 콘텐츠에서 영어/한글 스크립트를 확보하고, Claude API로 학습 항목 4종(단어/숙어/패턴/문장)을 추출해 DB에 저장한다.
 
@@ -64,7 +64,8 @@ pending ──> extracting ──> ready
 ## 단계 1: 메타데이터 (유튜브만)
 
 - 비디오 ID 파싱: `watch?v=`, `youtu.be/`, `shorts/`, `embed/` 형식 지원. 파싱 실패 시 등록 자체를 400으로 거부.
-- 제목 조회: YouTube oEmbed(`https://www.youtube.com/oembed?url=...`) — API 키 불필요. 실패 시 yt-dlp 메타데이터로 폴백.
+- 제목 조회: YouTube oEmbed(`https://www.youtube.com/oembed?url=...`) — API 키 불필요 (`services/youtube.py fetch_title`, 서버측 yt-dlp 폴백 없음).
+- 라이선스 조회: Data API `videos.list(part=status)` (`fetch_license`) — CC 게이트용 (아래 참조).
 - 중복 방지: `youtube_video_id` UNIQUE — 이미 등록된 영상이면 409 + 기존 콘텐츠 링크 반환.
 
 ## 단계 2: 자막 추출 (유튜브만)
@@ -75,7 +76,8 @@ youtube-transcript-api 로 자막 목록 조회
   ├─ en 자동 생성 자막만 있음  → 채택 (품질 경고 플래그)
   └─ en 계열 전무             → 실패 처리 + "수기 입력으로 전환" 안내
 ko 자막 있으면 함께 추출 (수동 > 자동 우선)
-차단/오류 시 yt-dlp 자막 다운로드로 1회 폴백
+차단(RequestBlocked) 시 → 프록시 설정이 있으면 프록시 경유, 없으면
+"자막 준비 중" 상태로 로컬 자막 수집기에 위임 (아래 "비용/한도" 참조)
 ```
 
 문장 재구성: 자막 조각(캡션 단위)은 문장 중간에서 끊기므로, 타임스탬프를 보존한 채 문장부호 기준으로 병합해 `transcript_segments`(seq, start_ms, en_text)로 저장한다. 자동 자막(문장부호 없음)은 단계 3 번역 호출에 문장 분리를 함께 요청한다.
@@ -131,16 +133,21 @@ ko 자막 있으면 함께 추출 (수동 > 자동 우선)
 각 항목:
   normalized_key = lower(trim(공백 정규화(en_text)))   # pattern은 template 기준
   learning_items에 (item_type, normalized_key) upsert
-    ├─ 신규 → INSERT (review_status=pending)
-    └─ 기존 → 항목 재사용 (이미 approved면 그대로 학습 풀 유지)
+    ├─ 신규 → INSERT (review_status=approved — 2026-07-30 기본 승인 전환)
+    └─ 기존 → 항목 재사용 (rejected 는 그대로 존중)
   item_occurrences에 (item, content, segment) 연결 INSERT
 ```
 
 같은 단어가 여러 영상에 나와도 항목/카드는 1개, 출처 문맥만 늘어난다.
 
-### 검수 게이트
+### 검수 게이트 (2026-07-30 — 사후 거절 모델로 전환)
 
-추출 직후 `review_status=pending` — 관리자가 백오피스에서 승인/수정/제외해야 학습 풀에 편입된다(approved). 상세: [backoffice.md](backoffice.md). 일괄 승인 버튼 제공(콘텐츠 단위).
+추출 항목은 `review_status=approved` 기본으로 저장되어 즉시 학습 풀에 편입된다.
+등록이 관리자 전용이 된 뒤로 영상 선정 자체가 큐레이션이므로, 항목별 사전
+승인은 "담았는데 카드가 없음" 함정만 만들었다 (d0524ea). 부적절한 항목은
+백오피스에서 **사후 거절(rejected)** — 가시성 규칙이 rejected 를 계속 제외한다.
+배경: [content-governance.md](content-governance.md) "항목 승인 기본값",
+화면: [backoffice.md](backoffice.md).
 
 ## API
 

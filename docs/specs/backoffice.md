@@ -1,8 +1,8 @@
 # 스펙: 백오피스 (관리자)
 
-> 최종 수정: 2026-07-11
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
-`esladmin.lessonaza.app`에서 admin 역할만 접근하는 관리 화면. **백오피스가 다루는 콘텐츠는 공용(public)만** — 개인(private) 콘텐츠는 서비스의 `/my` 에서 등록자 본인이 관리한다 (2026-07-11 개정). 핵심 업무는 (1) 콘텐츠 등록 (2) AI 추출 결과 검수 (3) 사용자/운영 관리.
+`esl.lessonaza.app/admin` 경로에서 admin 역할만 사용하는 관리 화면 (단일 도메인 통합 2026-07-12 — `esladmin.*` 는 rewrite 하위호환만). 콘텐츠 등록은 **관리자 전용**이다 (2026-07-27 거버넌스 전환 — [content-governance.md](content-governance.md), 사용자 등록 경로 제거). 핵심 업무는 (1) 콘텐츠 등록(CC 게이트·허락 증빙) (2) 추출 항목 사후 검수 (3) 사용자/테마 관리.
 
 ## 화면 목록
 
@@ -14,6 +14,7 @@
 | `/admin/contents/[id]` | 콘텐츠 상세 | 스크립트 확인, 추출 항목 검수, 재시도 |
 | `/admin/items` | 항목 풀 관리 | 전역 항목 검색/수정 (콘텐츠 횡단) |
 | `/admin/users` | 사용자 관리 | 역할 변경, 학습 현황 조회 |
+| `/admin/themes` | 테마 몰 관리 | 제한 테마 지급/회수 — [theme-mall.md](theme-mall.md) |
 
 ## 콘텐츠 등록 (/admin/contents/new)
 
@@ -33,6 +34,12 @@
 - URL 붙여넣기 → 등록 클릭이 전부. 제목은 파이프라인이 자동 기입 (요구사항).
 - 유효하지 않은 URL은 즉시 인라인 에러. 중복 영상은 기존 콘텐츠로 링크 안내.
 - 진행 상태는 목록/상세에서 단계별 표시 (extraction_jobs 기반), 5초 폴링.
+- **CC 영상 찾기** (2026-07-29): 검색어로 `GET /api/admin/youtube/cc-search` —
+  CC 라이선스 + 자막 보유 영상 후보를 보여주고 선택 시 URL 자동 채움.
+- **CC 게이트**: 비 CC(미확인 포함) 영상은 409 `cc_required` — 허락 증빙 폼
+  (`permission` 객체: 권리자·날짜·범위 3종 체크·증빙)을 입력해야 등록
+  ([content-governance.md](content-governance.md)).
+- **라이선스 3단 배지**: CC / 표준(허락 증빙) / 미확인 — 목록·상세에 표시 (5a97b48).
 
 ### 수기 입력 탭
 
@@ -59,7 +66,9 @@
 +------------------------------------------------------------+
 ```
 
-- 검수 액션: **승인**(approved, 학습 풀 편입) / **수정 후 승인**(en/ko/힌트 인라인 편집) / **제외**(rejected).
+- 항목 기본값은 **approved** (2026-07-30 전환 — 추출 즉시 학습 풀 편입,
+  [content-pipeline.md](content-pipeline.md) 검수 게이트). 검수는 사후 교정 중심.
+- 검수 액션: **승인**(approved) / **수정 후 승인**(en/ko/힌트 인라인 편집) / **제외**(rejected).
 - 문장 탭은 `hint_thinking`(영어식 사고) 열 추가 — 비어 있으면 승인 불가(레벨 4 퀴즈 필수 필드).
 - 스크립트 탭: 세그먼트 영/한 나란히, 인라인 수정 가능 (번역 오류 교정).
 - 이미 다른 콘텐츠에서 approved된 전역 항목은 "기존 항목" 뱃지로 표시 (검수 불필요).
@@ -92,11 +101,13 @@
 | GET `/api/admin/items?type=&status=&q=` | 전역 항목 검색 |
 | GET `/api/admin/users` / PATCH `/api/admin/users/{id}` | 사용자 목록/역할 변경 |
 | GET `/api/admin/dashboard` | 대시보드 집계 |
+| GET `/api/admin/youtube/cc-search?q=` | CC 영상 검색 (등록 후보) |
+| `/api/admin/themes*` | 테마 카탈로그·지급/회수 — [theme-mall.md](theme-mall.md) |
 
 ## 접근 제어
 
-- 프론트: middleware가 호스트=esladmin && 비admin이면 로그인/서비스로 리다이렉트.
-- 백엔드: `/api/admin/*` 전 라우트에 admin 가드 의존성 (JWT + DB role 재확인).
+- 프론트: `middleware.ts` 는 `esladmin.*` 호스트를 `/admin` 으로 rewrite 만 하고 차단하지 않는다 — 비관리자 안내는 `AdminLayout` 담당.
+- 백엔드: `/api/admin/*` 전 라우트에 admin 가드 의존성 (JWT + DB role 재확인) — 보안 경계는 여기.
 
 ## 검수 UX 원칙
 

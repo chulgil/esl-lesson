@@ -1,6 +1,6 @@
 # 스펙: 친구 1:1 채팅
 
-> 최종 수정: 2026-07-27 · 설계 승인: 2026-07-27 (사용자)
+> 최종 검증: 2026-07-30 (코드 대조 완료) · 설계 승인: 2026-07-27 (사용자)
 
 수락된 친구끼리 1:1 대화. 기록은 무제한 보존, 읽음 표시·입력 중 표시·오프라인 웹푸시·학습 단어 공유 카드·카오모지 피커 포함. [study-spectate.md](study-spectate.md) 의 친구 관계와 프레즌스 인프라를 재사용한다.
 
@@ -27,6 +27,7 @@ chat_messages
   sender_id FK
   body Text                    -- 텍스트+카오모지. 2,000자 제한 (API 검증)
   item_ref JSONB nullable      -- 학습 카드 스냅샷 {item_id, item_type, en_text, ko_text}
+  image_path Text nullable     -- 서버 발급 uuid.ext (이미지 전송 — e4f5a6b7c8d9)
   client_msg_id Text           -- 멱등키. unique(conversation_id, client_msg_id)
   created_at
 
@@ -46,6 +47,8 @@ chat_reads
 | GET `/api/chat/with/{user_id}/messages?before={id}&limit=50` | 히스토리 커서 페이지네이션 (id DESC → 클라에서 역순 렌더) |
 | POST `/api/chat/messages` | 전송 `{to_user_id, body, client_msg_id, item_ref?}` → 저장·캐시 갱신·WS 푸시·오프라인이면 웹푸시. 같은 `client_msg_id` 재전송은 기존 행 반환 (멱등) |
 | POST `/api/chat/with/{user_id}/read` | 읽음 갱신 → 상대에게 WS `chat.read` 푸시 |
+| GET `/api/chat/shareable-items` | 단어 공유 카드 검색 — 내 학습 항목(가시성 통과분)만 |
+| POST `/api/chat/uploads` / GET `/api/chat/uploads/{name}` | 이미지 업로드/열람 (아래 "이미지 전송") |
 
 - 상대가 **수락된 친구가 아니면 404** (존재 비노출). 친구 삭제 후에도 기존 대화 조회는 허용, **전송만 403** `not_friends` — 기록 보존 원칙.
 - 대화 행은 첫 전송 시 get-or-create (정규화된 쌍으로 upsert).
@@ -147,7 +150,7 @@ excelkospi 우하단 버튼 컨셉 — 설정의 "플로팅" 체크(localStorage
 
 ## 범위 밖 (후속)
 
-- 그룹 채팅 · 이미지 첨부 · 메시지 삭제/수정 · 링크 미리보기
+- 그룹 채팅 · 메시지 삭제/수정 · 링크 미리보기 (이미지 전송은 2026-07-27 구현 완료 — 위 "이미지 전송")
 - 수평 확장 시 인스턴스 간 팬아웃·캐시 무효화 신호는 **Postgres LISTEN/NOTIFY** 사용
   (Redis 도입 금지 — 2026-07-27 사용자 결정. 이미 운영 중인 Postgres 에 pub/sub 이
   내장되어 있고, asyncpg `add_listener` 로 바로 구독 가능. 캐시·허브 인터페이스는 그대로)
