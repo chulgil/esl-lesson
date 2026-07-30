@@ -1,6 +1,7 @@
 "use client";
 
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
+import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { BackLink } from "@/components/nav/BackLink";
 import type { ChatSkinProps } from "./types";
 
@@ -182,26 +183,13 @@ export function NoteSkin(p: ChatSkinProps) {
             onPickImage={p.onAttachImageFile}
             onPickKaomoji={p.onPickKaomoji}
           />
-          <input
+          <ChatTextarea
             value={p.input}
-            onChange={(e) => p.onInputChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) p.onSend();
-            }}
-            onPaste={(e) => {
-              // 클립보드 이미지 붙여넣기 → 파일 첨부와 같은 업로드 파이프라인
-              const file = Array.from(e.clipboardData.files).find((f) =>
-                f.type.startsWith("image/"),
-              );
-              if (file) {
-                e.preventDefault();
-                p.onAttachImageFile(file);
-              }
-            }}
-            data-chat-input="1"
-            placeholder="한 줄 적기..."
-            maxLength={2000}
-            className="min-h-11 flex-1 rounded-md border-2 border-ink/20 px-3 text-base transition-colors focus:border-brick-blue focus:outline-none sm:text-sm"
+            onChange={p.onInputChange}
+            onSend={p.onSend}
+            onPasteImage={p.onAttachImageFile}
+            placeholder="한 줄 적기... (Shift+Enter 줄바꿈)"
+            className="min-h-11 flex-1 rounded-md border-2 border-ink/20 px-3 py-2.5 text-base transition-colors focus:border-brick-blue focus:outline-none sm:text-sm"
           />
           <button
             type="button"

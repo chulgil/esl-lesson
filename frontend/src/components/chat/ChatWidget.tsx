@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
+import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
 import { useChatRoom } from "@/components/chat/useChatRoom";
 import { fetchMe } from "@/lib/api";
@@ -504,7 +505,7 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
       )}
 
       <div
-        className={`flex items-center gap-1 border-t p-1.5 ${
+        className={`flex items-end gap-1 border-t p-1.5 ${
           excel ? "border-[#d8dde3]" : "border-ink/10 bg-white"
         }`}
       >
@@ -514,26 +515,13 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
           onPickImage={p.onAttachImageFile}
           onPickKaomoji={p.onPickKaomoji}
         />
-        <input
+        <ChatTextarea
           value={p.input}
-          onChange={(e) => p.onInputChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) p.onSend();
-          }}
-          onPaste={(e) => {
-            // 클립보드 이미지 붙여넣기 → 파일 첨부와 같은 업로드 파이프라인
-            const file = Array.from(e.clipboardData.files).find((f) =>
-              f.type.startsWith("image/"),
-            );
-            if (file) {
-              e.preventDefault();
-              p.onAttachImageFile(file);
-            }
-          }}
-          data-chat-input="1"
+          onChange={p.onInputChange}
+          onSend={p.onSend}
+          onPasteImage={p.onAttachImageFile}
           placeholder={excel ? "내용 입력" : "한 줄 적기..."}
-          maxLength={2000}
-          className={`min-h-11 min-w-0 flex-1 px-2 text-base focus:outline-none sm:min-h-9 sm:text-[13px] ${
+          className={`min-h-11 min-w-0 flex-1 px-2 py-2.5 text-base focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px] ${
             excel
               ? "rounded-sm border border-[#c9cfd6] focus:border-[#217346]"
               : "rounded-md border-2 border-ink/20 focus:border-brick-blue"

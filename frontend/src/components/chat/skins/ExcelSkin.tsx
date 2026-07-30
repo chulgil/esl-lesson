@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
+import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { BlankSheet, ExcelChrome, fakeFilename } from "./ExcelChrome";
 import type { ChatSkinProps } from "./types";
 
@@ -191,34 +192,22 @@ export function ExcelSkin(p: ChatSkinProps) {
           )}
 
           {/* 입력줄 — excelkospi 의 "입력 후 Enter" 바 컨셉, 리스트 하단에 고정 */}
-          <div className="flex items-center gap-1.5 border-t border-[#d8dde3] bg-white px-2 py-1.5">
+          {/* items-end — 입력창이 여러 줄로 자라도 버튼은 바닥에 붙는다 */}
+          <div className="flex items-end gap-1.5 border-t border-[#d8dde3] bg-white px-2 py-1.5">
             <ChatToolsMenu
               variant="excel"
               onPickItem={p.onAttachItem}
               onPickImage={p.onAttachImageFile}
               onPickKaomoji={p.onPickKaomoji}
             />
-            <input
+            <ChatTextarea
               value={p.input}
-              onChange={(e) => p.onInputChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) p.onSend();
-              }}
-              onPaste={(e) => {
-                // 클립보드 이미지 붙여넣기 → 파일 첨부와 같은 업로드 파이프라인
-                const file = Array.from(e.clipboardData.files).find((f) =>
-                  f.type.startsWith("image/"),
-                );
-                if (file) {
-                  e.preventDefault();
-                  p.onAttachImageFile(file);
-                }
-              }}
-              data-chat-input="1"
-              placeholder="내용 입력 후 Enter"
-              maxLength={2000}
-              aria-label="내용 입력"
-              className="min-h-11 flex-1 rounded-sm border border-[#c9cfd6] px-2.5 text-base focus:border-[#217346] focus:outline-none sm:min-h-9 sm:text-[13px]"
+              onChange={p.onInputChange}
+              onSend={p.onSend}
+              onPasteImage={p.onAttachImageFile}
+              placeholder="내용 입력 후 Enter (Shift+Enter 줄바꿈)"
+              ariaLabel="내용 입력"
+              className="min-h-11 flex-1 rounded-sm border border-[#c9cfd6] px-2.5 py-2.5 text-base focus:border-[#217346] focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px]"
             />
             <button
               type="button"
