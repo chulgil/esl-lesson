@@ -30,7 +30,7 @@ from app.services import push as push_service
 from app.services.friends import are_friends
 from app.services.game import records
 from app.services.game.dictation import dictator
-from app.services.game.invites import GAMES, invite_hub, invite_push_payload
+from app.services.game.invites import GAMES, invite_hub, invite_push_payload, safe_theme
 from app.services.game.manager import WordPoolError, manager
 from app.services.game.quiz_royale import royale
 from app.services.game.scramble import scrambler
@@ -751,18 +751,20 @@ async def game_ws(websocket: WebSocket) -> None:
                 to_user_id = int(msg.get("to_user_id", 0))
                 game = str(msg.get("game", ""))
                 code = str(msg.get("code", ""))
+                # 게스트 게임 화면을 초대자 테마로 — 검증(safe_theme)은 invites 계층에서
+                theme = safe_theme(str(msg.get("theme") or "") or None)
                 via: str | None = None
                 # 수락된 친구에게만 — 임의 user_id 초대(스팸 푸시) 차단
                 async with get_session_factory()() as invite_db:
                     if await are_friends(invite_db, user_id, to_user_id):
                         if await invite_hub.invite(
-                            user_id, to_user_id=to_user_id, game=game, code=code
+                            user_id, to_user_id=to_user_id, game=game, code=code, theme=theme
                         ):
                             via = "ws"
                         elif game in GAMES and await push_service.send_to_user(
                             invite_db,
                             to_user_id,
-                            invite_push_payload(user.nickname, game, code),
+                            invite_push_payload(user.nickname, game, code, theme=theme),
                         ):
                             # 접속 중이 아니면 웹 푸시 초대장 — 클릭 시 자동 입장
                             via = "push"
@@ -771,7 +773,12 @@ async def game_ws(websocket: WebSocket) -> None:
                             invite_db,
                             to_user_id,
                             "game_invite",
-                            {"from_name": user.nickname, "game": game, "code": code},
+                            {
+                                "from_name": user.nickname,
+                                "game": game,
+                                "code": code,
+                                "theme": theme,
+                            },
                         )
                         await invite_db.commit()
                 await send({"t": "iv.sent", "ok": via is not None, "via": via})

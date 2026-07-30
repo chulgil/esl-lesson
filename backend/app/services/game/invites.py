@@ -7,6 +7,8 @@ WS 접속(페이지별 다중 소켓)을 유저 단위로 추적하고, 대기�
 import logging
 from collections.abc import Awaitable, Callable
 
+from app.services.themes import THEME_ACCESS
+
 logger = logging.getLogger(__name__)
 
 Sender = Callable[[dict], Awaitable[None]]
@@ -22,13 +24,22 @@ GAME_LABELS = {
 GAMES = tuple(GAME_LABELS)
 
 
-def invite_push_payload(from_name: str, game: str, code: str) -> dict:
-    """오프라인 친구용 웹 푸시 — 알림 클릭 시 대기실 자동 입장(?join=)."""
+def safe_theme(theme: str | None) -> str | None:
+    """카탈로그에 있는 테마 키만 통과 — 클라 주입 값이 URL/알림으로 릴레이되므로 경계 검증."""
+    return theme if theme in THEME_ACCESS else None
+
+
+def invite_push_payload(from_name: str, game: str, code: str, theme: str | None = None) -> dict:
+    """오프라인 친구용 웹 푸시 — 알림 클릭 시 대기실 자동 입장(?join=).
+
+    테마가 유효하면 게스트 화면을 초대자 테마로 여는 ?theme= 을 붙인다."""
     label = GAME_LABELS.get(game, game)
+    valid = safe_theme(theme)
+    suffix = f"&theme={valid}" if valid else ""
     return {
         "title": "게임 초대",
         "body": f"{from_name} 님이 {label}에 초대했어요!",
-        "url": f"/game/{game}?join={code}",
+        "url": f"/game/{game}?join={code}{suffix}",
         "tag": "game-invite",
     }
 
@@ -53,7 +64,14 @@ class InviteHub:
     def online(self, user_id: int) -> bool:
         return bool(self.sockets.get(user_id))
 
-    async def invite(self, from_user_id: int, to_user_id: int, game: str, code: str) -> bool:
+    async def invite(
+        self,
+        from_user_id: int,
+        to_user_id: int,
+        game: str,
+        code: str,
+        theme: str | None = None,
+    ) -> bool:
         """접속 중인 친구의 모든 소켓에 초대 전달. 오프라인이면 False."""
         if game not in GAMES or not self.online(to_user_id):
             return False
@@ -62,6 +80,8 @@ class InviteHub:
             "from": self.names.get(from_user_id, "친구"),
             "game": game,
             "code": code,
+            # 게스트 게임 화면을 초대자 테마로 (무효 값은 None — 클라가 무시)
+            "theme": safe_theme(theme),
         }
         for send in list(self.sockets.get(to_user_id, [])):
             try:

@@ -32,6 +32,7 @@ export function InviteToaster() {
     from: string;
     game: string;
     code: string;
+    theme?: string | null;
   } | null>(null);
   const [chatToast, setChatToast] = useState<{
     fromId: number;
@@ -41,7 +42,12 @@ export function InviteToaster() {
 
   const handleMessage = useCallback((msg: ServerMsg) => {
     if (msg.t === "iv.invited") {
-      setInvite({ from: msg.from, game: msg.game, code: msg.code });
+      setInvite({
+        from: msg.from,
+        game: msg.game,
+        code: msg.code,
+        theme: msg.theme,
+      });
       return;
     }
     if (msg.t === "chat.message") {
@@ -132,7 +138,9 @@ export function InviteToaster() {
           <button
             type="button"
             onClick={() => {
-              const target = `/game/${invite.game}?join=${invite.code}`;
+              // 초대자 테마로 게임 화면을 연다 — 종료/이탈 시 useInviteTheme 이 복원
+              const themeSuffix = invite.theme ? `&theme=${invite.theme}` : "";
+              const target = `/game/${invite.game}?join=${invite.code}${themeSuffix}`;
               setInvite(null);
               router.push(target);
             }}

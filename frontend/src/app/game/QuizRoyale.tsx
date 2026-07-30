@@ -5,6 +5,7 @@ import { Brick } from "@/components/brick/Brick";
 import { InviteFriends } from "@/components/game/InviteFriends";
 import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
+import { useInviteTheme } from "@/lib/use-invite-theme";
 import type {
   GameReviewItem,
   QrEndMsg,
@@ -31,6 +32,8 @@ export function QuizRoyale({
   onInvite?: (userId: number, code: string) => void;
 }) {
   const [phase, setPhase] = useState<Phase>("waiting");
+  // 초대 입장(?theme=)이면 게임 동안 초대자 테마 — 종료/이탈 시 자동 복원
+  useInviteTheme(phase === "ended");
   // 결과가 화면 하단에 묻혀 안 보이는 문제(모바일) — 종료 시 결과 섹션을 상단으로 스크롤
   const resultRef = useRef<HTMLDivElement>(null);
   useEffect(() => {

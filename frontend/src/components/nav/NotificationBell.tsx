@@ -191,8 +191,11 @@ function notifText(n: NotificationItem): string {
 }
 
 function notifTarget(n: NotificationItem): string {
-  if (n.type === "game_invite")
-    return `/game/${String(n.payload.game ?? "")}?join=${String(n.payload.code ?? "")}`;
+  if (n.type === "game_invite") {
+    // 초대자 테마 payload 가 있으면 게스트 화면을 그 테마로 (무효 값은 서버가 null 저장)
+    const theme = n.payload.theme ? `&theme=${String(n.payload.theme)}` : "";
+    return `/game/${String(n.payload.game ?? "")}?join=${String(n.payload.code ?? "")}${theme}`;
+  }
   if (n.type === "theme_granted") return "/settings";
   return "/friends";
 }

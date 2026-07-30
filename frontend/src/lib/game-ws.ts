@@ -297,6 +297,8 @@ export type IvMsg =
       from: string;
       game: "tetris" | "quiz" | "typing" | "scramble" | "dictation";
       code: string;
+      /** 초대자 테마 — 게스트 게임 화면에 적용, 종료 시 복원 (무효 값은 서버가 null) */
+      theme?: string | null;
     }
   | { t: "iv.sent"; ok: boolean; via?: "ws" | "push" | null };
 
@@ -534,7 +536,14 @@ export class GameSocket {
     this.send({ t: "st.leave" });
   }
   invite(toUserId: number, game: string, code: string): void {
-    this.send({ t: "iv.invite", to_user_id: toUserId, game, code });
+    // 게스트 게임 화면을 초대자 테마로 — 송신부 한 곳에서 자동 동봉 (관전 stEvent 와 동일 패턴)
+    this.send({
+      t: "iv.invite",
+      to_user_id: toUserId,
+      game,
+      code,
+      theme: getAppTheme(),
+    });
   }
   close(): void {
     this.ws?.close();

@@ -49,12 +49,19 @@
 
 - **프레즌스**: 로그인 시 `InviteToaster` 가 루트 레이아웃에서 게임 WS 를 상시 연결
   (`invite_hub` attach) — 어느 메뉴에 있든 초대 토스트 수신, 끊기면 15초 후 재접속
-- **프로토콜**: 대기실에서 `iv.invite {to_user_id, game, code}` → 서버가
+- **프로토콜**: 대기실에서 `iv.invite {to_user_id, game, code, theme}` → 서버가
   **수락된 친구인지 검증** (`services/friends.py are_friends`, 임의 user_id 스팸 차단) 후
-  - 접속 중: 친구의 모든 소켓에 `iv.invited {from, game, code}` 릴레이 → 토스트 [참가]
+  - 접속 중: 친구의 모든 소켓에 `iv.invited {from, game, code, theme}` 릴레이 → 토스트 [참가]
   - 미접속: **웹 푸시 폴백** (`push.send_to_user` + `invite_push_payload`,
-    tag `game-invite`) — 알림 클릭 시 `/game/{game}?join={code}` 자동 입장
+    tag `game-invite`) — 알림 클릭 시 `/game/{game}?join={code}[&theme=]` 자동 입장
   - 응답 `iv.sent {ok, via: "ws"|"push"|null}`
+- **초대자 테마 미러링 (2026-07-30)**: 클라 `invite()` 가 `getAppTheme()` 을 자동 동봉,
+  서버 `safe_theme()` 이 카탈로그 외 값을 None 으로 버린 뒤 3경로(토스트·푸시 URL·
+  알림센터 `game_invite` payload)에 릴레이. 게스트 게임 화면(5종 전부)은
+  `useInviteTheme(ended)` 훅이 `?theme=` 을 data-theme 속성으로만 오버라이드 —
+  **게임 종료(phase ended) + 페이지 이탈 이중 복원**, setAppTheme 금지(localStorage
+  저장 시 제한 테마가 게스트 설정으로 굳는 누수 — 관전 st.event 와 동일 원칙).
+  테트리스 보드 캔버스는 훅 반환값을 `useAppTheme()` 대신 사용.
 - **게임 이름 단일 소스**: `services/game/invites.py GAME_LABELS` — `GAMES` 는 여기서 파생,
   새 게임 추가 시 한글 라벨 누락이 테스트로 잡힌다 (프론트 토스트 라벨은 별도 유지)
 - **대기실 UI**: `InviteFriends` — 접속 중 친구는 초록 버튼(즉시 토스트), 미접속 친구는

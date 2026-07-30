@@ -52,6 +52,38 @@ def test_invite_push_payload_uses_korean_labels():
     assert payload["tag"] == "game-invite"
 
 
+async def test_invite_carries_host_theme():
+    """게스트 게임 화면을 초대자 테마로 — iv.invited 에 검증된 테마 동봉."""
+    hub = InviteHub()
+    a, b = Collector(), Collector()
+    hub.attach(1, "철수", a)
+    hub.attach(2, "영희", b)
+
+    await hub.invite(1, to_user_id=2, game="typing", code="AB12CD", theme="cat")
+    msg = next(m for m in b.messages if m["t"] == "iv.invited")
+    assert msg["theme"] == "cat"
+
+    # 카탈로그에 없는 값은 클라 주입 방지 위해 버린다 (URL/알림으로 릴레이되는 값)
+    await hub.invite(1, to_user_id=2, game="typing", code="EF34GH", theme="neon")
+    msg = next(m for m in b.messages if m["code"] == "EF34GH")
+    assert msg["theme"] is None
+
+
+def test_invite_push_payload_theme_param():
+    """푸시 URL 에도 테마 전달 — 유효 키만, 없거나 무효면 기존 URL 유지."""
+    assert (
+        invite_push_payload("철수", "dictation", "AB12CD", theme="cat")["url"]
+        == "/game/dictation?join=AB12CD&theme=cat"
+    )
+    assert (
+        invite_push_payload("철수", "dictation", "AB12CD")["url"] == "/game/dictation?join=AB12CD"
+    )
+    assert (
+        invite_push_payload("철수", "dictation", "AB12CD", theme="neon")["url"]
+        == "/game/dictation?join=AB12CD"
+    )
+
+
 async def make_users(db, *names):
     users = [User(google_sub=f"g-{n}", email=f"{n}@example.com", name=n) for n in names]
     db.add_all(users)
