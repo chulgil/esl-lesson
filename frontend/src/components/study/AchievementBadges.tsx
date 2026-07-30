@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import type { Achievement, AchievementTier } from "@/lib/study-api";
 
 /** 업적 스티커 벽 — 패밀리 섹션 + 난이도 티어(초급/중급/고급/마스터) 링 컬러.
- *  달성=컬러 스티커, 미달성=점선+진행 바 (노트 컨셉, P3) */
+ *  달성=컬러 스티커, 미달성=점선+진행 바 (노트 컨셉, P3).
+ *  29종 전부 펼치면 벽이 너무 길다 — 섹션당 4개(한 줄)만 보이고 더보기로 확장. */
 
 const FAMILY_LABELS: Record<string, string> = {
   study: "학습",
@@ -34,30 +36,57 @@ const TIER_CHIP: Record<AchievementTier, string> = {
   master: "bg-brick-red/25 text-brick-red",
 };
 
+/** 섹션당 기본 노출 개수 — 4열 그리드의 정확히 한 줄 */
+const VISIBLE_COUNT = 4;
+
 export function AchievementBadges({ items }: { items: Achievement[] }) {
   return (
     <div className="flex flex-col gap-5">
       {FAMILY_ORDER.map((family) => {
         const group = items.filter((a) => a.family === family);
         if (group.length === 0) return null;
-        const achieved = group.filter((a) => a.achieved).length;
-        return (
-          <section key={family}>
-            <h3 className="mb-2 flex items-baseline gap-2 text-sm font-bold">
-              {FAMILY_LABELS[family] ?? family}
-              <span className="text-[10px] font-normal opacity-50">
-                {achieved}/{group.length}
-              </span>
-            </h3>
-            <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
-              {group.map((a) => (
-                <StickerCard key={a.key} a={a} />
-              ))}
-            </ul>
-          </section>
-        );
+        return <FamilySection key={family} family={family} group={group} />;
       })}
     </div>
+  );
+}
+
+function FamilySection({
+  family,
+  group,
+}: {
+  family: string;
+  group: Achievement[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const achieved = group.filter((a) => a.achieved).length;
+  const hidden = group.length - VISIBLE_COUNT;
+  const visible = expanded ? group : group.slice(0, VISIBLE_COUNT);
+  return (
+    <section>
+      <h3 className="mb-2 flex items-baseline gap-2 text-sm font-bold">
+        {FAMILY_LABELS[family] ?? family}
+        <span className="text-[10px] font-normal opacity-50">
+          {achieved}/{group.length}
+        </span>
+      </h3>
+      {/* 모바일도 4열(컴팩트 타일) — 기본 노출 4개가 항상 꽉 찬 한 줄이 된다 */}
+      <ul className="grid grid-cols-4 gap-2 sm:gap-3">
+        {visible.map((a) => (
+          <StickerCard key={a.key} a={a} />
+        ))}
+      </ul>
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="mt-2 min-h-11 w-full rounded-lg border-2 border-dashed border-ink/20 bg-white text-xs font-bold opacity-70 transition hover:border-ink/40 hover:opacity-100"
+        >
+          {expanded ? "접기" : `더보기 (+${hidden})`}
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -70,7 +99,7 @@ function StickerCard({ a }: { a: Achievement }) {
   return (
     <li
       title={`${a.title} — ${a.desc}`}
-      className={`relative flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 text-center ${
+      className={`relative flex flex-col items-center gap-1 rounded-lg border-2 p-2 text-center sm:gap-1.5 sm:p-3 ${
         a.achieved
           ? "border-brick-yellow bg-highlight/30"
           : "border-dashed border-ink/20 bg-white opacity-70"
@@ -78,7 +107,7 @@ function StickerCard({ a }: { a: Achievement }) {
     >
       {a.tier && (
         <span
-          className={`absolute -top-2 right-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+          className={`absolute -top-2 right-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:right-1.5 ${
             a.achieved ? TIER_CHIP[a.tier] : "bg-ink/10 text-ink/50"
           }`}
         >
@@ -86,11 +115,13 @@ function StickerCard({ a }: { a: Achievement }) {
         </span>
       )}
       <span
-        className={`flex h-11 w-11 items-center justify-center rounded-full border-2 ${ring}`}
+        className={`flex h-9 w-9 items-center justify-center rounded-full border-2 sm:h-11 sm:w-11 ${ring}`}
       >
         <BadgeIcon name={a.key} />
       </span>
-      <span className="text-xs leading-tight font-bold">{a.title}</span>
+      <span className="text-[10px] leading-tight font-bold sm:text-xs">
+        {a.title}
+      </span>
       {a.achieved ? (
         <span className="text-[10px] font-bold text-brick-green">달성!</span>
       ) : (
