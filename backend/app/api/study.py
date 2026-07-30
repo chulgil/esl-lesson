@@ -19,6 +19,7 @@ from app.models import (
     LearningItem,
     ReviewCard,
     ReviewLog,
+    ThemeRewardRule,
     TranscriptSegment,
     User,
     UserSettings,
@@ -715,6 +716,10 @@ async def get_achievements(
     # 학습 홈 방문 = 보상 지급 접점 — 달성 즉시 다음 방문에서 테마가 열린다
     await sync_theme_rewards(db, user.id)
     items = await achievements.compute(db, user.id)
+    # 보상 테마 예고 — 스티커에 "보상: 캔디 테마" 칩 (theme-mall.md)
+    rules = (await db.execute(select(ThemeRewardRule))).scalars().all()
+    reward_by_key = {r.achievement_key: r.theme_key for r in rules}
+    items = [{**a, "reward_theme": reward_by_key.get(a["key"])} for a in items]
     return {
         "items": items,
         "achieved_count": sum(1 for a in items if a["achieved"]),

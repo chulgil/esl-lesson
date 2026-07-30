@@ -9,7 +9,12 @@ import {
   isChatInputFocused,
   setChatSocket,
 } from "@/lib/chat-signals";
-import { getAppTheme } from "@/lib/theme";
+import {
+  APP_THEMES,
+  type AppTheme,
+  getAppTheme,
+  setAppTheme,
+} from "@/lib/theme";
 import { GameSocket, type ServerMsg } from "@/lib/game-ws";
 
 const GAME_LABELS: Record<string, string> = {
@@ -33,6 +38,11 @@ export function InviteToaster() {
     game: string;
     code: string;
     theme?: string | null;
+  } | null>(null);
+  // 테마 획득 축하 — 획득 순간이 "테마 = 업적 보상" 멘탈모델을 심는 최적 접점
+  const [themeToast, setThemeToast] = useState<{
+    themeKey: string;
+    reason: string | null;
   } | null>(null);
   const [chatToast, setChatToast] = useState<{
     fromId: number;
@@ -90,6 +100,13 @@ export function InviteToaster() {
       msg.t === "notif.new"
     ) {
       dispatchChatEvent(msg);
+      // 테마 지급(업적 보상·이벤트)은 벨 적재에 더해 즉시 축하 — 획득 순간 각인
+      if (msg.t === "notif.new" && msg.type === "theme_granted") {
+        setThemeToast({
+          themeKey: String(msg.theme_key ?? ""),
+          reason: msg.note ? String(msg.note) : null,
+        });
+      }
     }
   }, []);
 
@@ -127,6 +144,13 @@ export function InviteToaster() {
     return () => clearTimeout(timer);
   }, [chatToast]);
 
+  // 테마 축하 토스트 — 액션 유도가 목적이라 조금 길게 유지 후 자동 소멸
+  useEffect(() => {
+    if (!themeToast) return;
+    const timer = setTimeout(() => setThemeToast(null), 10000);
+    return () => clearTimeout(timer);
+  }, [themeToast]);
+
   return (
     <>
       {invite && (
@@ -152,6 +176,50 @@ export function InviteToaster() {
             type="button"
             onClick={() => setInvite(null)}
             aria-label="초대 닫기"
+            className="min-h-10 min-w-10 rounded-md text-lg opacity-50 hover:opacity-100"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {themeToast && (
+        <div className="fixed inset-x-4 top-16 z-50 mx-auto flex max-w-sm items-center gap-3 rounded-lg border-2 border-brick-yellow bg-highlight/40 p-3 shadow-lg backdrop-blur">
+          <span
+            className="inline-block h-8 w-8 shrink-0 rounded-full border-2 border-ink/20"
+            style={{
+              backgroundColor:
+                APP_THEMES.find((t) => t.key === themeToast.themeKey)?.swatch ??
+                "#fff",
+            }}
+          />
+          <span className="flex-1 text-sm">
+            <b>
+              {APP_THEMES.find((t) => t.key === themeToast.themeKey)?.label ??
+                themeToast.themeKey}{" "}
+              테마가 열렸어요!
+            </b>
+            {themeToast.reason && (
+              <span className="mt-0.5 block text-xs opacity-70">
+                {themeToast.reason}
+              </span>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              // 방금 지급받은 테마 — 엔타이틀먼트 보유 상태라 즉시 적용 안전
+              setAppTheme(themeToast.themeKey as AppTheme);
+              setThemeToast(null);
+            }}
+            className="min-h-10 rounded-md bg-ink px-3 text-sm font-bold text-white transition hover:opacity-85"
+          >
+            바로 적용
+          </button>
+          <button
+            type="button"
+            onClick={() => setThemeToast(null)}
+            aria-label="테마 알림 닫기"
             className="min-h-10 min-w-10 rounded-md text-lg opacity-50 hover:opacity-100"
           >
             ×

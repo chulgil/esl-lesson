@@ -92,6 +92,8 @@ export interface Achievement {
   tier: AchievementTier | null;
   /** 스티커 벽 섹션 그룹 */
   family: "study" | "streak" | "game" | "social";
+  /** 달성 시 지급되는 테마 키 — 보상 규칙이 있을 때만 (theme-mall.md) */
+  reward_theme: string | null;
 }
 
 /** 주간 학습 리더보드 — 나+친구 (P1 데일리 루프) */

@@ -140,6 +140,41 @@ async def test_tiered_achievements_progression(client, db_session):
     # 단발 업적은 tier 없음
     assert items["first_review"]["tier"] is None
 
+    # 오늘의 목표(가볍게 10/기본 20/열심히 50) — 하루 최대 복습 수가 지표.
+    # 위에서 하루에 120개 복습 → 셋 다 달성
+    assert items["goal_light"]["achieved"] is True
+    assert items["goal_basic"]["achieved"] is True
+    assert items["goal_hard"]["achieved"] is True
+    assert items["goal_hard"]["target"] == 50
+
+
+async def test_daily_goal_uses_single_day_peak(client, db_session):
+    """이틀에 나눠 15개씩 — 누적 30이어도 하루 최대 15라 기본(20) 미달성."""
+    me = await login(client, db_session)
+    await _log_reviews(db_session, me.id, count=15, days_ago=0)
+    await _log_reviews(db_session, me.id, count=15, days_ago=1)
+    await db_session.commit()
+
+    res = await client.get("/api/study/achievements")
+    items = {a["key"]: a for a in res.json()["items"]}
+    assert items["goal_light"]["achieved"] is True  # 하루 15 >= 10
+    assert items["goal_basic"]["achieved"] is False  # 하루 최대 15 < 20
+    assert items["goal_basic"]["current"] == 15
+
+
+async def test_achievements_expose_reward_theme(client, db_session):
+    """업적 스티커에 보상 테마 예고 — 규칙 있는 업적만 reward_theme."""
+    from app.models import ThemeRewardRule
+
+    db_session.add(ThemeRewardRule(achievement_key="first_friend", theme_key="candy"))
+    await db_session.commit()
+    await login(client, db_session)
+
+    res = await client.get("/api/study/achievements")
+    items = {a["key"]: a for a in res.json()["items"]}
+    assert items["first_friend"]["reward_theme"] == "candy"
+    assert items["first_review"]["reward_theme"] is None
+
 
 async def test_first_friend_requires_accepted(client, db_session):
     me = await login(client, db_session)

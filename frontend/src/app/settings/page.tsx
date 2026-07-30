@@ -7,6 +7,7 @@ import { DailyGoalSetting } from "@/components/settings/DailyGoalSetting";
 import { NicknameCard } from "@/components/settings/NicknameCard";
 import { PushReminderCard } from "@/components/settings/PushReminderCard";
 import { deleteMe } from "@/lib/api";
+import { studyApi } from "@/lib/study-api";
 import { APP_THEMES, setAppTheme, useAppTheme } from "@/lib/theme";
 import { themeApi } from "@/lib/theme-api";
 
@@ -34,8 +35,13 @@ function ThemeSection() {
   const theme = useAppTheme();
   // null = 로딩/조회 실패 — 판정 전엔 잠그지 않는다 (오프라인에서 설정 화면 유지)
   const [allowed, setAllowed] = useState<Set<string> | null>(null);
-  // 잠긴 테마의 해금 업적 힌트 ("'첫 친구' 달성 시 열려요")
-  const [unlocks, setUnlocks] = useState<Record<string, string>>({});
+  // 잠긴 테마의 해금 업적 힌트 + 진행률 ("'첫 친구' 달성 시 · 0/1")
+  const [unlocks, setUnlocks] = useState<
+    Record<string, { title: string; key: string }>
+  >({});
+  const [progress, setProgress] = useState<
+    Record<string, { current: number; target: number }>
+  >({});
   const [reverted, setReverted] = useState(false);
 
   useEffect(() => {
@@ -47,10 +53,26 @@ function ThemeSection() {
         );
         setUnlocks(
           Object.fromEntries(
-            res.items.filter((i) => i.unlock).map((i) => [i.key, i.unlock!]),
+            res.items
+              .filter((i) => i.unlock && i.unlock_key)
+              .map((i) => [i.key, { title: i.unlock!, key: i.unlock_key! }]),
           ),
         );
       })
+      .catch(() => {});
+    // 해금 업적 진행률 — "얼마나 남았는지" 가 보여야 행동으로 이어진다
+    studyApi
+      .achievements()
+      .then((res) =>
+        setProgress(
+          Object.fromEntries(
+            res.items.map((a) => [
+              a.key,
+              { current: a.current, target: a.target },
+            ]),
+          ),
+        ),
+      )
       .catch(() => {});
   }, []);
 
@@ -66,7 +88,10 @@ function ThemeSection() {
     <section className="mt-10 max-w-lg">
       <p className="mb-1 text-sm font-bold">테마</p>
       <p className="mb-3 text-xs opacity-60">
-        앱 전체(배경·버튼·게임 보드)의 디자인 컨셉이 함께 바뀝니다
+        앱 전체(배경·버튼·게임 보드)의 디자인 컨셉이 함께 바뀝니다.
+        <span className="block">
+          새 테마는 업적을 달성하거나 이벤트로 받으면 열려요.
+        </span>
       </p>
       {reverted && (
         <p className="mb-3 text-xs font-bold text-brick-red">
@@ -108,10 +133,19 @@ function ThemeSection() {
                 <span className="block text-xs opacity-60">{t.desc}</span>
               </span>
               {locked ? (
-                <span className="rounded-full bg-ink/10 px-3 py-1 text-xs font-bold opacity-70">
-                  {unlocks[t.key]
-                    ? `'${unlocks[t.key]}' 달성 시 열려요`
-                    : "이벤트·구매로 열려요"}
+                <span className="flex flex-col items-end gap-0.5">
+                  <span className="rounded-full bg-ink/10 px-3 py-1 text-xs font-bold opacity-70">
+                    {unlocks[t.key]
+                      ? `'${unlocks[t.key].title}' 달성 시 열려요`
+                      : "이벤트·구매로 열려요"}
+                  </span>
+                  {/* 진행률 — 얼마나 남았는지 보여야 "해볼까" 로 이어진다 */}
+                  {unlocks[t.key] && progress[unlocks[t.key].key] && (
+                    <span className="text-[10px] opacity-50">
+                      진행 {progress[unlocks[t.key].key].current}/
+                      {progress[unlocks[t.key].key].target}
+                    </span>
+                  )}
                 </span>
               ) : (
                 active && (

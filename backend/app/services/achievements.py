@@ -88,6 +88,34 @@ DEFINITIONS = (
         "study",
         "words",
     ),
+    # 오늘의 목표 (설정 프리셋 가볍게 10/기본 20/열심히 50 과 동일 기준) — 하루 최대 복습 수
+    (
+        "goal_light",
+        "가볍게 목표",
+        "하루 10개 복습을 달성했어요",
+        10,
+        "beginner",
+        "study",
+        "peak_daily",
+    ),
+    (
+        "goal_basic",
+        "기본 목표",
+        "하루 20개 복습을 달성했어요",
+        20,
+        "intermediate",
+        "study",
+        "peak_daily",
+    ),
+    (
+        "goal_hard",
+        "열심히 목표",
+        "하루 50개 복습을 달성했어요",
+        50,
+        "advanced",
+        "study",
+        "peak_daily",
+    ),
     # 꾸준함 — 연속 학습
     ("streak_7", "일주일 개근", "7일 연속으로 학습했어요", 7, "beginner", "streak", "streak"),
     ("streak_30", "한 달 개근", "30일 연속으로 학습했어요", 30, "intermediate", "streak", "streak"),
@@ -249,6 +277,9 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
         "reviews": total_reviews,
         "words": word_cards,
         "streak": streak,
+        # 하루 최대 복습 수 — 오늘의 목표 티어(가볍게/기본/열심히) 판정.
+        # streak 와 같은 90일 창(daily) 재사용 — 그 이전의 피크는 반영되지 않는다
+        "peak_daily": max(daily.values(), default=0),
         "wins": tetris_wins + typing_wins + quiz_wins + scramble_wins + dictation_wins,
         "games": tetris_played
         + len(typing_rows)

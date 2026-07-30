@@ -168,7 +168,7 @@
 | GET `/api/study/decks` | 덱(담은 콘텐츠)별 due/new 카운트 — study-decks.md |
 | GET `/api/study/network` | 어휘망 그래프 (임베딩 유사도) — word-insight.md |
 | GET `/api/study/items/{id}/insight` | 단어 인사이트 카드 (가시성 게이트) — word-insight.md |
-| GET `/api/study/achievements` / `/quests` / `/leaderboard` | 업적·퀘스트·학습 리더보드 (리텐션 팩 — proposal/retention-plan.md, `services/achievements.py`, `services/retention.py`). 업적은 29종 티어 스티커(2026-07-30): 패밀리 4그룹(study/streak/game/social) x 난이도 티어(beginner/intermediate/advanced/master = 초급/중급/고급/마스터, 단발은 null). 같은 지표(복습·단어·스트릭·승리·참여·타자·친구)가 티어 여러 개를 먹인다 — 적립 테이블 없이 로그 실시간 집계(소급 반영) 원칙 유지 |
+| GET `/api/study/achievements` / `/quests` / `/leaderboard` | 업적·퀘스트·학습 리더보드 (리텐션 팩 — proposal/retention-plan.md, `services/achievements.py`, `services/retention.py`). 업적은 33종 티어 스티커(2026-07-30, 오늘의 목표 가볍게10/기본20/열심히50 = 하루 최대 복습 수 지표 포함): 패밀리 4그룹(study/streak/game/social) x 난이도 티어(beginner/intermediate/advanced/master = 초급/중급/고급/마스터, 단발은 null). 같은 지표(복습·단어·스트릭·승리·참여·타자·친구)가 티어 여러 개를 먹인다 — 적립 테이블 없이 로그 실시간 집계(소급 반영) 원칙 유지 |
 | POST `/api/cards` | 항목 원탭 카드 추가 (게임 ReviewPanel·어휘망에서 사용, 멱등) |
 | POST `/api/cards/{id}/suspend` | 카드 학습 제외/복귀 |
 | GET/PATCH `/api/settings` | 일일 한도, 목표 기억률, 레벨 토글, 힌트 지연 |

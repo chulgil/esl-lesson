@@ -9,6 +9,8 @@ export interface ThemeCatalogItem {
   allowed: boolean;
   /** 해금 업적 제목 — 보상 규칙이 있으면 잠금 배지 문구로 노출 */
   unlock: string | null;
+  /** 해금 업적 키 — 업적 진행률(current/target)과 조인용 */
+  unlock_key: string | null;
 }
 
 /** 업적→테마 보상 규칙 (백오피스 관리) */

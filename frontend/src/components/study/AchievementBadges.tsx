@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Achievement, AchievementTier } from "@/lib/study-api";
+import { APP_THEMES } from "@/lib/theme";
 
 /** 업적 스티커 벽 — 패밀리 섹션 + 난이도 티어(초급/중급/고급/마스터) 링 컬러.
  *  달성=컬러 스티커, 미달성=점선+진행 바 (노트 컨셉, P3).
@@ -35,6 +36,10 @@ const TIER_CHIP: Record<AchievementTier, string> = {
   advanced: "bg-brick-yellow/50",
   master: "bg-brick-red/25 text-brick-red",
 };
+
+const THEME_LABELS: Record<string, string> = Object.fromEntries(
+  APP_THEMES.map((t) => [t.key, t.label]),
+);
 
 /** 섹션당 기본 노출 개수 — 4열 그리드의 정확히 한 줄 */
 const VISIBLE_COUNT = 4;
@@ -105,9 +110,10 @@ function StickerCard({ a }: { a: Achievement }) {
           : "border-dashed border-ink/20 bg-white opacity-70"
       }`}
     >
+      {/* 티어 칩 — 카드 안쪽 모서리 (밖으로 튀어나오면 이웃 카드와 겹쳐 깨져 보임) */}
       {a.tier && (
         <span
-          className={`absolute -top-2 right-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:right-1.5 ${
+          className={`absolute top-1 right-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
             a.achieved ? TIER_CHIP[a.tier] : "bg-ink/10 text-ink/50"
           }`}
         >
@@ -122,6 +128,20 @@ function StickerCard({ a }: { a: Achievement }) {
       <span className="text-[10px] leading-tight font-bold sm:text-xs">
         {a.title}
       </span>
+      {/* 보상 테마 예고 — "이 업적을 깨면 테마가 열린다" 를 스티커에서 광고 */}
+      {a.reward_theme && (
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+            a.achieved
+              ? "bg-brick-green/20 text-brick-green"
+              : "bg-highlight/70"
+          }`}
+        >
+          {a.achieved
+            ? `${THEME_LABELS[a.reward_theme] ?? a.reward_theme} 테마 획득`
+            : `보상: ${THEME_LABELS[a.reward_theme] ?? a.reward_theme} 테마`}
+        </span>
+      )}
       {a.achieved ? (
         <span className="text-[10px] font-bold text-brick-green">달성!</span>
       ) : (
@@ -190,6 +210,9 @@ const PEOPLE = (
 const CALENDAR = (
   <path d="M5 5h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1zm3-3v4m8-4v4M4 10h16" />
 );
+const TARGET = (
+  <path d="M12 21a9 9 0 100-18 9 9 0 000 18zm0-4a5 5 0 100-10 5 5 0 000 10zm0-4a1 1 0 100-2 1 1 0 000 2z" />
+);
 
 const ICON_PATHS: Record<string, React.ReactNode> = {
   first_review: PENCIL,
@@ -207,4 +230,5 @@ const PREFIX_ICON_PATHS: Record<string, React.ReactNode> = {
   games: GAMEPAD,
   typing: KEYBOARD,
   friends: PEOPLE,
+  goal: TARGET,
 };

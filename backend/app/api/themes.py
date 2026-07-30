@@ -30,9 +30,10 @@ async def list_themes(
     access_map = await effective_theme_access(db)
 
     # 잠긴 테마의 해금 업적 힌트 — 설정 화면 배지 문구 ("'첫 친구' 달성 시")
+    # unlock_key 는 설정 화면이 업적 진행률(current/target)과 조인하는 키
     titles = {d[0]: d[1] for d in DEFINITIONS}
     rules = (await db.execute(select(ThemeRewardRule))).scalars().all()
-    unlock_by_theme = {r.theme_key: titles.get(r.achievement_key) for r in rules}
+    unlock_by_theme = {r.theme_key: r.achievement_key for r in rules}
 
     return {
         "items": [
@@ -40,7 +41,10 @@ async def list_themes(
                 "key": key,
                 "access": access,
                 "allowed": key in allowed,
-                "unlock": unlock_by_theme.get(key),
+                "unlock": titles.get(unlock_by_theme.get(key, ""), None)
+                if key in unlock_by_theme
+                else None,
+                "unlock_key": unlock_by_theme.get(key),
             }
             for key, access in access_map.items()
         ]

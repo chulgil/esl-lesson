@@ -278,6 +278,8 @@ async def test_themes_unlock_hint_from_rules(client, db_session):
     await login(client, db_session)
     by_key = await themes_by_key(client)
     assert by_key["lego"]["unlock"] == "첫 게임"
+    # unlock_key — 설정 화면이 업적 진행률과 조인하는 키
+    assert by_key["lego"]["unlock_key"] == "first_game"
     assert by_key["cat"]["unlock"] is None
 
 
