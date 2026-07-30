@@ -34,16 +34,23 @@ function ThemeSection() {
   const theme = useAppTheme();
   // null = 로딩/조회 실패 — 판정 전엔 잠그지 않는다 (오프라인에서 설정 화면 유지)
   const [allowed, setAllowed] = useState<Set<string> | null>(null);
+  // 잠긴 테마의 해금 업적 힌트 ("'첫 친구' 달성 시 열려요")
+  const [unlocks, setUnlocks] = useState<Record<string, string>>({});
   const [reverted, setReverted] = useState(false);
 
   useEffect(() => {
     themeApi
       .themes()
-      .then((res) =>
+      .then((res) => {
         setAllowed(
           new Set(res.items.filter((i) => i.allowed).map((i) => i.key)),
-        ),
-      )
+        );
+        setUnlocks(
+          Object.fromEntries(
+            res.items.filter((i) => i.unlock).map((i) => [i.key, i.unlock!]),
+          ),
+        );
+      })
       .catch(() => {});
   }, []);
 
@@ -102,7 +109,9 @@ function ThemeSection() {
               </span>
               {locked ? (
                 <span className="rounded-full bg-ink/10 px-3 py-1 text-xs font-bold opacity-70">
-                  이벤트·구매로 열려요
+                  {unlocks[t.key]
+                    ? `'${unlocks[t.key]}' 달성 시 열려요`
+                    : "이벤트·구매로 열려요"}
                 </span>
               ) : (
                 active && (

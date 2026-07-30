@@ -18,6 +18,21 @@ class ThemeSetting(Base):
     access: Mapped[str] = mapped_column(String(16))  # "free" | "restricted"
 
 
+class ThemeRewardRule(Base, PkMixin, CreatedAtMixin):
+    """업적 달성 → 테마 지급 매핑. 백오피스에서 관리 (docs/specs/theme-mall.md).
+
+    규칙 삭제/변경은 이후 지급에만 영향 — 이미 지급된 theme_grants 는 유지된다
+    (달성 스펙이 바뀌어도 보유 보장 + note 로 지급 사유 이력)."""
+
+    __tablename__ = "theme_reward_rules"
+    __table_args__ = (
+        UniqueConstraint("achievement_key", "theme_key", name="uq_theme_reward_rules_pair"),
+    )
+
+    achievement_key: Mapped[str] = mapped_column(String(64))
+    theme_key: Mapped[str] = mapped_column(String(32))
+
+
 class ThemeGrant(Base, PkMixin, CreatedAtMixin):
     """유저별 제한 테마 보유권. 행 존재 = 사용 가능 (단순 소유 모델).
 

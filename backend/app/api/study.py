@@ -33,6 +33,7 @@ from app.services import (
     retention,
     vocab_network,
 )
+from app.services.theme_rewards import sync_theme_rewards
 from app.services.visibility import subscribed_content_ids, visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -711,6 +712,8 @@ async def get_achievements(
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     """업적 배지 — 로그 실시간 집계, 소급 반영 (P3 리텐션)."""
+    # 학습 홈 방문 = 보상 지급 접점 — 달성 즉시 다음 방문에서 테마가 열린다
+    await sync_theme_rewards(db, user.id)
     items = await achievements.compute(db, user.id)
     return {
         "items": items,

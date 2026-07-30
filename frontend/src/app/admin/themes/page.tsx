@@ -5,6 +5,7 @@ import { APP_THEMES } from "@/lib/theme";
 import {
   type AdminThemeItem,
   type ThemeGrantItem,
+  type ThemeRewardRule,
   themeApi,
 } from "@/lib/theme-api";
 
@@ -248,6 +249,165 @@ export default function AdminThemesPage() {
           </div>
         </>
       )}
+
+      <RewardRulesSection themes={themes} onError={setError} />
     </section>
+  );
+}
+
+/** 업적 보상 규칙 — 어떤 업적 달성에 어떤 테마를 줄지 매핑.
+ *  규칙 추가 시 과거 달성자도 다음 접속에서 소급 지급된다.
+ *  규칙 삭제는 이후 지급만 중단 — 이미 받은 테마는 유지(이력 보존). */
+function RewardRulesSection({
+  themes,
+  onError,
+}: {
+  themes: AdminThemeItem[];
+  onError: (msg: string | null) => void;
+}) {
+  const [rules, setRules] = useState<ThemeRewardRule[]>([]);
+  const [achievements, setAchievements] = useState<
+    { key: string; title: string }[]
+  >([]);
+  const [achievementKey, setAchievementKey] = useState("");
+  const [themeKey, setThemeKey] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(() => {
+    themeApi
+      .rewardRules()
+      .then((res) => {
+        setRules(res.items);
+        setAchievements(res.achievements);
+      })
+      .catch((e) => onError(e.message));
+  }, [onError]);
+
+  useEffect(load, [load]);
+
+  const restrictedThemes = themes.filter((t) => t.access === "restricted");
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!achievementKey || !themeKey) return;
+    setSaving(true);
+    onError(null);
+    try {
+      await themeApi.createRewardRule({
+        achievement_key: achievementKey,
+        theme_key: themeKey,
+      });
+      setAchievementKey("");
+      setThemeKey("");
+      load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "규칙 추가 실패");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(rule: ThemeRewardRule) {
+    if (
+      !confirm(
+        `'${rule.achievement_title}' → ${THEME_LABELS[rule.theme_key] ?? rule.theme_key} 규칙을 삭제할까요?\n이미 지급된 테마는 유지되고, 이후 지급만 중단돼요.`,
+      )
+    )
+      return;
+    onError(null);
+    try {
+      await themeApi.deleteRewardRule(rule.id);
+      load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "규칙 삭제 실패");
+    }
+  }
+
+  return (
+    <>
+      <h2 className="mt-10 text-lg font-bold">업적 보상 규칙</h2>
+      <p className="mt-1 text-xs opacity-60">
+        업적 달성 시 테마가 자동 지급돼요. 과거 달성자도 다음 접속에서 소급
+        지급되고, 규칙을 삭제해도 이미 받은 테마는 유지돼요.
+      </p>
+
+      <form onSubmit={handleAdd} className="mt-3 flex flex-wrap gap-2">
+        <select
+          value={achievementKey}
+          onChange={(e) => setAchievementKey(e.target.value)}
+          required
+          className="min-h-11 rounded-md border-2 border-ink/20 bg-white px-2 text-sm"
+        >
+          <option value="">업적 선택</option>
+          {achievements.map((a) => (
+            <option key={a.key} value={a.key}>
+              {a.title}
+            </option>
+          ))}
+        </select>
+        <select
+          value={themeKey}
+          onChange={(e) => setThemeKey(e.target.value)}
+          required
+          className="min-h-11 rounded-md border-2 border-ink/20 bg-white px-2 text-sm"
+        >
+          <option value="">테마 선택 (제한만)</option>
+          {restrictedThemes.map((t) => (
+            <option key={t.key} value={t.key}>
+              {THEME_LABELS[t.key] ?? t.key}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          disabled={saving}
+          className="min-h-11 rounded-md bg-ink px-4 text-sm font-bold text-white transition hover:opacity-85 disabled:opacity-50"
+        >
+          {saving ? "추가 중..." : "규칙 추가"}
+        </button>
+      </form>
+
+      <div className="overflow-x-auto">
+        <table className="mt-4 w-full max-w-2xl border-collapse bg-white text-sm">
+          <thead>
+            <tr className="border-b-2 border-ink/20 text-left text-xs">
+              <th className="p-2">업적</th>
+              <th className="p-2">지급 테마</th>
+              <th className="p-2 w-40">생성일</th>
+              <th className="p-2 w-16">액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rules.map((r) => (
+              <tr key={r.id} className="border-b border-ink/10">
+                <td className="p-2">{r.achievement_title}</td>
+                <td className="p-2">
+                  {THEME_LABELS[r.theme_key] ?? r.theme_key}
+                </td>
+                <td className="p-2 text-xs opacity-60">
+                  {new Date(r.created_at).toLocaleString("ko-KR")}
+                </td>
+                <td className="p-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(r)}
+                    className="text-xs text-brick-red hover:underline"
+                  >
+                    삭제
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {rules.length === 0 && (
+              <tr>
+                <td colSpan={4} className="p-4 text-center text-xs opacity-40">
+                  규칙이 없어요 — 업적과 테마를 골라 추가하세요
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

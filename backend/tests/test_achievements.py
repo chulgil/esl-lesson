@@ -87,6 +87,9 @@ async def test_first_win_from_any_game(client, db_session):
     items = {a["key"]: a for a in res.json()["items"]}
     assert items["first_win"]["achieved"] is True
     assert items["games_10"]["current"] == 1
+    # 첫 게임(참여) 단발 업적 — 테마 보상(레고) 매핑 대상
+    assert items["first_game"]["achieved"] is True
+    assert items["first_game"]["tier"] is None
 
 
 async def test_typing_300_from_peak_cpm(client, db_session):

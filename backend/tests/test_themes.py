@@ -13,14 +13,15 @@ async def themes_by_key(client) -> dict:
     return {item["key"]: item for item in data["items"]}
 
 
-async def test_free_all_allowed_cat_locked_by_default(client, db_session):
-    """free 테마는 전원 사용 가능, 제한 테마(cat)는 grant 없이는 잠김."""
+async def test_only_note_free_by_default(client, db_session):
+    """기본 무료는 note 하나 — 나머지는 미션 달성/지급으로만 열린다 (2026-07-30 전환)."""
     await login(client, db_session)
     by_key = await themes_by_key(client)
     assert set(by_key) == {"note", "candy", "lego", "excel", "cat"}
-    for key in ("note", "candy", "lego", "excel"):
-        assert by_key[key] == {"key": key, "access": "free", "allowed": True}
-    assert by_key["cat"] == {"key": "cat", "access": "restricted", "allowed": False}
+    assert by_key["note"]["access"] == "free" and by_key["note"]["allowed"] is True
+    for key in ("candy", "lego", "excel", "cat"):
+        assert by_key[key]["access"] == "restricted"
+        assert by_key[key]["allowed"] is False
 
 
 async def test_grant_unlocks_cat_and_notifies(admin_client, db_session):
@@ -161,8 +162,8 @@ async def test_access_toggle_restricts_and_frees(admin_client, db_session):
 
     admin_client.cookies.set(SESSION_COOKIE, create_session_token(user))
     by_key = await themes_by_key(admin_client)
-    assert by_key["candy"] == {"key": "candy", "access": "restricted", "allowed": True}
-    assert by_key["cat"] == {"key": "cat", "access": "free", "allowed": True}
+    assert by_key["candy"]["access"] == "restricted" and by_key["candy"]["allowed"] is True
+    assert by_key["cat"]["access"] == "free" and by_key["cat"]["allowed"] is True
 
 
 async def test_access_toggle_locks_out_ungranted(admin_client, db_session):
@@ -173,7 +174,111 @@ async def test_access_toggle_locks_out_ungranted(admin_client, db_session):
 
     admin_client.cookies.set(SESSION_COOKIE, create_session_token(user))
     by_key = await themes_by_key(admin_client)
-    assert by_key["excel"] == {"key": "excel", "access": "restricted", "allowed": False}
+    assert by_key["excel"]["access"] == "restricted" and by_key["excel"]["allowed"] is False
+
+
+async def test_reward_rule_crud_and_validations(admin_client):
+    """업적 보상 규칙 — 백오피스에서 업적→테마 매핑 관리."""
+    # 생성
+    res = await admin_client.post(
+        "/api/admin/themes/rewards",
+        json={"achievement_key": "first_friend", "theme_key": "candy"},
+    )
+    assert res.status_code == 200
+    rule_id = res.json()["id"]
+
+    # 목록 — 업적 카탈로그 동봉 (폼 셀렉트용)
+    listing = (await admin_client.get("/api/admin/themes/rewards")).json()
+    assert [(r["achievement_key"], r["theme_key"]) for r in listing["items"]] == [
+        ("first_friend", "candy")
+    ]
+    assert any(a["key"] == "first_game" for a in listing["achievements"])
+
+    # 중복 409 / 미존재 업적 404 / free 테마 422
+    dup = await admin_client.post(
+        "/api/admin/themes/rewards",
+        json={"achievement_key": "first_friend", "theme_key": "candy"},
+    )
+    assert dup.status_code == 409
+    unknown = await admin_client.post(
+        "/api/admin/themes/rewards",
+        json={"achievement_key": "ghost_key", "theme_key": "candy"},
+    )
+    assert unknown.status_code == 404
+    free = await admin_client.post(
+        "/api/admin/themes/rewards",
+        json={"achievement_key": "first_win", "theme_key": "note"},
+    )
+    assert free.status_code == 422
+
+    # 삭제 — 규칙 삭제는 기존 지급에 영향 없음 (별도 테스트에서 검증)
+    assert (await admin_client.delete(f"/api/admin/themes/rewards/{rule_id}")).status_code == 204
+    assert (await admin_client.delete(f"/api/admin/themes/rewards/{rule_id}")).status_code == 404
+
+
+async def test_achievement_grants_theme_and_keeps_it(client, admin_client, db_session):
+    """첫 친구 달성 → candy 자동 지급 + 알림 + 이력(note). 규칙이 바뀌어도 보유 유지."""
+    from app.models import ThemeRewardRule
+
+    db_session.add(ThemeRewardRule(achievement_key="first_friend", theme_key="candy"))
+    await db_session.commit()
+
+    admin_cookie = admin_client.cookies.get(SESSION_COOKIE)
+    me = await login(client, db_session)
+    # 달성 전: candy 잠김
+    by_key = await themes_by_key(client)
+    assert by_key["candy"]["allowed"] is False
+
+    # 수락된 친구 생성 → 첫 친구 달성
+    friend = await make_user(db_session, "pal@example.com", "친구")
+    from app.models.friend import Friendship
+
+    db_session.add(Friendship(requester_id=me.id, addressee_id=friend.id, status="accepted"))
+    await db_session.commit()
+
+    # 테마 조회 시 보상 엔진이 소급 지급 — AppNav 가드 경로에서 잠김 오판 없음
+    by_key = await themes_by_key(client)
+    assert by_key["candy"]["allowed"] is True
+
+    grant = (
+        await db_session.execute(select(ThemeGrant).where(ThemeGrant.theme_key == "candy"))
+    ).scalar_one()
+    assert grant.user_id == me.id
+    assert "첫 친구" in (grant.note or "")  # 이력: 어떤 업적으로 받았는지
+    notif = (
+        await db_session.execute(select(Notification).where(Notification.type == "theme_granted"))
+    ).scalar_one()
+    assert notif.payload["theme_key"] == "candy"
+
+    # 재조회 멱등 — 중복 지급 없음
+    await themes_by_key(client)
+    count = (
+        await db_session.execute(
+            select(func.count(ThemeGrant.id)).where(ThemeGrant.theme_key == "candy")
+        )
+    ).scalar_one()
+    assert count == 1
+
+    # 달성 스펙(규칙)이 삭제돼도 이미 받은 테마는 유지
+    # admin_client 는 client 와 동일 인스턴스(쿠키만 admin) — login 이 덮었으니 복원
+    admin_client.cookies.set(SESSION_COOKIE, admin_cookie)
+    rules = (await admin_client.get("/api/admin/themes/rewards")).json()["items"]
+    await admin_client.delete(f"/api/admin/themes/rewards/{rules[0]['id']}")
+    admin_client.cookies.set(SESSION_COOKIE, create_session_token(me))
+    by_key = await themes_by_key(client)
+    assert by_key["candy"]["allowed"] is True
+
+
+async def test_themes_unlock_hint_from_rules(client, db_session):
+    """잠긴 테마에 해금 업적 힌트 — 설정 화면 배지 문구용."""
+    from app.models import ThemeRewardRule
+
+    db_session.add(ThemeRewardRule(achievement_key="first_game", theme_key="lego"))
+    await db_session.commit()
+    await login(client, db_session)
+    by_key = await themes_by_key(client)
+    assert by_key["lego"]["unlock"] == "첫 게임"
+    assert by_key["cat"]["unlock"] is None
 
 
 async def test_access_toggle_validations(admin_client, client, db_session):

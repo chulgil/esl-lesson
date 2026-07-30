@@ -94,6 +94,7 @@ DEFINITIONS = (
     ("streak_100", "백일 개근", "100일 연속으로 학습했어요", 100, "advanced", "streak", "streak"),
     ("streak_365", "일 년 개근", "365일 연속으로 학습했어요", 365, "master", "streak", "streak"),
     # 게임 — 승리·참여·타자
+    ("first_game", "첫 게임", "게임에 처음 참여했어요", 1, None, "game", "games"),
     ("first_win", "첫 승리", "게임에서 처음 이겼어요", 1, None, "game", "wins"),
     ("wins_10", "승리 입문", "게임에서 10번 이겼어요", 10, "beginner", "game", "wins"),
     ("wins_30", "승리 중수", "게임에서 30번 이겼어요", 30, "intermediate", "game", "wins"),

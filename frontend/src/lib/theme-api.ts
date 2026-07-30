@@ -7,6 +7,17 @@ export interface ThemeCatalogItem {
   access: ThemeAccess;
   /** 내 계정 기준 사용 가능 여부 — free 전부 + 지급받은 제한 테마 */
   allowed: boolean;
+  /** 해금 업적 제목 — 보상 규칙이 있으면 잠금 배지 문구로 노출 */
+  unlock: string | null;
+}
+
+/** 업적→테마 보상 규칙 (백오피스 관리) */
+export interface ThemeRewardRule {
+  id: number;
+  achievement_key: string;
+  achievement_title: string;
+  theme_key: string;
+  created_at: string;
 }
 
 export interface AdminThemeItem {
@@ -60,4 +71,19 @@ export const themeApi = {
 
   revoke: (id: number) =>
     request<void>(`/api/admin/themes/grants/${id}`, { method: "DELETE" }),
+
+  rewardRules: () =>
+    request<{
+      items: ThemeRewardRule[];
+      achievements: { key: string; title: string }[];
+    }>("/api/admin/themes/rewards"),
+
+  createRewardRule: (body: { achievement_key: string; theme_key: string }) =>
+    request<ThemeRewardRule>("/api/admin/themes/rewards", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteRewardRule: (id: number) =>
+    request<void>(`/api/admin/themes/rewards/${id}`, { method: "DELETE" }),
 };

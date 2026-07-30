@@ -38,9 +38,17 @@ theme_grants
 theme_settings (c8d9e0f1a2b3, 2026-07-30)
   theme_key String(32) PK -- THEME_ACCESS 의 키
   access String(16)       -- "free" | "restricted" (오버라이드)
+
+theme_reward_rules (d0e1f2a3b4c5, 2026-07-30)
+  id PK
+  achievement_key String(64) -- achievements.DEFINITIONS 의 키
+  theme_key String(32)       -- unique(achievement_key, theme_key)
+  created_at
 ```
 
-- 접근 정책: `backend/app/services/themes.py` — 기본값 `THEME_ACCESS`(note/candy/lego/excel = free, cat = restricted) 에 `theme_settings` 오버라이드를 병합한 `effective_theme_access(db)` 가 판정의 단일 진입점. 행 없음 = 기본값. 유효 키 목록·기본값은 코드가 정본(프론트 APP_THEMES 와 드리프트 방지).
+- 접근 정책: `backend/app/services/themes.py` — 기본값 `THEME_ACCESS`(**note 만 free, candy/lego/excel/cat = restricted** — 2026-07-30 전환: 기본 테마는 노트 하나, 나머지는 업적 보상·이벤트 지급으로만) 에 `theme_settings` 오버라이드를 병합한 `effective_theme_access(db)` 가 판정의 단일 진입점. 행 없음 = 기본값. 유효 키 목록·기본값은 코드가 정본(프론트 APP_THEMES 와 드리프트 방지).
+- **업적 보상 지급 엔진** (`services/theme_rewards.py sync_theme_rewards`): GET /api/themes(AppNav 가드·설정)와 GET /api/study/achievements(학습 홈)에서 allowed 판정 **전에** 실행 — 규칙의 업적을 달성했고 미보유면 theme_grants INSERT(note="업적 달성: {제목}" 이력) + theme_granted 알림. 업적이 로그 소급 집계라 과거 달성자도 자동 지급(백필 불필요). 비용 가드: 미지급 규칙 테마가 없으면 업적 집계 생략(정착 상태 2쿼리).
+- **영속 보장**: 규칙 삭제/변경은 이후 지급에만 영향 — 이미 지급된 grants 는 유지, note 가 지급 사유 이력. 초기 시드 규칙: 첫 친구→candy, 첫 게임(first_game 신설)→lego.
 - 백오피스에서 테마별 무료<->제한 전환 가능. **note 는 잠금 복귀(fallback) 목적지라 제한 전환 금지** (`FALLBACK_THEME`).
 - allowed 판정: free 전부 + 내 grants. **관리자는 grant 없이 전 테마 허용** (운영 확인용).
 - 무료 전환 시 grants 행은 보존 — 재제한 시 다시 유효해진다.
@@ -50,7 +58,10 @@ theme_settings (c8d9e0f1a2b3, 2026-07-30)
 
 | 메서드/경로 | 역할 |
 |---|---|
-| GET `/api/themes` | (auth) 카탈로그 전체 `{items:[{key, access, allowed}]}` — 표시 순서·라벨은 프론트 APP_THEMES |
+| GET `/api/themes` | (auth) 카탈로그 전체 `{items:[{key, access, allowed, unlock}]}` — unlock = 해금 업적 제목(규칙 있을 때, 설정 배지 문구). 조회 전 보상 동기화 실행 |
+| GET `/api/admin/themes/rewards` | 보상 규칙 목록 + 업적 카탈로그 `{items, achievements}` |
+| POST `/api/admin/themes/rewards` | 규칙 추가 `{achievement_key, theme_key}` — 404 `achievement_not_found`/`theme_not_found` / 409 `already_mapped` / 422 `theme_not_restricted` |
+| DELETE `/api/admin/themes/rewards/{rule_id}` | 규칙 삭제 204 — 기존 지급 유지 |
 | GET `/api/admin/themes` | 카탈로그 + 테마별 보유자 수 `{items:[{key, access, grants}]}` |
 | PATCH `/api/admin/themes/{theme_key}` | 무료/제한 전환 `{access: "free"\|"restricted"}` — 404 `theme_not_found` / 422 `fallback_theme_locked`(note 제한 금지) |
 | GET `/api/admin/themes/{theme_key}/grants` | 보유자 목록 `{items:[{id, email, nickname, note, created_at}]}` |

@@ -8,12 +8,13 @@ from app.models.user import ROLE_ADMIN, ROLE_LEARNER
 
 # 테마별 접근 정책 기본값 — 유효 키 목록의 단일 근거 (프론트 APP_THEMES 와 키 일치).
 # 실제 정책은 theme_settings 오버라이드 우선 (백오피스 무료/제한 전환).
-# 지금은 free/restricted 2종. 유료 전환 시 "paid" 값 추가 예정 (PG 결정 후)
+# 기본 무료는 note 하나 — 나머지는 업적 보상(theme_reward_rules)·이벤트 지급으로만
+# 열린다 (2026-07-30 전환). 유료 전환 시 "paid" 값 추가 예정 (PG 결정 후)
 THEME_ACCESS: dict[str, str] = {
     "note": "free",
-    "candy": "free",
-    "lego": "free",
-    "excel": "free",
+    "candy": "restricted",
+    "lego": "restricted",
+    "excel": "restricted",
     "cat": "restricted",
 }
 

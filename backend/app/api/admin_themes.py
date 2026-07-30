@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import require_admin
-from app.models import ThemeGrant, ThemeSetting, User
+from app.models import ThemeGrant, ThemeRewardRule, ThemeSetting, User
+from app.services.achievements import DEFINITIONS
 from app.services.notifications import notify
 from app.services.themes import FALLBACK_THEME, THEME_ACCESS, effective_theme_access
 
@@ -79,6 +80,74 @@ async def set_theme_access(
         setting.access = body.access
     await db.commit()
     return {"key": theme_key, "access": body.access}
+
+
+class RewardRuleCreate(BaseModel):
+    achievement_key: str
+    theme_key: str
+
+
+@router.get("/rewards")
+async def list_reward_rules(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
+    """업적→테마 보상 규칙 + 업적 카탈로그 (폼 셀렉트용)."""
+    titles = {d[0]: d[1] for d in DEFINITIONS}
+    rows = (await db.execute(select(ThemeRewardRule).order_by(ThemeRewardRule.id))).scalars().all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "achievement_key": r.achievement_key,
+                "achievement_title": titles.get(r.achievement_key, r.achievement_key),
+                "theme_key": r.theme_key,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ],
+        "achievements": [{"key": d[0], "title": d[1]} for d in DEFINITIONS],
+    }
+
+
+@router.post("/rewards")
+async def create_reward_rule(
+    body: RewardRuleCreate, db: Annotated[AsyncSession, Depends(get_db)]
+) -> dict:
+    """규칙 추가 — 이후 해당 업적 달성자(과거 달성 포함, 소급)에게 테마 지급."""
+    titles = {d[0]: d[1] for d in DEFINITIONS}
+    if body.achievement_key not in titles:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "achievement_not_found")
+    await restricted_or_raise(db, body.theme_key)
+    duplicate = (
+        await db.execute(
+            select(ThemeRewardRule.id).where(
+                ThemeRewardRule.achievement_key == body.achievement_key,
+                ThemeRewardRule.theme_key == body.theme_key,
+            )
+        )
+    ).scalar_one_or_none()
+    if duplicate is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "already_mapped")
+
+    rule = ThemeRewardRule(achievement_key=body.achievement_key, theme_key=body.theme_key)
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    return {
+        "id": rule.id,
+        "achievement_key": rule.achievement_key,
+        "achievement_title": titles[rule.achievement_key],
+        "theme_key": rule.theme_key,
+        "created_at": rule.created_at,
+    }
+
+
+@router.delete("/rewards/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_reward_rule(rule_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> None:
+    """규칙 삭제 — 이후 지급만 중단. 이미 지급된 theme_grants 는 유지 (보유 보장)."""
+    rule = await db.get(ThemeRewardRule, rule_id)
+    if rule is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "rule_not_found")
+    await db.delete(rule)
+    await db.commit()
 
 
 @router.get("/{theme_key}/grants")
