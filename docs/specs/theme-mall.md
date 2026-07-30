@@ -34,8 +34,16 @@ theme_grants
   created_at
 ```
 
-- 접근 정책: `backend/app/services/themes.py` `THEME_ACCESS` — note/candy/lego/excel = free, cat = restricted.
+```
+theme_settings (c8d9e0f1a2b3, 2026-07-30)
+  theme_key String(32) PK -- THEME_ACCESS 의 키
+  access String(16)       -- "free" | "restricted" (오버라이드)
+```
+
+- 접근 정책: `backend/app/services/themes.py` — 기본값 `THEME_ACCESS`(note/candy/lego/excel = free, cat = restricted) 에 `theme_settings` 오버라이드를 병합한 `effective_theme_access(db)` 가 판정의 단일 진입점. 행 없음 = 기본값. 유효 키 목록·기본값은 코드가 정본(프론트 APP_THEMES 와 드리프트 방지).
+- 백오피스에서 테마별 무료<->제한 전환 가능. **note 는 잠금 복귀(fallback) 목적지라 제한 전환 금지** (`FALLBACK_THEME`).
 - allowed 판정: free 전부 + 내 grants. **관리자는 grant 없이 전 테마 허용** (운영 확인용).
+- 무료 전환 시 grants 행은 보존 — 재제한 시 다시 유효해진다.
 - 회원탈퇴: `delete_me` 의 명시 삭제 목록에 포함 (sqlite 테스트에서 FK cascade 미작동 — Notification 전례).
 
 ## API
@@ -44,6 +52,7 @@ theme_grants
 |---|---|
 | GET `/api/themes` | (auth) 카탈로그 전체 `{items:[{key, access, allowed}]}` — 표시 순서·라벨은 프론트 APP_THEMES |
 | GET `/api/admin/themes` | 카탈로그 + 테마별 보유자 수 `{items:[{key, access, grants}]}` |
+| PATCH `/api/admin/themes/{theme_key}` | 무료/제한 전환 `{access: "free"\|"restricted"}` — 404 `theme_not_found` / 422 `fallback_theme_locked`(note 제한 금지) |
 | GET `/api/admin/themes/{theme_key}/grants` | 보유자 목록 `{items:[{id, email, nickname, note, created_at}]}` |
 | POST `/api/admin/themes/{theme_key}/grants` | 지급 `{email, note?}` — 이메일 소문자 조회. 404 `user_not_found` / 409 `already_granted` / 422 `theme_not_restricted`(free 는 지급 무의미) / 404 `theme_not_found` |
 | DELETE `/api/admin/themes/grants/{grant_id}` | 회수 204 |
@@ -56,7 +65,7 @@ theme_grants
 |---|---|
 | 설정 테마 카드 | 미허용 테마 = 스와치 흐림 + "이벤트·구매로 열려요" 배지 + 클릭 무시. 현재 테마가 회수돼 미허용이면 note 자동 복귀 + "사용 권한이 없는 테마라 기본으로 되돌렸어요" 1회 |
 | AppNav 전역 | 로그인 세션마다 `/api/themes` 를 fetchMe 와 병렬 조회 — `getAppTheme()` 이 미허용이면 `setAppTheme("note")`. localStorage 우회 차단 |
-| 백오피스 `/admin/themes` | 테마 목록(키·라벨·정책·보유자 수) + restricted 행 클릭(기본 cat 펼침) → 보유자 목록·지급 폼·회수 |
+| 백오피스 `/admin/themes` | 테마 목록(키·라벨·정책·전환 버튼·보유자 수) — 전환 버튼으로 무료<->제한(note 는 "기본 고정"), restricted 행 클릭 → 보유자 목록·지급 폼·회수. 무료 테마 선택 시 지급 패널 숨김(서버 422 방지) |
 
 - 조회 실패(오프라인 등) 시 잠그지 않는다 — 코스메틱 자산이라 가용성 우선.
 

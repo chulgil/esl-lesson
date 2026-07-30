@@ -73,10 +73,11 @@
 - 스크립트 탭: 세그먼트 영/한 나란히, 인라인 수정 가능 (번역 오류 교정).
 - 이미 다른 콘텐츠에서 approved된 전역 항목은 "기존 항목" 뱃지로 표시 (검수 불필요).
 
-## 항목 풀 관리 (/admin/items)
+## 항목 풀 관리 (/admin/items) — 구현됨 (2026-07-30)
 
-- 전역 learning_items 검색 (타입/상태/텍스트 필터).
-- 용도: 중복 유사 항목 정리, 오탈자 수정, 사후 제외. 수정 이력은 updated_at만 기록(감사 로그는 범위 외).
+- 전역 learning_items 검색: 타입(word/idiom/pattern/sentence)·상태(pending/approved/rejected)·영/한 키워드 필터 + 페이지네이션(50/페이지, 총 건수 표시).
+- 행별 승인/거절 버튼 — **승인 opt-out 모델의 사후 거절 창구** (추출 항목은 기본 approved, [content-governance.md](content-governance.md)). 문장 승인은 hint_thinking 필수(서버 422 메시지 그대로 노출).
+- 용도: 부적절 항목 사후 거절, 거절 복구. 텍스트 인라인 수정은 콘텐츠 상세 화면 담당. 수정 이력은 updated_at만 기록(감사 로그는 범위 외).
 
 ## 사용자 관리 (/admin/users)
 
@@ -98,7 +99,8 @@
 | PATCH `/api/admin/segments/{id}` | 스크립트 세그먼트 수정 |
 | PATCH `/api/admin/items/{id}` | 항목 수정/상태 변경 `{en_text?, ko_text?, hint_thinking?, review_status?}` |
 | POST `/api/admin/contents/{id}/approve-all` | 콘텐츠 내 pending 일괄 승인 |
-| GET `/api/admin/items?type=&status=&q=` | 전역 항목 검색 |
+| GET `/api/admin/items?type=&status=&q=&page=` | 전역 항목 검색 (50/페이지) |
+| PATCH `/api/admin/themes/{key}` | 테마 무료/제한 전환 — [theme-mall.md](theme-mall.md) |
 | GET `/api/admin/users` / PATCH `/api/admin/users/{id}` | 사용자 목록/역할 변경 |
 | GET `/api/admin/dashboard` | 대시보드 집계 |
 | GET `/api/admin/youtube/cc-search?q=` | CC 영상 검색 (등록 후보) |
