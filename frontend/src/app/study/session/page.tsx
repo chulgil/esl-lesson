@@ -267,10 +267,16 @@ function StudySessionInner() {
       )}
 
       {phase === "empty" && (
-        <div className="flex flex-col items-start gap-4">
-          <p>오늘 복습할 카드가 없어요. 내일 다시 만나요!</p>
+        <div className="flex max-w-md flex-col items-start gap-3">
+          <p className="font-bold">오늘 만날 카드가 없어요</p>
+          {/* 왜 비었는지 안내 — 담기빼기 후 "없다"만 뜨면 버그로 보인다 (2026-07-30) */}
+          <p className="text-sm opacity-70">
+            담은 콘텐츠의 카드를 모두 만났고 다음 복습일도 아직이에요. 새
+            콘텐츠를 담거나, 예전에 뺀 콘텐츠를 다시 담으면 그 카드들이 진도
+            그대로 돌아와요.
+          </p>
           <Brick color="blue" href="/library">
-            라이브러리 둘러보기
+            라이브러리에서 콘텐츠 담기
           </Brick>
         </div>
       )}
