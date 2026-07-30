@@ -124,10 +124,18 @@ async def get_queue(
         ).scalars()
     )
 
+    # 오늘 만난 카드 = 현재 가시(구독 중)인 것만 예산에 계산 — 담기 A 로 한도를
+    # 쓰고 A 를 뺀 뒤 B 를 담으면, A 의 숨은 카드가 예산을 잠근 채 due 도 0 이라
+    # "복습할 카드가 없어요"가 됐다 (2026-07-30 보고). 재담기 시에는 그 카드들이
+    # 다시 가시가 되어 예산에 복귀하므로 중복 편입도 없다.
     introduced_today = (
         await db.execute(
-            select(func.count(ReviewCard.id)).where(
-                ReviewCard.user_id == user.id, ReviewCard.created_at >= day_start
+            select(func.count(ReviewCard.id))
+            .join(LearningItem, LearningItem.id == ReviewCard.item_id)
+            .where(
+                ReviewCard.user_id == user.id,
+                ReviewCard.created_at >= day_start,
+                visible_item_clause(user.id),
             )
         )
     ).scalar_one()

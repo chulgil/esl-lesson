@@ -12,7 +12,7 @@ from app.models import (
     ReviewCard,
     User,
 )
-from tests.test_study import login
+from tests.test_study import login, seed_items
 
 
 async def seed_deck(db, user_id, title, count, visibility="public"):
@@ -164,3 +164,36 @@ async def test_queue_unsubscribed_content_404(client, db_session):
     assert (await client.get(f"/api/study/queue?content_id={theirs.id}")).status_code == 404
     assert (await client.get("/api/study/queue?content_id=999999")).status_code == 404
     assert me.id  # 로그인 자체는 유효 — 404 가 인증 문제로 인한 것이 아님을 보장
+
+
+async def test_new_budget_not_blocked_by_unsubscribed_intro(client, db_session):
+    """담기 A→신규 한도 소진→빼기 A→담기 B 에서 큐가 비면 안 된다 (2026-07-30 보고).
+
+    introduced_today 가 구독 해제된(비가시) 카드까지 세면 B 의 신규 편입
+    예산이 0 이 되어 "복습할 카드가 없어요"로 보인다 — 오늘 만난 카드는
+    현재 가시인 것만 예산에 계산해야 한다."""
+    from app.api.study import get_user_settings
+
+    user = await login(client, db_session)
+    settings = await get_user_settings(db_session, user)
+    settings.daily_new_limit = 2
+    await db_session.commit()
+
+    # 콘텐츠 A: 항목 2개 — 큐 조회로 신규 2개 편입 (한도 소진)
+    items_a = await seed_items(db_session, count=2)
+    content_a = (
+        await db_session.execute(
+            select(ItemOccurrence.content_id).where(ItemOccurrence.item_id == items_a[0].id)
+        )
+    ).scalar_one()
+    res = await client.get("/api/study/queue")
+    assert len(res.json()["questions"]) == 2
+
+    # A 빼기 → 큐 비는 것 자체는 정상
+    assert (await client.delete(f"/api/my/contents/{content_a}")).status_code == 204
+    assert (await client.get("/api/study/queue")).json()["questions"] == []
+
+    # 콘텐츠 B 담기 → 신규 예산이 A 의 숨은 카드에 막히면 안 됨
+    await seed_items(db_session, count=2)  # 새 콘텐츠 + 자동 구독 (seed_items 관례)
+    res = await client.get("/api/study/queue")
+    assert len(res.json()["questions"]) > 0, "B 를 담았는데 복습할 카드가 없다고 나옴"
