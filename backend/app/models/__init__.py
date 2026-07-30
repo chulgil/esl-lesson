@@ -24,6 +24,7 @@ from app.models.item import ItemOccurrence, LearningItem, WordInsight
 from app.models.notification import Notification
 from app.models.push import PushSubscription
 from app.models.retention import QuestCompletion, StreakSaverUse
+from app.models.theme import ThemeGrant
 from app.models.user import User, UserSettings
 
 __all__ = [
@@ -51,6 +52,7 @@ __all__ = [
     "ReviewCard",
     "ReviewLog",
     "StreakSaverUse",
+    "ThemeGrant",
     "TranscriptSegment",
     "User",
     "UserSettings",

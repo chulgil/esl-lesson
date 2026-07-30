@@ -9,6 +9,7 @@ const NAV = [
   { href: "/admin/contents", label: "콘텐츠" },
   { href: "/admin/items", label: "항목 풀" },
   { href: "/admin/users", label: "사용자" },
+  { href: "/admin/themes", label: "테마 몰" },
 ];
 
 export default function AdminLayout({

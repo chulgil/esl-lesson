@@ -184,6 +184,8 @@ function notifText(n: NotificationItem): string {
   if (n.type === "friend_accepted")
     return `${from} 님이 친구 요청을 수락했어요`;
   if (n.type === "game_invite") return `${from} 님이 게임에 초대했어요`;
+  if (n.type === "theme_granted")
+    return "새 테마가 열렸어요 — 설정에서 바꿔보세요";
   // 알 수 없는 타입 (구버전 클라 대비) — 이름만 노출
   return `${from} 님의 새 알림`;
 }
@@ -191,6 +193,7 @@ function notifText(n: NotificationItem): string {
 function notifTarget(n: NotificationItem): string {
   if (n.type === "game_invite")
     return `/game/${String(n.payload.game ?? "")}?join=${String(n.payload.code ?? "")}`;
+  if (n.type === "theme_granted") return "/settings";
   return "/friends";
 }
 
