@@ -6,6 +6,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, CreatedAtMixin, PkMixin
 
 
+class ThemeSetting(Base):
+    """테마별 접근 정책 오버라이드. 행 없음 = 코드 카탈로그 기본값.
+
+    백오피스에서 무료/제한 전환 시 upsert — 카탈로그(THEME_ACCESS)는
+    기본값이자 유효 키 목록으로만 남는다 (docs/specs/theme-mall.md)."""
+
+    __tablename__ = "theme_settings"
+
+    theme_key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    access: Mapped[str] = mapped_column(String(16))  # "free" | "restricted"
+
+
 class ThemeGrant(Base, PkMixin, CreatedAtMixin):
     """유저별 제한 테마 보유권. 행 존재 = 사용 가능 (단순 소유 모델).
 

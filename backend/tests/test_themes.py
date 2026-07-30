@@ -138,3 +138,56 @@ async def test_admin_allowed_all_without_grant(admin_client):
     """관리자는 grant 없이 전 테마 허용 — 백오피스 운영 확인용."""
     by_key = await themes_by_key(admin_client)
     assert all(item["allowed"] for item in by_key.values())
+
+
+async def test_access_toggle_restricts_and_frees(admin_client, db_session):
+    """관리자가 테마 정책을 전환 — free→restricted 잠금, restricted→free 전원 해제."""
+    user = await make_user(db_session, "kitty@example.com", "냥집사")
+    await db_session.commit()
+
+    # candy 를 제한으로 전환 → grant 없는 유저는 잠김
+    res = await admin_client.patch("/api/admin/themes/candy", json={"access": "restricted"})
+    assert res.status_code == 200
+    assert res.json() == {"key": "candy", "access": "restricted"}
+    # 제한 전환 후엔 지급도 가능해진다
+    grant = await admin_client.post(
+        "/api/admin/themes/candy/grants", json={"email": "kitty@example.com"}
+    )
+    assert grant.status_code == 200
+
+    # cat 을 무료로 전환 → grant 없이도 전원 허용
+    res = await admin_client.patch("/api/admin/themes/cat", json={"access": "free"})
+    assert res.status_code == 200
+
+    admin_client.cookies.set(SESSION_COOKIE, create_session_token(user))
+    by_key = await themes_by_key(admin_client)
+    assert by_key["candy"] == {"key": "candy", "access": "restricted", "allowed": True}
+    assert by_key["cat"] == {"key": "cat", "access": "free", "allowed": True}
+
+
+async def test_access_toggle_locks_out_ungranted(admin_client, db_session):
+    """제한 전환된 테마는 grant 없는 유저에게 잠긴다 (클라 가드가 note 복귀)."""
+    user = await make_user(db_session, "plain@example.com", "일반인")
+    await db_session.commit()
+    await admin_client.patch("/api/admin/themes/excel", json={"access": "restricted"})
+
+    admin_client.cookies.set(SESSION_COOKIE, create_session_token(user))
+    by_key = await themes_by_key(admin_client)
+    assert by_key["excel"] == {"key": "excel", "access": "restricted", "allowed": False}
+
+
+async def test_access_toggle_validations(admin_client, client, db_session):
+    # note 는 잠금 해제 복귀(fallback) 테마 — 제한 전환 금지
+    res = await admin_client.patch("/api/admin/themes/note", json={"access": "restricted"})
+    assert res.status_code == 422
+    assert res.json()["detail"] == "fallback_theme_locked"
+
+    # 카탈로그에 없는 키 404
+    res = await admin_client.patch("/api/admin/themes/neon", json={"access": "restricted"})
+    assert res.status_code == 404
+    assert res.json()["detail"] == "theme_not_found"
+
+    # 관리자 전용
+    await login(client, db_session)
+    res = await client.patch("/api/admin/themes/candy", json={"access": "restricted"})
+    assert res.status_code == 403

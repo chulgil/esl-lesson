@@ -40,6 +40,16 @@ export interface Item {
   context_en: string | null;
 }
 
+/** 항목 풀 검색 응답 — GET /api/admin/items (목록용 축약 필드) */
+export interface PoolItem {
+  id: number;
+  item_type: "word" | "idiom" | "pattern" | "sentence";
+  en_text: string;
+  ko_text: string;
+  review_status: "pending" | "approved" | "rejected";
+  difficulty_hint: string;
+}
+
 export interface ContentDetail extends ContentSummary {
   url: string | null;
   segments: Segment[];
@@ -136,6 +146,24 @@ export const adminApi = {
 
   deleteContent: (id: number) =>
     request<void>(`/api/admin/contents/${id}`, { method: "DELETE" }),
+
+  /** 전역 항목 풀 검색 — 타입/상태/키워드 필터 + 페이지네이션 (50/페이지) */
+  searchItems: (params: {
+    type?: string;
+    status?: string;
+    q?: string;
+    page?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params.type) qs.set("type", params.type);
+    if (params.status) qs.set("status", params.status);
+    if (params.q) qs.set("q", params.q);
+    if (params.page) qs.set("page", String(params.page));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<{ total: number; page: number; items: PoolItem[] }>(
+      `/api/admin/items${suffix}`,
+    );
+  },
 
   patchItem: (
     id: number,

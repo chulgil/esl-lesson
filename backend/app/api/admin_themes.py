@@ -1,6 +1,6 @@
-"""백오피스 테마 몰 — 제한 테마 수동 지급/회수 (docs/specs/theme-mall.md)."""
+"""백오피스 테마 몰 — 무료/제한 전환 + 제한 테마 수동 지급/회수 (docs/specs/theme-mall.md)."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import require_admin
-from app.models import ThemeGrant, User
+from app.models import ThemeGrant, ThemeSetting, User
 from app.services.notifications import notify
-from app.services.themes import THEME_ACCESS
+from app.services.themes import FALLBACK_THEME, THEME_ACCESS, effective_theme_access
 
 router = APIRouter(prefix="/admin/themes", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -26,8 +26,8 @@ def _grant_dict(grant: ThemeGrant, email: str, nickname: str) -> dict:
     }
 
 
-def restricted_or_raise(theme_key: str) -> None:
-    access = THEME_ACCESS.get(theme_key)
+async def restricted_or_raise(db: AsyncSession, theme_key: str) -> None:
+    access = (await effective_theme_access(db)).get(theme_key)
     if access is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "theme_not_found")
     if access != "restricted":
@@ -47,17 +47,43 @@ async def theme_stats(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
             )
         ).all()
     )
+    access_map = await effective_theme_access(db)
     return {
         "items": [
             {"key": key, "access": access, "grants": counts.get(key, 0)}
-            for key, access in THEME_ACCESS.items()
+            for key, access in access_map.items()
         ]
     }
 
 
+class AccessPatch(BaseModel):
+    access: Literal["free", "restricted"]
+
+
+@router.patch("/{theme_key}")
+async def set_theme_access(
+    theme_key: str, body: AccessPatch, db: Annotated[AsyncSession, Depends(get_db)]
+) -> dict:
+    """무료/제한 전환 — 제한 전환 시 grant 없는 사용자는 다음 조회부터 잠기고
+    클라 가드가 note 로 복귀시킨다. grants 행은 보존 (재제한 시 다시 유효)."""
+    if theme_key not in THEME_ACCESS:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "theme_not_found")
+    if theme_key == FALLBACK_THEME and body.access == "restricted":
+        # note 는 잠금 복귀 목적지 — 제한하면 복귀 루프가 생긴다
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "fallback_theme_locked")
+
+    setting = await db.get(ThemeSetting, theme_key)
+    if setting is None:
+        db.add(ThemeSetting(theme_key=theme_key, access=body.access))
+    else:
+        setting.access = body.access
+    await db.commit()
+    return {"key": theme_key, "access": body.access}
+
+
 @router.get("/{theme_key}/grants")
 async def list_grants(theme_key: str, db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
-    restricted_or_raise(theme_key)
+    await restricted_or_raise(db, theme_key)
     rows = (
         await db.execute(
             select(ThemeGrant, User.email, User.nickname)
@@ -81,7 +107,7 @@ async def create_grant(
     db: Annotated[AsyncSession, Depends(get_db)],
     admin: Annotated[User, Depends(require_admin)],
 ) -> dict:
-    restricted_or_raise(theme_key)
+    await restricted_or_raise(db, theme_key)
     user = (
         await db.execute(select(User).where(func.lower(User.email) == body.email.strip().lower()))
     ).scalar_one_or_none()

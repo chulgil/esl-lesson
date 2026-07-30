@@ -43,6 +43,12 @@ export const themeApi = {
 
   adminThemes: () => request<{ items: AdminThemeItem[] }>("/api/admin/themes"),
 
+  setAccess: (key: string, access: ThemeAccess) =>
+    request<{ key: string; access: ThemeAccess }>(`/api/admin/themes/${key}`, {
+      method: "PATCH",
+      body: JSON.stringify({ access }),
+    }),
+
   grants: (key: string) =>
     request<{ items: ThemeGrantItem[] }>(`/api/admin/themes/${key}/grants`),
 
