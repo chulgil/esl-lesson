@@ -1,57 +1,121 @@
 "use client";
 
-import type { Achievement } from "@/lib/study-api";
+import type { Achievement, AchievementTier } from "@/lib/study-api";
 
-/** 업적 스티커 그리드 — 달성=컬러 스티커, 미달성=점선+진행 바 (노트 컨셉, P3) */
+/** 업적 스티커 벽 — 패밀리 섹션 + 난이도 티어(초급/중급/고급/마스터) 링 컬러.
+ *  달성=컬러 스티커, 미달성=점선+진행 바 (노트 컨셉, P3) */
+
+const FAMILY_LABELS: Record<string, string> = {
+  study: "학습",
+  streak: "꾸준함",
+  game: "게임",
+  social: "친구",
+};
+const FAMILY_ORDER = ["study", "streak", "game", "social"];
+
+const TIER_LABELS: Record<AchievementTier, string> = {
+  beginner: "초급",
+  intermediate: "중급",
+  advanced: "고급",
+  master: "마스터",
+};
+
+/** 티어별 링·칩 색 — 달성 시에만 컬러 (미달성은 회색 통일) */
+const TIER_RING: Record<AchievementTier, string> = {
+  beginner: "border-brick-green bg-brick-green/15",
+  intermediate: "border-brick-blue bg-brick-blue/15",
+  advanced: "border-brick-yellow bg-brick-yellow/30",
+  master: "border-brick-red bg-brick-red/15",
+};
+const TIER_CHIP: Record<AchievementTier, string> = {
+  beginner: "bg-brick-green/25",
+  intermediate: "bg-brick-blue/25",
+  advanced: "bg-brick-yellow/50",
+  master: "bg-brick-red/25 text-brick-red",
+};
+
 export function AchievementBadges({ items }: { items: Achievement[] }) {
   return (
-    <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
-      {items.map((a) => (
-        <li
-          key={a.key}
-          title={`${a.title} — ${a.desc}`}
-          className={`flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 text-center ${
-            a.achieved
-              ? "border-brick-yellow bg-highlight/30"
-              : "border-dashed border-ink/20 bg-white opacity-70"
-          }`}
-        >
-          <span
-            className={`flex h-11 w-11 items-center justify-center rounded-full border-2 ${
-              a.achieved
-                ? "border-ink bg-brick-yellow text-ink"
-                : "border-ink/20 bg-ink/5 text-ink/40"
-            }`}
-          >
-            <BadgeIcon name={a.key} />
-          </span>
-          <span className="text-xs leading-tight font-bold">{a.title}</span>
-          {a.achieved ? (
-            <span className="text-[10px] font-bold text-brick-green">
-              달성!
-            </span>
-          ) : (
-            <>
-              <span className="h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
-                <span
-                  className="block h-full rounded-full bg-brick-blue"
-                  style={{ width: `${Math.round(a.progress * 100)}%` }}
-                />
+    <div className="flex flex-col gap-5">
+      {FAMILY_ORDER.map((family) => {
+        const group = items.filter((a) => a.family === family);
+        if (group.length === 0) return null;
+        const achieved = group.filter((a) => a.achieved).length;
+        return (
+          <section key={family}>
+            <h3 className="mb-2 flex items-baseline gap-2 text-sm font-bold">
+              {FAMILY_LABELS[family] ?? family}
+              <span className="text-[10px] font-normal opacity-50">
+                {achieved}/{group.length}
               </span>
-              <span className="text-[10px] opacity-60">
-                {a.current}/{a.target}
-              </span>
-            </>
-          )}
-        </li>
-      ))}
-    </ul>
+            </h3>
+            <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+              {group.map((a) => (
+                <StickerCard key={a.key} a={a} />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
   );
 }
 
-/** 업적별 라인 아이콘 (유니코드 이모지 대신 SVG — 테마 일관성) */
+function StickerCard({ a }: { a: Achievement }) {
+  const ring = a.achieved
+    ? a.tier
+      ? TIER_RING[a.tier]
+      : "border-ink bg-brick-yellow"
+    : "border-ink/20 bg-ink/5 text-ink/40";
+  return (
+    <li
+      title={`${a.title} — ${a.desc}`}
+      className={`relative flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 text-center ${
+        a.achieved
+          ? "border-brick-yellow bg-highlight/30"
+          : "border-dashed border-ink/20 bg-white opacity-70"
+      }`}
+    >
+      {a.tier && (
+        <span
+          className={`absolute -top-2 right-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+            a.achieved ? TIER_CHIP[a.tier] : "bg-ink/10 text-ink/50"
+          }`}
+        >
+          {TIER_LABELS[a.tier]}
+        </span>
+      )}
+      <span
+        className={`flex h-11 w-11 items-center justify-center rounded-full border-2 ${ring}`}
+      >
+        <BadgeIcon name={a.key} />
+      </span>
+      <span className="text-xs leading-tight font-bold">{a.title}</span>
+      {a.achieved ? (
+        <span className="text-[10px] font-bold text-brick-green">달성!</span>
+      ) : (
+        <>
+          <span className="h-1.5 w-full overflow-hidden rounded-full bg-ink/10">
+            <span
+              className="block h-full rounded-full bg-brick-blue"
+              style={{ width: `${Math.round(a.progress * 100)}%` }}
+            />
+          </span>
+          <span className="text-[10px] opacity-60">
+            {a.current}/{a.target}
+          </span>
+        </>
+      )}
+    </li>
+  );
+}
+
+/** 업적별 라인 아이콘 (유니코드 이모지 대신 SVG — 테마 일관성).
+ *  같은 지표의 티어들은 접두어(reviews_/wins_ 등)로 패밀리 아이콘 공유. */
 function BadgeIcon({ name }: { name: string }) {
-  const path = ICON_PATHS[name] ?? ICON_PATHS.first_review;
+  const prefix = name.split("_")[0];
+  const path =
+    ICON_PATHS[name] ?? PREFIX_ICON_PATHS[prefix] ?? ICON_PATHS.first_review;
   return (
     <svg
       viewBox="0 0 24 24"
@@ -68,39 +132,48 @@ function BadgeIcon({ name }: { name: string }) {
   );
 }
 
+// 연필 — 첫 복습 / 불꽃 — 스트릭 / 쌓인 층 — 복습 / 펼친 책 — 단어
+// 트로피 — 승리 / 게임패드 — 참여 / 키보드 — 타자 / 두 사람 — 친구
+const PENCIL = <path d="M17 3l4 4L8 20l-5 1 1-5L17 3z" />;
+const BOOK = (
+  <path d="M12 6c-2-1.5-5-2-8-2v14c3 0 6 .5 8 2 2-1.5 5-2 8-2V4c-3 0-6 .5-8 2zm0 0v14" />
+);
+const LAYERS = (
+  <path d="M12 2l10 5-10 5L2 7l10-5zM2 12l10 5 10-5M2 17l10 5 10-5" />
+);
+const FLAME = (
+  <path d="M12 2c1 4-3 5-3 9a3 3 0 006 0c0-2-1-3-1-3 3 1 5 3.5 5 7a7 7 0 11-14 0c0-6 6-8 7-13z" />
+);
+const TROPHY = (
+  <path d="M8 21h8m-4-4v4m-6-17h12v5a6 6 0 01-12 0V4zM6 5H3a4 4 0 004 4m11-4h3a4 4 0 01-4 4" />
+);
+const GAMEPAD = (
+  <path d="M6 9h12a4 4 0 014 4v3a3 3 0 01-5.5 1.7L15 16H9l-1.5 1.7A3 3 0 012 16v-3a4 4 0 014-4zm2 2v4m-2-2h4m6-1h.01M18 14h.01" />
+);
+const KEYBOARD = (
+  <path d="M3 7h18a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1zm3 3h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+);
+const PEOPLE = (
+  <path d="M9 11a4 4 0 100-8 4 4 0 000 8zm-7 10a7 7 0 0114 0M19 8a3 3 0 11-4-4m7 17a6 6 0 00-4-5.5" />
+);
+const CALENDAR = (
+  <path d="M5 5h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1zm3-3v4m8-4v4M4 10h16" />
+);
+
 const ICON_PATHS: Record<string, React.ReactNode> = {
-  // 연필 — 첫 복습
-  first_review: <path d="M17 3l4 4L8 20l-5 1 1-5L17 3z" />,
-  // 펼친 책 — 100단어
-  words_100: (
-    <path d="M12 6c-2-1.5-5-2-8-2v14c3 0 6 .5 8 2 2-1.5 5-2 8-2V4c-3 0-6 .5-8 2zm0 0v14" />
-  ),
-  // 쌓인 층 — 복습 1000회
-  reviews_1000: (
-    <path d="M12 2l10 5-10 5L2 7l10-5zM2 12l10 5 10-5M2 17l10 5 10-5" />
-  ),
-  // 불꽃 — 7일 연속
-  streak_7: (
-    <path d="M12 2c1 4-3 5-3 9a3 3 0 006 0c0-2-1-3-1-3 3 1 5 3.5 5 7a7 7 0 11-14 0c0-6 6-8 7-13z" />
-  ),
-  // 달력 — 30일 연속
-  streak_30: (
-    <path d="M5 5h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1zm3-3v4m8-4v4M4 10h16" />
-  ),
-  // 트로피 — 첫 승리
-  first_win: (
-    <path d="M8 21h8m-4-4v4m-6-17h12v5a6 6 0 01-12 0V4zM6 5H3a4 4 0 004 4m11-4h3a4 4 0 01-4 4" />
-  ),
-  // 게임패드 — 10판
-  games_10: (
-    <path d="M6 9h12a4 4 0 014 4v3a3 3 0 01-5.5 1.7L15 16H9l-1.5 1.7A3 3 0 012 16v-3a4 4 0 014-4zm2 2v4m-2-2h4m6-1h.01M18 14h.01" />
-  ),
-  // 키보드 — 타자 300
-  typing_300: (
-    <path d="M3 7h18a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1zm3 3h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
-  ),
-  // 두 사람 — 첫 친구
-  first_friend: (
-    <path d="M9 11a4 4 0 100-8 4 4 0 000 8zm-7 10a7 7 0 0114 0M19 8a3 3 0 11-4-4m7 17a6 6 0 00-4-5.5" />
-  ),
+  first_review: PENCIL,
+  first_win: TROPHY,
+  first_friend: PEOPLE,
+  streak_30: CALENDAR,
+  streak_365: CALENDAR,
+};
+
+const PREFIX_ICON_PATHS: Record<string, React.ReactNode> = {
+  reviews: LAYERS,
+  words: BOOK,
+  streak: FLAME,
+  wins: TROPHY,
+  games: GAMEPAD,
+  typing: KEYBOARD,
+  friends: PEOPLE,
 };

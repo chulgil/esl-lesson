@@ -107,6 +107,37 @@ async def test_typing_300_from_peak_cpm(client, db_session):
     assert items["typing_300"]["achieved"] is True
 
 
+async def test_tiered_achievements_progression(client, db_session):
+    """티어 스티커 — 같은 지표의 초급/중급/고급/마스터 4단이 단계별로 열린다."""
+    me = await login(client, db_session)
+    await _log_reviews(db_session, me.id, count=120)
+    await db_session.commit()
+
+    res = await client.get("/api/study/achievements")
+    items = {a["key"]: a for a in res.json()["items"]}
+
+    # 복습 120회 → 초급(100) 달성, 중급(500) 진행 중
+    assert items["reviews_100"]["achieved"] is True
+    assert items["reviews_100"]["tier"] == "beginner"
+    assert items["reviews_500"]["achieved"] is False
+    assert items["reviews_500"]["current"] == 120
+    assert items["reviews_5000"]["tier"] == "master"
+
+    # 4단 티어 패밀리 존재 — 스트릭·승리·게임·타자·단어
+    assert items["streak_365"]["target"] == 365
+    assert items["wins_300"]["tier"] == "master"
+    assert items["games_500"]["tier"] == "master"
+    assert items["typing_600"]["tier"] == "master"
+    assert items["words_1000"]["tier"] == "master"
+
+    # 패밀리 그룹 필드 — 프론트 섹션 렌더용
+    assert items["wins_10"]["family"] == "game"
+    assert items["streak_7"]["family"] == "streak"
+    assert items["first_friend"]["family"] == "social"
+    # 단발 업적은 tier 없음
+    assert items["first_review"]["tier"] is None
+
+
 async def test_first_friend_requires_accepted(client, db_session):
     me = await login(client, db_session)
     other = User(google_sub="g-ach", email="ach@example.com", name="친구")

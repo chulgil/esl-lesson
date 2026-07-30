@@ -77,6 +77,9 @@ export interface VocabNetwork {
 }
 
 /** 업적 배지 — 로그 실시간 집계, 소급 반영 (P3) */
+export type AchievementTier =
+  "beginner" | "intermediate" | "advanced" | "master";
+
 export interface Achievement {
   key: string;
   title: string;
@@ -85,6 +88,10 @@ export interface Achievement {
   target: number;
   achieved: boolean;
   progress: number;
+  /** 난이도 티어 — null 은 단발 업적 (첫 걸음 등) */
+  tier: AchievementTier | null;
+  /** 스티커 벽 섹션 그룹 */
+  family: "study" | "streak" | "game" | "social";
 }
 
 /** 주간 학습 리더보드 — 나+친구 (P1 데일리 루프) */

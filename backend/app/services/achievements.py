@@ -25,17 +25,100 @@ from app.models.friend import Friendship
 KST = timezone(timedelta(hours=9))
 STREAK_WINDOW_DAYS = 90
 
-# (key, title, desc, target) — 진행률 표시용. 판정은 current >= target
+# (key, title, desc, target, tier, family, metric)
+# tier: None(단발) | beginner(초급) | intermediate(중급) | advanced(고급) | master(마스터)
+# family: 프론트 섹션 그룹 (study/streak/game/social). metric: currents 조회 키.
+# 판정은 current >= target — 같은 지표의 티어들이 단계별로 열린다.
 DEFINITIONS = (
-    ("first_review", "첫 걸음", "첫 복습을 완료했어요", 1),
-    ("words_100", "첫 100단어", "단어 100개 학습을 시작했어요", 100),
-    ("reviews_1000", "복습 마스터", "누적 복습 1,000회를 달성했어요", 1000),
-    ("streak_7", "일주일 개근", "7일 연속으로 학습했어요", 7),
-    ("streak_30", "한 달 개근", "30일 연속으로 학습했어요", 30),
-    ("first_win", "첫 승리", "게임에서 처음 이겼어요", 1),
-    ("games_10", "게임 단골", "게임 10판에 참여했어요", 10),
-    ("typing_300", "타자 신동", "타자 최고 300타를 넘겼어요", 300),
-    ("first_friend", "첫 친구", "첫 친구와 연결됐어요", 1),
+    # 학습 — 복습·단어
+    ("first_review", "첫 걸음", "첫 복습을 완료했어요", 1, None, "study", "reviews"),
+    (
+        "reviews_100",
+        "복습 입문",
+        "누적 복습 100회를 달성했어요",
+        100,
+        "beginner",
+        "study",
+        "reviews",
+    ),
+    (
+        "reviews_500",
+        "복습 중수",
+        "누적 복습 500회를 달성했어요",
+        500,
+        "intermediate",
+        "study",
+        "reviews",
+    ),
+    (
+        "reviews_1000",
+        "복습 고수",
+        "누적 복습 1,000회를 달성했어요",
+        1000,
+        "advanced",
+        "study",
+        "reviews",
+    ),
+    (
+        "reviews_5000",
+        "복습 마스터",
+        "누적 복습 5,000회를 달성했어요",
+        5000,
+        "master",
+        "study",
+        "reviews",
+    ),
+    ("words_100", "단어 입문", "단어 100개 학습을 시작했어요", 100, "beginner", "study", "words"),
+    (
+        "words_300",
+        "단어 중수",
+        "단어 300개 학습을 시작했어요",
+        300,
+        "intermediate",
+        "study",
+        "words",
+    ),
+    ("words_600", "단어 고수", "단어 600개 학습을 시작했어요", 600, "advanced", "study", "words"),
+    (
+        "words_1000",
+        "단어 마스터",
+        "단어 1,000개 학습을 시작했어요",
+        1000,
+        "master",
+        "study",
+        "words",
+    ),
+    # 꾸준함 — 연속 학습
+    ("streak_7", "일주일 개근", "7일 연속으로 학습했어요", 7, "beginner", "streak", "streak"),
+    ("streak_30", "한 달 개근", "30일 연속으로 학습했어요", 30, "intermediate", "streak", "streak"),
+    ("streak_100", "백일 개근", "100일 연속으로 학습했어요", 100, "advanced", "streak", "streak"),
+    ("streak_365", "일 년 개근", "365일 연속으로 학습했어요", 365, "master", "streak", "streak"),
+    # 게임 — 승리·참여·타자
+    ("first_win", "첫 승리", "게임에서 처음 이겼어요", 1, None, "game", "wins"),
+    ("wins_10", "승리 입문", "게임에서 10번 이겼어요", 10, "beginner", "game", "wins"),
+    ("wins_30", "승리 중수", "게임에서 30번 이겼어요", 30, "intermediate", "game", "wins"),
+    ("wins_100", "승리 고수", "게임에서 100번 이겼어요", 100, "advanced", "game", "wins"),
+    ("wins_300", "승리 마스터", "게임에서 300번 이겼어요", 300, "master", "game", "wins"),
+    ("games_10", "게임 단골", "게임 10판에 참여했어요", 10, "beginner", "game", "games"),
+    ("games_50", "게임 애호가", "게임 50판에 참여했어요", 50, "intermediate", "game", "games"),
+    ("games_200", "게임 고수", "게임 200판에 참여했어요", 200, "advanced", "game", "games"),
+    ("games_500", "게임 마스터", "게임 500판에 참여했어요", 500, "master", "game", "games"),
+    ("typing_300", "타자 신동", "타자 최고 300타를 넘겼어요", 300, "beginner", "game", "typing"),
+    (
+        "typing_400",
+        "타자 중수",
+        "타자 최고 400타를 넘겼어요",
+        400,
+        "intermediate",
+        "game",
+        "typing",
+    ),
+    ("typing_500", "타자 고수", "타자 최고 500타를 넘겼어요", 500, "advanced", "game", "typing"),
+    ("typing_600", "타자 마스터", "타자 최고 600타를 넘겼어요", 600, "master", "game", "typing"),
+    # 소셜 — 친구
+    ("first_friend", "첫 친구", "첫 친구와 연결됐어요", 1, None, "social", "friends"),
+    ("friends_5", "우정 입문", "친구 5명과 연결됐어요", 5, "beginner", "social", "friends"),
+    ("friends_10", "마당발", "친구 10명과 연결됐어요", 10, "intermediate", "social", "friends"),
 )
 
 
@@ -160,25 +243,24 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
         ),
     )
 
+    # 지표 하나가 티어 여러 개를 먹인다 — 정의는 metric 키로 조회
     currents = {
-        "first_review": total_reviews,
-        "words_100": word_cards,
-        "reviews_1000": total_reviews,
-        "streak_7": streak,
-        "streak_30": streak,
-        "first_win": tetris_wins + typing_wins + quiz_wins + scramble_wins + dictation_wins,
-        "games_10": tetris_played
+        "reviews": total_reviews,
+        "words": word_cards,
+        "streak": streak,
+        "wins": tetris_wins + typing_wins + quiz_wins + scramble_wins + dictation_wins,
+        "games": tetris_played
         + len(typing_rows)
         + quiz_played
         + scramble_played
         + dictation_played,
-        "typing_300": peak_cpm,
-        "first_friend": friends,
+        "typing": peak_cpm,
+        "friends": friends,
     }
 
     items = []
-    for key, title, desc, target in DEFINITIONS:
-        current = currents[key]
+    for key, title, desc, target, tier, family, metric in DEFINITIONS:
+        current = currents[metric]
         items.append(
             {
                 "key": key,
@@ -188,6 +270,8 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
                 "target": target,
                 "achieved": current >= target,
                 "progress": min(1.0, current / target),
+                "tier": tier,
+                "family": family,
             }
         )
     return items
