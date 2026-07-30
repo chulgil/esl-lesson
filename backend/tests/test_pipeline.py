@@ -82,7 +82,8 @@ async def test_manual_pipeline_translate_extract_dedup(wired_db, monkeypatch):
     assert {i.item_type for i in items} == {"word", "sentence"}
     sentence = next(i for i in items if i.item_type == "sentence")
     assert sentence.hint_thinking == "있다, 나무가, 저기에"
-    assert sentence.review_status == "pending"
+    # 관리자 큐레이션 전환 후 추출 항목은 기본 승인 (2026-07-30, content-governance.md)
+    assert sentence.review_status == "approved"
 
     # 같은 항목이 나오는 두 번째 콘텐츠 → 항목 재사용, 출처만 추가 (전역 dedup)
     content2 = Content(source="manual", title="T2")

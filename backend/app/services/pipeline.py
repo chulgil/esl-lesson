@@ -273,6 +273,10 @@ async def _upsert_item(
             hint_thinking=raw.get("thinking_ko"),
             pattern_template=raw.get("template") if kind == "pattern" else None,
             difficulty_hint=raw.get("difficulty", "intermediate"),
+            # 등록이 관리자 전용이 된 뒤로는 영상 선정 자체가 큐레이션이다 —
+            # 항목별 수동 승인은 "담았는데 카드가 없음"만 만든다 (2026-07-30 보고).
+            # 기본 승인으로 뒤집고, 부적절 항목은 백오피스에서 사후 거절(존중됨).
+            review_status="approved",
         )
         db.add(item)
         await db.flush()
