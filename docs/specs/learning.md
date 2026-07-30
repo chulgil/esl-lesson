@@ -1,6 +1,6 @@
 # 스펙: 학습 시스템 (FSRS 간격 반복 + 레벨 1-4 퀴즈)
 
-> 최종 수정: 2026-07-11
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
 안키와 동일한 원리의 간격 반복(Spaced Repetition)을 FSRS 알고리즘으로 구현한다. 사용자가 "잊어버릴 만한 시점"에 항목이 복습 큐에 자동으로 나타나고, 레벨별 퀴즈 형식으로 검사한다.
 
@@ -161,12 +161,17 @@
 
 | 메서드/경로 | 설명 |
 |-------------|------|
-| GET `/api/study/queue` | 오늘의 큐 + 문항 (20개 단위) |
+| GET `/api/study/queue` | 오늘의 큐 + 문항 (`?content_id=` 덱 한정 — study-decks.md) |
 | POST `/api/study/answer` | `{card_id, quiz_mode, answer, duration_ms}` → 채점 결과 + FSRS 갱신 + 다음 due |
-| POST `/api/study/rate` | 레벨 4 자기평가 보정 `{card_id, rating}` |
+| POST `/api/study/rate` | 자기평가 보정 `{card_id, rating}` |
 | GET `/api/study/stats` | 대시보드: due/신규 수, 레벨별 현황, 일별 히트맵, 연속 학습일 |
+| GET `/api/study/decks` | 덱(담은 콘텐츠)별 due/new 카운트 — study-decks.md |
+| GET `/api/study/network` | 어휘망 그래프 (임베딩 유사도) — word-insight.md |
+| GET `/api/study/items/{id}/insight` | 단어 인사이트 카드 (가시성 게이트) — word-insight.md |
+| GET `/api/study/achievements` / `/quests` / `/leaderboard` | 업적·퀘스트·학습 리더보드 (리텐션 팩 — proposal/retention-plan.md, `services/achievements.py`, `services/retention.py`) |
+| POST `/api/cards` | 항목 원탭 카드 추가 (게임 ReviewPanel·어휘망에서 사용, 멱등) |
 | POST `/api/cards/{id}/suspend` | 카드 학습 제외/복귀 |
-| GET/PATCH `/api/settings` | 일일 한도, 목표 기억률, 레벨 토글 |
+| GET/PATCH `/api/settings` | 일일 한도, 목표 기억률, 레벨 토글, 힌트 지연 |
 
 ## 채점 응답 계약 (POST /api/study/answer)
 

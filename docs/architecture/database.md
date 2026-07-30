@@ -1,6 +1,6 @@
 # 데이터베이스 설계
 
-> 최종 수정: 2026-07-11
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
 서버 기존 PostgreSQL 17 컨테이너(`postgres`, pgvector/pg17)에 **데이터베이스 `englesson` + 전용 롤 `englesson`** 을 추가한다. 기존 서비스와 컨테이너는 공유하되 DB/권한은 격리한다.
 
@@ -25,8 +25,10 @@ contents 1--N item_occurrences N--1 learning_items
 
 review_cards 1--N review_logs
 
-users 1--N game_matches (player1/player2)     [페이즈 2]
+users 1--N game_matches (player1/player2)
 ```
+
+(ERD 는 핵심 학습 도메인만. 이후 추가된 확장 테이블은 아래 "확장 테이블" 참조.)
 
 핵심 설계 결정 — **학습 항목은 전역(global)으로 중복 제거**한다. 같은 단어 "resilient"가 영상 3개에 나와도 `learning_items` 행은 1개, 출처는 `item_occurrences`로 연결. 사용자는 항목당 카드 1장만 가진다(중복 학습 방지).
 
@@ -40,6 +42,7 @@ users 1--N game_matches (player1/player2)     [페이즈 2]
 | google_sub | text | UNIQUE NOT NULL | Google OAuth `sub` 클레임 |
 | email | text | UNIQUE NOT NULL | |
 | name | text | NOT NULL | |
+| nickname | text | DEFAULT '' | 게임/친구 표시명 (실명 비노출 — a3b4c5d6e7f8) |
 | avatar_url | text | | |
 | role | text | CHECK IN ('admin','learner'), DEFAULT 'learner' | 백오피스 접근 = admin |
 | created_at / last_login_at | timestamptz | | |
@@ -53,8 +56,12 @@ users 1--N game_matches (player1/player2)     [페이즈 2]
 | user_id | bigint | PK, FK users | |
 | daily_new_limit | int | 20 | 하루 신규 카드 도입 한도 |
 | daily_review_limit | int | 200 | 하루 복습 한도 |
+| daily_goal | int | 20 | 일일 목표 (c5d6e7f8a9b0) |
 | desired_retention | real | 0.90 | FSRS 목표 기억률 |
-| levels_enabled | int[] | {1,2,3,4} | 학습할 레벨 선택 |
+| hint_delay_seconds | int | 10 | 힌트 노출 지연 (d4e5f6a7b8c9) |
+| study_level | int | 2 | 학습 레벨 프리셋 (e5f6a7b8c9d0) |
+| levels_enabled | int[] | {1,2} | 학습할 항목 타입 선택 |
+| streak_savers / saver_award_week | int / text | 0 / NULL | 스트릭 세이버 (a9b0c1d2e3f4) |
 
 ### contents — 콘텐츠 (유튜브/수기)
 
@@ -62,7 +69,9 @@ users 1--N game_matches (player1/player2)     [페이즈 2]
 |------|------|------|------|
 | id | bigint | PK | |
 | source | text | CHECK IN ('youtube','manual') | |
+| visibility | text | CHECK IN ('public','private'), DEFAULT 'public' | 공용/개인 (b2c3d4e5f6a7 — content-governance.md) |
 | youtube_video_id | text | UNIQUE (NULL 허용) | 11자 비디오 ID, 중복 등록 방지 |
+| youtube_license | text | NULL 허용 | 'creativeCommon'/'youtube' — Data API 조회 (c9d0e1f2a3b4) |
 | url | text | | 원본 URL |
 | title | text | NOT NULL | 유튜브면 자동 기입 |
 | title_ko | text | | AI 번역 제목 (선택) |
@@ -81,6 +90,7 @@ users 1--N game_matches (player1/player2)     [페이즈 2]
 | start_ms / end_ms | int | NULL 허용 | 유튜브 타임스탬프 (수기는 NULL) |
 | en_text | text | NOT NULL | |
 | ko_text | text | | 없으면 AI 번역으로 채움 |
+| words | jsonb | NULL 허용 | 단어 단위 타임스탬프 정렬 (b1c2d3e4a5f6 — word-alignment.md) |
 
 ### learning_items — 학습 항목 (전역 중복 제거)
 
@@ -123,6 +133,7 @@ UNIQUE(item_id, content_id, segment_id)
 | difficulty | real | | FSRS D |
 | reps / lapses | int | DEFAULT 0 | 총 복습 / 망각 횟수 |
 | suspended | boolean | DEFAULT false | 학습 제외 토글 |
+| fsrs_json | jsonb | NULL 허용 | py-fsrs Card 직렬화 원본 (a1b2c3d4e5f6). state/stability 등은 프로젝션 |
 | last_review_at / created_at | timestamptz | | |
 
 ### review_logs — 복습 이력 (FSRS 재최적화 원천 데이터)
@@ -146,14 +157,14 @@ UNIQUE(item_id, content_id, segment_id)
 |------|------|------|
 | id | bigint | PK |
 | content_id | bigint | FK contents |
-| step | text | 'metadata' / 'transcript' / 'translate' / 'extract' |
+| step | text | 'metadata' / 'transcript' / 'translate' / 'extract' / 'embed' / 'align' |
 | status | text | 'pending' / 'running' / 'done' / 'failed' |
 | attempt | int | 재시도 횟수 (최대 3) |
 | error | text | 실패 사유 |
 | payload | jsonb | 단계별 산출물 요약/로그 |
 | started_at / finished_at | timestamptz | |
 
-### game_matches — 대전 기록 (페이즈 2)
+### game_matches — 대전 기록 (워드 테트리스)
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
@@ -167,6 +178,26 @@ UNIQUE(item_id, content_id, segment_id)
 | p1_score / p2_score | int | |
 | stats | jsonb | WPM, 콤보, 정확도, 처리 단어 수 |
 | started_at / ended_at | timestamptz | |
+
+## 확장 테이블 (2026-07 추가 — 상세 컬럼은 모델 파일 참조)
+
+| 테이블 | 용도 | 모델 파일 / 스펙 |
+|--------|------|------------------|
+| content_permissions | 저작권 이용허락 기록 (범위 4종 + 증빙) | `models/content.py` / content-governance.md |
+| content_subscriptions | 라이브러리 담기(구독) — UNIQUE(content_id, user_id) | `models/content.py` / study-decks.md |
+| word_insights | 단어 인사이트 카드 (AI 생성, 항목당 1회) | `models/item.py` / word-insight.md |
+| item_embeddings | pgvector halfvec(1024) + HNSW (유사단어/오답 선지) | 마이그레이션 a7b8c9d0e1f2 / word-insight.md |
+| friendships | 친구 관계 (요청/수락) | `models/friend.py` / chat.md |
+| conversations / chat_messages / chat_reads | 1:1 채팅 (메시지·읽음) | `models/chat.py` / chat.md |
+| push_subscriptions | 웹 푸시 구독 (VAPID) | `models/push.py` / push-reminder.md |
+| notifications | 알림 센터 적재 (type + payload JSONB + read_at) | `models/notification.py` / notifications.md |
+| theme_grants | 제한 테마 지급 — UNIQUE(user_id, theme_key) | `models/theme.py` / theme-mall.md |
+| streak_saver_uses / quest_completions | 리텐션 팩 (스트릭 세이버·퀘스트) | `models/retention.py` / learning.md |
+| typing_races | 타자 레이스 기록 | `models/game.py` / typing-race.md |
+| scramble_races | 스크램블 레이스 기록 | `models/game.py` / scramble-race.md |
+| dictation_races | 딕테이션 배틀 기록 | `models/game.py` / dictation-battle.md |
+| daily_puzzle_plays | 데일리 퍼즐 플레이 기록 | `models/game.py` / daily-puzzle.md |
+| quiz_royale_matches / quiz_royale_players | 퀴즈 로얄 매치·정규화된 플레이어 집계 | `models/game.py` / quiz-royale.md |
 
 ## 인덱스
 

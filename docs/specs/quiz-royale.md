@@ -1,6 +1,6 @@
 # 스펙: 스피드 퀴즈 로얄 — 최대 4인 버저 퀴즈
 
-> 최종 수정: 2026-07-16 · P1 구현 완료 · 기획 배경: [proposal/quiz-royale.md](../proposal/quiz-royale.md)
+> 최종 검증: 2026-07-30 (코드 대조 완료) · P1 구현 완료 · 기획 배경: [proposal/quiz-royale.md](../proposal/quiz-royale.md)
 
 같은 4지선다를 최대 4명에게 동시 출제 — 빠르고 정확할수록 높은 점수.
 문제는 대전 소재(내 콘텐츠 선택 규칙 공유)의 단어 풀에서 생성.
@@ -29,7 +29,9 @@
 
 - 서버: `services/game/quiz_royale.py` (라운드 루프 = 방당 태스크 1개 +
   0.05s 폴링, 실시간 tick 없음) · 저장 `quiz_royale_matches`
-  (마이그레이션 b8c9d0e1f2a3, players JSONB 에 최종 순위)
+  (마이그레이션 b8c9d0e1f2a3, players JSONB 는 결과 화면 스냅샷) +
+  `quiz_royale_players` 정규화 행 (b4c5d6e7f8a9 DB 감사 — XP/최고기록/업적/
+  리더보드 집계는 이 테이블로, JSONB 풀스캔 금지)
 - 클라: `app/game/QuizRoyale.tsx` (대기실/라운드/공개/시상대),
   로비 `QuizRoyaleEntry` (봇 수 선택 + 방 만들기/입장, 소재 선택 공유)
 

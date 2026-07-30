@@ -1,6 +1,6 @@
 # 스펙: 테마 몰 (테마 엔타이틀먼트)
 
-> 최종 수정: 2026-07-30 · 설계 승인: 2026-07-30 (사용자)
+> 최종 검증: 2026-07-30 (코드 대조 완료) · 설계 승인: 2026-07-30 (사용자)
 
 앱 테마 5종(note/candy/lego/cat/excel — `frontend/src/lib/theme.ts` APP_THEMES)을 전원 무료에서 **엔타이틀먼트(보유권) 기반** 자산으로 전환한다. 이번 범위는 엔타이틀먼트 기반 + 백오피스 수동 지급/회수 + 헤냥이(cat) 제한이며, 결제(PG) 연동은 후속이다.
 
@@ -67,3 +67,10 @@ theme_grants
 - 대상: `hyein.lim213@gmail.com`, `codenavi@gmail.com` (note = "초기 지급 (2026-07-30)")
 - 유저 행이 아직 없으면(미로그인) 스킵 — 최초 로그인 후 백오피스에서 수동 지급
 - NOT EXISTS 가드로 멱등 — 재실행해도 중복 없음
+
+## 관전 화면 테마 (2026-07-30 — [study-spectate.md](study-spectate.md))
+
+관전자는 호스트의 테마로 화면을 본다 — `st.event` payload 에 `theme?: string` 이
+자동 동봉되고(`game-ws.ts stEvent` 가 `getAppTheme()` 첨부), `/study/watch` 는
+`data-theme` 속성만 일시 오버라이드한다 (언마운트 시 복원, `setAppTheme` 미사용 —
+관전자의 저장 테마·엔타이틀먼트를 오염시키지 않기 위함).

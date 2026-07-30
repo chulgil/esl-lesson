@@ -1,6 +1,6 @@
 # 시스템 아키텍처 개요
 
-> 최종 수정: 2026-07-11
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
 eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 17을 사용하는 2-컨테이너 웹 서비스다. codenavi 서버의 기존 Traefik 1.7 리버스 프록시 뒤에 배포된다.
 
@@ -27,9 +27,12 @@ eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 
                                            |           |
                                 +----------v---+   +---v-----------------+
                                 | PostgreSQL 17|   | 외부 API            |
-                                | (기존 컨테이너|   |  - YouTube (자막)   |
-                                |  DB: englesson)|  |  - Claude API      |
-                                +--------------+   |  - Google OAuth     |
+                                | (기존 컨테이너|   |  - YouTube (자막/   |
+                                |  DB: englesson)|  |    Data API 라이선스)|
+                                +--------------+   |  - Claude API       |
+                                                   |  - Google OAuth     |
+                                                   |  - Voyage (임베딩)  |
+                                                   |  - Web Push (VAPID) |
                                                    +---------------------+
 ```
 
@@ -37,7 +40,7 @@ eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 
 
 | 컴포넌트 | 책임 | 비고 |
 |----------|------|------|
-| frontend (Next.js 15) | 학습 UI, 퀴즈 렌더링, 백오피스 화면, 게임 클라이언트 | 호스트명으로 서비스/백오피스 분기 (middleware) |
+| frontend (Next.js 15) | 학습 UI, 퀴즈 렌더링, 백오피스 화면(`/admin`), 게임 클라이언트 | 단일 도메인 통합(2026-07-12). `esladmin.*` 호스트는 middleware 가 `/admin` 으로 rewrite 하는 하위호환만 유지 (`frontend/src/middleware.ts`) |
 | backend (FastAPI) | 인증(JWT 발급/검증), 콘텐츠/학습 REST API, FSRS 스케줄링, AI 추출 파이프라인, 게임 WebSocket | 단일 컨테이너 안에서 API + 백그라운드 워커 실행 |
 | PostgreSQL 17 | 전 데이터 영속화 | 서버 기존 `postgres` 컨테이너에 DB `englesson` 추가 |
 | Traefik 1.7 | TLS 종료, 도메인/경로 라우팅 | 기존 인프라 그대로 사용, 라벨만 추가 |
@@ -46,10 +49,10 @@ eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 
 
 | 요청 | 라우팅 대상 |
 |------|-------------|
-| `esl.lessonaza.app/*` (아래 제외) | frontend — 학습자 서비스 |
-| `esladmin.lessonaza.app/*` (아래 제외) | frontend — 백오피스 (호스트 기반 분기) |
+| `esl.lessonaza.app/*` (아래 제외) | frontend — 학습자 서비스. 백오피스는 `/admin` 경로 (관리자 역할 검증) |
+| `esladmin.lessonaza.app/*` (하위호환) | frontend — middleware 가 `/admin/*` 으로 rewrite |
 | `*.lessonaza.app/api/*` | backend REST API |
-| `*.lessonaza.app/ws/*` | backend WebSocket (페이즈 2 게임) |
+| `*.lessonaza.app/ws/*` | backend WebSocket (`/ws/game`) |
 
 설계 의도: `/api`를 두 도메인 모두에서 backend로 보내 **프론트가 항상 same-origin으로 API 호출** → CORS 설정과 서드파티 쿠키 이슈를 원천 제거한다. 세션 쿠키는 `Domain=.lessonaza.app`으로 발급해 두 도메인에서 공유한다.
 
@@ -62,11 +65,12 @@ eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 
   --> backend: 콘텐츠 행 생성 (status=pending) --> 202 즉시 응답
   --> [백그라운드 워커]
         1. 유튜브 메타데이터 조회 (제목 자동 기입)
-        2. 자막 추출 (en 필수, ko 있으면 함께)
+        2. 자막 추출 (en 필수, ko 있으면 함께. 서버 IP 차단 시 로컬 수집기 폴백 — /api/agent/*)
         3. ko 자막 없으면 Claude API로 번역 생성
         4. Claude API로 학습 항목 4종 추출 (단어/숙어/패턴/문장)
-        5. status=ready, 항목은 review_status=pending(검수 대기)로 저장
-관리자 -- 추출 결과 검수(승인/수정/제외) --> 학습 풀에 편입
+        5. status=ready, 항목은 review_status=approved 기본으로 저장
+           (opt-out 거절 — backend/app/services/pipeline.py)
+관리자 -- 추출 결과 검수(거절/수정) --> 필요 시 학습 풀에서 제외
 ```
 
 ### 흐름 2: 학습 세션 (서비스)
@@ -79,15 +83,19 @@ eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 
   backend: 채점 --> FSRS rating 매핑 --> 다음 복습 시각 계산 --> 카드 갱신 + 로그 적재
 ```
 
-### 흐름 3: 워드 테트리스 대전 (페이즈 2)
+### 흐름 3: 실시간 게임 (워드 테트리스 등)
 
 ```
-플레이어 --> WS /ws/game (JWT 인증)
+플레이어 --> WS /ws/game (JWT 쿠키 인증)
   matchmaking: 방 코드 매칭(PvP) 또는 AI 봇 배정(PvE)
-  게임 루프: 서버 권위(server-authoritative) 상태 --> 단어 낙하 틱 브로드캐스트
-  플레이어 타이핑 --> 서버 검증 --> 클리어/콤보/공격(garbage) --> 상대에게 전파
+  게임 루프: 서버 권위(server-authoritative) 상태 --> 틱/이벤트 브로드캐스트
+  플레이어 입력 --> 서버 검증 --> 점수/공격 --> 상대에게 전파
   종료 --> 매치 결과 DB 저장
 ```
+
+게임 종류: 워드 테트리스, 타자 레이스, 스크램블 레이스, 딕테이션 배틀, 퀴즈 로얄
+(모두 같은 `/ws/game` 엔드포인트 — `backend/app/api/game.py`, `backend/app/services/game/`).
+같은 WS 채널로 채팅(`chat.*`)·알림(`notif.new`)·학습 관전(`st.*`) 이벤트도 전달된다.
 
 ## 모노레포 구조
 
@@ -99,16 +107,20 @@ eng-lesson/
 │   ├── src/middleware.ts      # 호스트 기반 서비스/백오피스 분기
 │   └── Dockerfile
 ├── backend/                   # FastAPI (Python 3.12, uv)
-│   ├── app/api/               # 라우터 (auth, contents, study, game, admin)
+│   ├── app/api/               # 라우터: auth, contents, my_contents, study, game(+/ws/game),
+│   │                          #   themes, friends, chat, notifications, push, agent,
+│   │                          #   admin_contents, admin_users, admin_themes
 │   ├── app/core/              # 설정, 보안(JWT), DB 세션
 │   ├── app/models/            # SQLAlchemy 모델
-│   ├── app/services/          # 추출 파이프라인, FSRS, 채점
-│   ├── app/workers/           # 백그라운드 추출 워커
+│   ├── app/services/          # 추출 파이프라인, FSRS, 채점, 게임(services/game/)
+│   ├── app/workers/           # 백그라운드 워커 (queue.py 추출, reminders.py 푸시 리마인더)
 │   ├── alembic/               # 마이그레이션
 │   └── Dockerfile
 ├── docs/                      # 본 설계/스펙 문서
 ├── docker-compose.prod.yml    # 배포용 (traefik 라벨 포함)
+├── docker-compose.canary.yml  # red-green 배포 카나리 검증용
 ├── docker-compose.yml         # 로컬 개발용 (postgres 포함)
+├── scripts/deploy.sh          # 서버측 배포 본체 (deployment.md)
 └── .github/workflows/         # ci.yml, deploy.yml
 ```
 

@@ -1,6 +1,6 @@
 # 스펙: 알림 센터
 
-> 최종 수정: 2026-07-28
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
 Jira/Confluence 스타일 개인 알림함. 친구 요청·수락·게임 초대를 행으로 적재하고 네비 벨에서 확인한다. 토스트(휘발)와 달리 놓친 알림을 나중에 볼 수 있다. [chat.md](chat.md) 의 WS 인프라(`/ws/game` 단일 소켓 + `deliver_ws`)를 재사용한다.
 
@@ -8,12 +8,12 @@ Jira/Confluence 스타일 개인 알림함. 친구 요청·수락·게임 초대
 
 | 항목 | 결정 |
 |---|---|
-| 소스 | `friend_request` · `friend_accepted` · `game_invite` 3종 — 각 API 가 커밋 전에 `notify()` 호출 |
+| 소스 | `friend_request` · `friend_accepted` · `game_invite` · `theme_granted`(테마 지급 — theme-mall.md, 2026-07-30 추가) 4종 — 각 API 가 커밋 전에 `notify()` 호출 |
 | 읽음 모델 | 행별 `read_at` (null = 안읽음) — 개별 클릭 읽음 + "모두 읽음". 배지 = 안읽음 총수 |
 | 실시간 | 기존 소켓으로 `notif.new` 푸시 → 벨 즉시 재조회 (60초 폴링은 유실 대비 보조) |
-| 클릭 이동 | friend_request/friend_accepted → `/friends`, game_invite → `/game/{game}?join={code}` |
+| 클릭 이동 | friend_request/friend_accepted → `/friends`, game_invite → `/game/{game}?join={code}`, theme_granted → `/settings` |
 | payload | 발생 시점 스냅샷(닉네임 등) — 원본이 바뀌어도 알림 문구 불변 (`chat_messages.item_ref` 패턴) |
-| 채팅 | 벨 배지에 합산하지 않는다 (채팅 배지는 `ChatNavButton` 담당 — 이중 계산 금지). 드롭다운 첫 행 "새 메시지 N개" 요약만 |
+| 채팅 | 벨 배지 = 알림 unread + 채팅 unread **합산** (2026-07-28 배지 일원화 — 기존 `ChatNavButton` 개별 배지는 제거). 채팅은 행으로 적재하지 않고 드롭다운 첫 행 "새 메시지 N개" 요약만 |
 
 ## 데이터 모델
 
@@ -21,7 +21,7 @@ Jira/Confluence 스타일 개인 알림함. 친구 요청·수락·게임 초대
 notifications
   id BigInt PK              -- id DESC = 최신순
   user_id FK (CASCADE)      -- 탈퇴 시 즉시 파기 (delete_me 명시 삭제 목록 포함)
-  type String(32)           -- friend_request | friend_accepted | game_invite
+  type String(32)           -- friend_request | friend_accepted | game_invite | theme_granted
   payload JSONB             -- 스냅샷 {from_name, ...}
   read_at nullable
   created_at
@@ -46,7 +46,7 @@ notifications
 
 ## 프론트엔드
 
-- `NotificationBell` — AppNav 데스크톱 헤더, `ChatNavButton` 왼쪽. 빨간 배지(99+ 규칙)
+- `NotificationBell` (`frontend/src/components/nav/NotificationBell.tsx`) — AppNav 데스크톱 헤더. 빨간 배지(99+ 규칙). 토글은 pointerdown 활성화(간헐 무반응 차단, c08fdcf), 라우트 변경(pathname) 시 드롭다운 자동 닫힘(025e449)
 - 드롭다운(w-80, 바깥 클릭 닫기): 헤더("알림" + "모두 읽음") → 채팅 요약 행 → 알림 행(안읽음 파란 점 · `timeAgo` · 클릭 시 읽음+이동) → 비면 "새 알림이 없어요"
 - 갱신: 마운트 + 60초 폴링 + `notif.new`/`chat.message`/`chat.read` 이벤트
 

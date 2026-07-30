@@ -1,6 +1,6 @@
 # 기술 스택 선정
 
-> 최종 수정: 2026-07-11
+> 최종 검증: 2026-07-30 (코드 대조 완료)
 
 선정 기준: (1) 유지보수성과 안정성 — 사용자 요구사항 명시 (2) 서버 기존 인프라(Traefik 1.7, PostgreSQL 17, docker-compose 1.29) 재사용 (3) 운영자 1인 프로젝트 — 익숙한 생태계(Python/uv) 우선.
 
@@ -13,11 +13,12 @@
 | 백엔드 | FastAPI + SQLAlchemy 2 + Alembic | Python 3.12, uv |
 | DB | PostgreSQL (기존 컨테이너) | 17 |
 | 인증 | Google OAuth 2.0 (Authorization Code) + 자체 JWT | - |
-| AI | Claude API (`claude-sonnet-5` 기본) | - |
+| AI | Claude API (`claude-sonnet-5` 추출 / `claude-haiku-4-5` 번역·인사이트) | - |
+| 임베딩 | Voyage AI (`voyage-3.5-lite`, 유사단어/오답 선지) | 미설정 시 스킵 |
 | 복습 알고리즘 | FSRS (py-fsrs) | v5 파라미터 |
-| 유튜브 자막 | youtube-transcript-api (1차) + yt-dlp (폴백) | - |
-| 실시간 | FastAPI WebSocket | 페이즈 2 |
-| 배포 | Docker Compose + GitHub Actions (SSH) | - |
+| 유튜브 자막 | youtube-transcript-api (+프록시) / 차단 시 로컬 수집기 폴백 | - |
+| 실시간 | FastAPI WebSocket (`/ws/game` 단일 채널) | 운영 중 |
+| 배포 | GHA 러너 이미지 빌드 + red-green 카나리 (SSH) | - |
 
 ## 계층별 선정 근거
 
@@ -53,7 +54,7 @@
 
 ### AI: Claude API
 
-- 채택 이유: 번역 + 4종 추출(단어/숙어/패턴/문장)을 구조화 출력(JSON)으로 안정 수행. 기본 모델 `claude-sonnet-5` (비용/품질 균형), 대량 배치 시 Haiku 다운시프트 옵션.
+- 채택 이유: 번역 + 4종 추출(단어/숙어/패턴/문장)을 구조화 출력(JSON)으로 안정 수행. 추출은 `claude-sonnet-5`(ANTHROPIC_MODEL), 번역·단어 인사이트는 `claude-haiku-4-5`(대량 배치에서 sonnet thinking 타임아웃 — 2026-07-11 실측, `backend/app/core/config.py`).
 - 기각: **로컬 LLM** — 서버 사양(단일 VPS) 부족. **OpenAI** — 품질 동급이나 운영자 기존 키/생태계가 Anthropic.
 
 ### 복습 알고리즘: FSRS
@@ -61,20 +62,21 @@
 - 채택 이유: 안키 차세대 기본 알고리즘. SM-2 대비 리뷰 횟수 20-30% 절감(동일 기억률 기준) 연구 결과. py-fsrs 공식 구현 존재 — 직접 구현 리스크 제거.
 - 기각: **SM-2** — 구현 단순하나 고정 간격 공식의 한계. **Leitner 박스** — 데모 수준에 적합, "인지과학적으로 잊어버릴 만한 주기" 요구에 미달.
 
-### 유튜브 자막: youtube-transcript-api + yt-dlp 폴백
+### 유튜브 자막: youtube-transcript-api + 로컬 수집기 폴백
 
-- 채택 이유: youtube-transcript-api는 자막 전용 경량 라이브러리(수동/자동 자막, 다국어). 차단/실패 시 yt-dlp로 폴백. 자막이 아예 없는 영상은 "수기 입력" 경로로 안내 (오디오 STT는 범위 외 — 페이즈 3 후보).
+- 채택 이유: youtube-transcript-api는 자막 전용 경량 라이브러리(수동/자동 자막, 다국어). 서버(클라우드 IP) 차단 대응은 2단: (1) Webshare/일반 HTTP 프록시 (`WEBSHARE_PROXY_*`, `YT_PROXY_URL`), (2) 집 IP 의 로컬 자막 수집기가 `/api/agent/*` 를 폴링해 대신 제출 (`backend/scripts/transcript_agent.py` — 여기서만 yt-dlp 사용). 자막이 아예 없는 영상은 "수기 입력" 경로로 안내 (오디오 STT는 범위 외 — 페이즈 3 후보).
 - 기각: **YouTube Data API 공식** — 자막 다운로드(captions.download)는 영상 소유자만 가능해 용도 불충족. 메타데이터(제목)는 oEmbed/yt-dlp로 충분.
 
-### 실시간(페이즈 2): FastAPI WebSocket
+### 실시간: FastAPI WebSocket
 
 - 채택 이유: 백엔드 단일 컨테이너 유지. 방(room) 상태는 인메모리(단일 프로세스) — 개인 프로젝트 규모에 충분.
 - 기각: **Socket.IO 별도 Node 서버** — 재접속/룸 편의 기능은 좋으나 컨테이너/언어 추가 비용이 규모 대비 과함. **Redis pub/sub** — 다중 프로세스 확장 시점에 도입(현재 불필요).
 
-### 배포: Docker Compose + GitHub Actions SSH
+### 배포: GHA 러너 빌드 + red-green 카나리 (Docker Compose)
 
-- 채택 이유: 서버 기존 패턴(lessonaza: `~/apps/<repo>` + docker-compose.prod.yml + traefik 라벨)과 동일 — 운영 일관성. main push → Actions가 SSH로 `git pull && docker-compose up -d --build`.
-- 기각: **Jenkins(서버 내 존재)** — 유지 중인지 불명확, GitHub Actions가 저장소와 밀착. **레지스트리 경유(GHCR pull)** — 이미지 push/pull 왕복보다 서버 빌드가 단순(단일 서버라 빌드 캐시 이점).
+- 채택 이유: 서버 기존 패턴(lessonaza: `~/apps/<repo>` + docker-compose.prod.yml + traefik 라벨)과 동일 — 운영 일관성. main push → CI 통과 → 러너에서 이미지 빌드(buildx, GHA 캐시) → scp 전송 → 서버는 load + 카나리 검증 + 승격만 (상세: [deployment.md](deployment.md)).
+- 변경(2026-07-28): 초기 "서버에서 `git pull && docker-compose up -d --build`" 방식은 2GB 서버에서 빌드 중 라이브 서비스가 질식해 러너 빌드로 이전.
+- 기각: **Jenkins(서버 내 존재)** — 유지 중인지 불명확, GitHub Actions가 저장소와 밀착. **레지스트리 경유(GHCR pull)** — 러너 빌드 후 scp tar 전송으로 충분, 레지스트리 인증/보존 관리 불필요.
 
 ## 버전 고정 정책
 
