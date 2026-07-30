@@ -80,6 +80,20 @@ function WatchInner() {
     setChat("");
   }
 
+  // 관전 중에는 호스트의 테마로 화면을 본다 — data-theme 속성만 일시 오버라이드.
+  // setAppTheme 금지: localStorage 에 저장돼 관전자 설정이 호스트 테마로 굳는다.
+  useEffect(() => {
+    const hostTheme = event?.theme;
+    if (!hostTheme) return;
+    const root = document.documentElement;
+    const prev = root.getAttribute("data-theme");
+    root.setAttribute("data-theme", hostTheme);
+    return () => {
+      if (prev) root.setAttribute("data-theme", prev);
+      else root.removeAttribute("data-theme");
+    };
+  }, [event?.theme]);
+
   // 친구 페이지에서 ?code= 로 진입 → 자동 관전 요청
   useEffect(() => {
     if (!code) return;

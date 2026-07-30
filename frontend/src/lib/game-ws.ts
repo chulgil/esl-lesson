@@ -1,5 +1,7 @@
 /** 워드 테트리스 WS 클라이언트 (docs/specs/word-tetris.md 프로토콜) */
 
+import { getAppTheme } from "@/lib/theme";
+
 export interface BrickState {
   id: number;
   display: string;
@@ -263,6 +265,8 @@ export type DtMsg =
 /** 학습 관전 — 승인제 릴레이 (docs/specs/study-spectate.md) */
 export interface StEventPayload {
   phase: string;
+  /** 호스트의 앱 테마 — 관전 화면을 호스트 테마로 렌더 (2026-07-30, theme-mall.md) */
+  theme?: string;
   index?: number;
   total?: number;
   correct_count?: number;
@@ -478,7 +482,8 @@ export class GameSocket {
     this.send({ t: "st.allow", watcher_id: watcherId, allow });
   }
   stEvent(payload: object): void {
-    this.send({ t: "st.event", payload });
+    // 관전자는 호스트의 테마로 화면을 본다 — 송신부 한 곳에서 자동 동봉
+    this.send({ t: "st.event", payload: { ...payload, theme: getAppTheme() } });
   }
   scSolo(): void {
     this.send({ t: "sc.solo" });
