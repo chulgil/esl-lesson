@@ -8,8 +8,9 @@
 
 | 단계 | 상태 | 내용 |
 |---|---|---|
-| 무료 | 운영 중 | note/candy/lego/excel — 전원 사용 가능, grant 불필요 |
-| 이벤트 지급 | **현재 (이번 범위)** | restricted 테마를 백오피스에서 이메일로 수동 지급/회수. cat 은 초기 2계정 전용 |
+| 무료 | 운영 중 | note 하나만 전원 사용 가능 (2026-07-30 전환 — 기본 테마는 노트뿐) |
+| 업적 보상 | **운영 중** | theme_reward_rules 매핑으로 업적 달성 시 자동 지급 (첫 친구→candy, 첫 게임→lego). 백오피스에서 규칙 관리 |
+| 이벤트 지급 | 운영 중 | restricted 테마를 백오피스에서 이메일로 수동 지급/회수. cat 은 초기 2계정 전용 |
 | 유료 판매 | 후속 | `THEME_ACCESS` 에 "paid" 값 추가 + PG 연동. purchases 테이블(결제 이력)·환불 정책은 **결제 수단 결정 후** 별도 스펙 |
 
 - 유료 전환 시에도 `theme_grants` 가 "보유"의 단일 근거 — 구매 성공 = grant INSERT. 결제 이력(금액·PG 승인번호·환불)은 별도 purchases 테이블로 분리한다.
@@ -39,7 +40,7 @@ theme_settings (c8d9e0f1a2b3, 2026-07-30)
   theme_key String(32) PK -- THEME_ACCESS 의 키
   access String(16)       -- "free" | "restricted" (오버라이드)
 
-theme_reward_rules (d0e1f2a3b4c5, 2026-07-30)
+theme_reward_rules (d1e2f3a4b5c6, 2026-07-30)
   id PK
   achievement_key String(64) -- achievements.DEFINITIONS 의 키
   theme_key String(32)       -- unique(achievement_key, theme_key)
