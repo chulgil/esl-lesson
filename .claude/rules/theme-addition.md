@@ -1,0 +1,63 @@
+# Theme Addition — 신규 테마(템플릿) 추가 체크리스트
+
+> 트리거: 사용자가 "새 테마/템플릿 추가" 를 요청할 때 이 체크리스트 전체를 순서대로 적용한다.
+> 배경: school 테마가 부트 화이트리스트 누락으로 새로고침 시 풀리는 사고(2026-07-31),
+> 게임 낙하물이 테마 미적용으로 남았던 누락(2026-07-31)에서 도출. 한 곳이라도 빠지면
+> "배경만 바뀌는 테마" 가 된다.
+
+## 원칙
+
+- **단일 레지스트리**: 표면 스킨은 `theme-surfaces.ts`, 게임 보드는 `BoardCanvas` 3함수가
+  전부다. 화면별 개별 테마 분기 코드를 새로 만들지 않는다 (Lore-directive 86bbbc4).
+- 아래 체크리스트를 **전부 완료**해야 "테마 추가 완료" 를 선언할 수 있다.
+  일부만 하고 완료 선언 금지 (verification.md Iron Law).
+
+## 체크리스트 (파일 순서대로)
+
+### 1. 프론트 코어 (필수 — 하나라도 빠지면 테마가 동작하지 않음)
+
+- [ ] `frontend/src/lib/theme.ts` — `APP_THEMES` 에 항목 추가 (key/label/desc/swatch)
+- [ ] `frontend/src/app/globals.css` — `html[data-theme=X]` 블록:
+  - 색 토큰: `--color-brick-*` 재정의. **`--color-brick-label` 대비 필수 확인**
+    (파스텔 배경이면 잉크색 — 흰 글씨는 대비 미달. candy/cat 선례)
+  - 형태 토큰: `--radius-*`, 그림자 (테마 성격에 맞게 — 레고=하드섀도, 학교=플랫)
+  - 배경 패턴 (모눈/스터드/발도장 등)
+- [ ] `frontend/src/app/layout.tsx` — **부트 스크립트 테마 화이트리스트에 key 추가**
+  (누락 시 새로고침에서 테마 풀림 — school 사고 재발 방지)
+- [ ] `frontend/src/lib/theme-surfaces.ts` — 4개 레지스트리 전부:
+  - `SURFACE_SKINS` — 시험지·학습 카드·OMR·선지(퀴즈/어순 칩 공용) 스킨 1벌
+  - `CLOCK_OF` — 시험 경과 시계 종류
+  - `CHAT_LABEL_OF` — 채팅 메뉴 라벨 (교환 노트/공유 문서 등 위장 명칭)
+  - `BoardSkinTheme`/`boardThemeOf` — 게임 보드 전용 스킨 여부 결정
+    (위장 테마면 note 폴백 허용 — excel 선례)
+- [ ] `frontend/src/components/game/BoardCanvas.tsx` — 전용 보드 스킨을 주는 경우:
+  `THEME_BORDER` + `PALETTES`(낙하물 색·텍스트) + `drawBackground`(보드 배경) +
+  `drawBrickBody`(낙하물 오브젝트 — 테마 은유 물체로. 젤리/쪽지/브릭/지우개 선례)
+
+### 2. 프론트 부가 (해당 시)
+
+- [ ] 채팅 위장 스킨 — 기본은 `NoteSkin` 재사용. 새 위장 컨셉이면 스킨 1개 추가
+  (docs/specs/chat.md 위장 계약: 말풍선·아바타 금지)
+- [ ] 마스코트/캐릭터가 있는 테마 — 플로팅 슬롯 기준 준수
+  (우하단=채팅 런처, 좌하단=마스코트. docs/specs/ui-design.md)
+- [ ] 시험 타이머 장식 (`ExamTimer` — CLOCK_OF 종류에 장식 분기가 필요한 경우)
+
+### 3. 백엔드 (필수)
+
+- [ ] `backend/app/services/themes.py` — `THEME_ACCESS` 에 free/restricted 등록
+  (기본은 restricted — 무료 기본 테마는 note 뿐)
+- [ ] 해금 경로 결정 — 업적 보상이면 백오피스 테마 규칙(업적→테마 매핑) 등록,
+  이벤트 지급이면 grant 이력 방식 (지급분은 스펙 변경과 무관하게 영구 보유)
+
+### 4. 문서·검증 (필수)
+
+- [ ] `docs/specs/theme-mall.md` — 테마 목록·해금 조건 갱신
+- [ ] 실기 스윕: 새 테마로 전환 후 **홈/학습/라이브러리/시험(응시+OMR+시계)/게임
+  (테트리스 보드+퀴즈 선지+어순 칩)/채팅(메뉴 라벨+위장)/설정** 전 화면 확인
+- [ ] 대비 확인: 유색 배경 버튼 글자가 `text-brick-label` 을 쓰는지 (text-white 금지)
+- [ ] 새로고침 후 테마 유지 확인 (부트 화이트리스트 검증)
+
+## 완료 선언 조건
+
+체크리스트 전 항목 + tsc·lint·빌드 그린 + 실기 스윕 증거. "코어만 하고 부가는 나중에"
+는 금지 — 부분 적용 테마는 사용자에게 "배경만 바뀐다" 로 보고된다 (2026-07-31 실사례).
