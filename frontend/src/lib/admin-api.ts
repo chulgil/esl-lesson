@@ -102,6 +102,28 @@ export interface ContentPermission {
   note?: string;
 }
 
+/** 시험지 문항 미리보기 — 검수용이라 정답(answer_index) 포함 */
+export interface AdminExamQuestion {
+  seq: number;
+  quiz_mode: string;
+  prompt: string;
+  prompt_ko: string | null;
+  choices: string[];
+  answer_index: number;
+  en_text: string;
+  ko_text: string;
+}
+
+export interface AdminExam {
+  exam_id: number;
+  round: number;
+  status: "active" | "archived";
+  question_count: number;
+  submitted_count: number;
+  created_at: string;
+  questions: AdminExamQuestion[];
+}
+
 export const adminApi = {
   dashboard: () =>
     request<{
@@ -181,6 +203,16 @@ export const adminApi = {
       `/api/admin/contents/${contentId}/approve-all`,
       { method: "POST" },
     ),
+
+  /** 시험지 생성/재생성 — 기존 active 는 archived, 새 회차 active (library-exam) */
+  createExam: (contentId: number) =>
+    request<{ exam_id: number; round: number; question_count: number }>(
+      `/api/admin/contents/${contentId}/exam`,
+      { method: "POST" },
+    ),
+
+  listExams: (contentId: number) =>
+    request<{ items: AdminExam[] }>(`/api/admin/contents/${contentId}/exams`),
 
   listUsers: () => request<{ items: AdminUser[] }>("/api/admin/users"),
 
