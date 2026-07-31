@@ -588,9 +588,8 @@ async def test_deleted_last_message_preview(client, db_session):
     (재검토: body/첨부 소거 상태를 "[단어 카드]" 로 오표기하던 문제)"""
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
-    sent = (
-        await client.post("/api/chat/messages", json=send_body(b.id, "마지막 메시지", "cid-del00004"))
-    ).json()
+    body = send_body(b.id, "마지막 메시지", "cid-del00004")
+    sent = (await client.post("/api/chat/messages", json=body)).json()
     await client.delete(f"/api/chat/messages/{sent['id']}")
 
     convs = (await client.get("/api/chat/conversations")).json()["items"]
