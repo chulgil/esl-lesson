@@ -51,7 +51,9 @@ exam_attempts               -- 응시 1회. 인덱스 (exam_id, user_id)
 |---|---|
 | GET /api/exams/open | 열린 시험 목록 (active 만, 최신순) — content_title/응시자 수/my_best/top_name. 학습 허브 도전 카드·라이브러리 시험 칩용 (2026-07-31) |
 | GET /api/contents/{id}/exam | 활성 시험 요약 — exam_id/round/question_count/응시자 수/my_best/TOP3. 없으면 `{exam_id: null}` |
-| POST /api/exams/{id}/attempts | 응시 시작 — attempt 생성 + 정답 없는 문항. archived 409 `exam_archived` |
+| POST /api/exams/{id}/attempts | 응시 시작 — attempt 생성 + 정답 없는 문항 + started_at. archived 409 `exam_archived` |
+| GET /api/exams/{id}/attempts/{aid} | **진행 중 응시 재개** (2026-07-31) — 서버 저장 started_at·문항 복원. 본인·미제출만, 그 외 404 |
+| DELETE /api/exams/{id}/attempts/{aid} | **응시 포기(초기화)** — 미제출 attempt 삭제(랭킹 무영향), 경과 리셋. 제출분 409 |
 | POST /api/exams/{id}/attempts/{aid}/submit | 서버 채점 — score=정답수x5, duration 서버 시각차. 결과+순위+복기+**xp_gained**. 1위가 바뀌면 이전 1위에게 `exam_dethroned` 알림 (자기 갱신·최초 등극 제외) |
 | GET /api/exams/{id}/rankings | TOP 50 + 내 순위(me) — nickname 없으면 name 폴백, is_me 플래그 |
 | POST /api/admin/contents/{id}/exam | 생성/재생성 (require_admin). 부족 422 `not_enough_items` |
@@ -81,6 +83,13 @@ exam_attempts               -- 응시 1회. 인덱스 (exam_id, user_id)
 
 - 집계는 제출 완료 attempt 만 (`achievements.compute` — 진행 중/이탈 무영향). 순위를 뺏기면 champion 스티커는 꺼질 수 있으나 테마 grant 는 영구 (theme-mall.md 기존 원칙).
 - 테마 보상: `theme_reward_rules` 에 exam 업적 키를 매핑하면 기존 `sync_theme_rewards` 가 그대로 지급 — **엔진 무수정** (예: exam_perfect -> excel).
+
+## 경과 시계·재개 (2026-07-31)
+
+- 응시 화면 헤더에 경과 mm:ss — **기준은 서버 started_at** (화면 이탈·새로고침에도 이어짐). 표시는 안내용, 판정은 서버 duration.
+- 시계 컨셉은 테마별 (`theme-surfaces CLOCK_OF`): 노트·학교=벽시계 / 캔디=막대사탕 / 레고=디지털 브릭 / 헤냥이=고양이 / 오피스=상태바 셀. 분침·초침 실회전.
+- 요약에 `my_open_attempt` — intro 에서 [이어서 응시 (경과 계속)] + [새로 시작], 응시 중 [포기하기 (경과 초기화)]. 마킹은 localStorage(attempt 단위) 임시 저장 — 제출·포기 시 제거.
+- 시험지 표면은 테마별 스킨 (`theme-surfaces SURFACE_SKINS`): 노트=종이 시험지 / 캔디=화이트보드 / 레고=블록판 / 헤냥이=칠판(분필) / 오피스=평가서 시트 / 학교수업=갱지 시험지.
 
 ## 프론트
 

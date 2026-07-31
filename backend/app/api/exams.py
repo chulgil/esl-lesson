@@ -179,7 +179,31 @@ async def exam_summary(
             }
             for row in rows[:3]
         ],
+        # 진행 중(미제출) attempt — 재진입 시 "이어서 응시" 안내 (경과 영속, 2026-07-31)
+        "my_open_attempt": await _open_attempt_of(db, exam.id, user.id),
     }
+
+
+async def _open_attempt_of(db: AsyncSession, exam_id: int, user_id: int) -> dict | None:
+    row = (
+        (
+            await db.execute(
+                select(ExamAttempt)
+                .where(
+                    ExamAttempt.exam_id == exam_id,
+                    ExamAttempt.user_id == user_id,
+                    ExamAttempt.submitted_at.is_(None),
+                )
+                .order_by(ExamAttempt.id.desc())
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if row is None:
+        return None
+    return {"attempt_id": row.id, "started_at": _aware(row.started_at).isoformat()}
 
 
 @router.post("/exams/{exam_id}/attempts")
@@ -224,17 +248,78 @@ async def start_attempt(
     await db.commit()
     return {
         "attempt_id": attempt.id,
-        "questions": [
-            {
-                "seq": q.seq,
-                "quiz_mode": q.payload.get("quiz_mode"),
-                "prompt": q.payload.get("prompt"),
-                "prompt_ko": q.payload.get("prompt_ko"),
-                "choices": q.payload.get("choices", []),
-            }
-            for q in questions
-        ],
+        "started_at": _aware(attempt.started_at).isoformat(),
+        "questions": _public_questions(questions),
     }
+
+
+def _public_questions(questions: list[ExamQuestion]) -> list[dict]:
+    """정답(answer_index) 없는 공개 문항 — 시작·재개 공용 직렬화."""
+    return [
+        {
+            "seq": q.seq,
+            "quiz_mode": q.payload.get("quiz_mode"),
+            "prompt": q.payload.get("prompt"),
+            "prompt_ko": q.payload.get("prompt_ko"),
+            "choices": q.payload.get("choices", []),
+        }
+        for q in questions
+    ]
+
+
+@router.get("/exams/{exam_id}/attempts/{attempt_id}")
+async def resume_attempt(
+    exam_id: int,
+    attempt_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """진행 중 attempt 재개 — 서버 저장 시작 시각과 문항 복원 (경과 영속).
+
+    본인·미제출만. 제출/삭제된 attempt 는 404 (2026-07-31)."""
+    attempt = await db.get(ExamAttempt, attempt_id)
+    if (
+        attempt is None
+        or attempt.exam_id != exam_id
+        or attempt.user_id != user.id
+        or attempt.submitted_at is not None
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "attempt not found")
+    questions = (
+        (
+            await db.execute(
+                select(ExamQuestion)
+                .where(ExamQuestion.exam_id == exam_id)
+                .order_by(ExamQuestion.seq)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "attempt_id": attempt.id,
+        "started_at": _aware(attempt.started_at).isoformat(),
+        "questions": _public_questions(questions),
+    }
+
+
+@router.delete("/exams/{exam_id}/attempts/{attempt_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def abandon_attempt(
+    exam_id: int,
+    attempt_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """응시 포기(초기화) — 미제출 attempt 삭제, 경과 시간 리셋 (2026-07-31).
+
+    제출된 attempt 는 랭킹 반영분이라 삭제 불가 409."""
+    attempt = await db.get(ExamAttempt, attempt_id)
+    if attempt is None or attempt.exam_id != exam_id or attempt.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "attempt not found")
+    if attempt.submitted_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "already_submitted")
+    await db.delete(attempt)
+    await db.commit()
 
 
 class SubmitBody(BaseModel):

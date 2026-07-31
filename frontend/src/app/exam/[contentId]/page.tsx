@@ -14,7 +14,7 @@ import {
   type ExamQuestion,
   type ExamSummary,
 } from "@/lib/exam-api";
-import { type AppTheme, useAppTheme } from "@/lib/theme";
+import { SURFACE_SKINS, useSurfaceSkin } from "@/lib/theme-surfaces";
 
 /** 시험지 화면 — OMR 답안지 컨셉 (docs/specs/library-exam.md).
  *  intro(요약) -> taking(문항+마킹 그리드) -> result(도장·복기) -> rankings.
@@ -30,106 +30,6 @@ const MODE_LABELS: Record<string, string> = {
 };
 
 const CHOICE_MARKS = ["1", "2", "3", "4"];
-
-/** 테마별 시험지 스킨 — 같은 레이아웃(문항+OMR)에 표면 컨셉만 바꾼다 (2026-07-31 요청).
- *  노트=종이 시험지 / 캔디=화이트보드(마커) / 레고=블록판(스터드) /
- *  헤냥이=칠판(분필) / 오피스=평가서 시트(위장). OMR·채점 로직은 공통. */
-const EXAM_SKINS: Record<
-  AppTheme,
-  {
-    section: string;
-    band: string;
-    bandTitle: string;
-    bandMeta: string;
-    divider: string;
-    number: string;
-    prompt: string;
-    promptSub: string;
-    choice: string;
-    choiceSelected: string;
-    mark: string;
-    markSelected: string;
-    studs?: boolean;
-    paw?: boolean;
-  }
-> = {
-  note: {
-    section: "rounded-lg border-2 border-ink/15 bg-white",
-    band: "border-4 border-double border-ink/50 px-3 py-2 text-center",
-    bandTitle: "font-hand text-lg leading-tight font-bold",
-    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-60",
-    divider: "mb-3 border-b border-dashed border-ink/25",
-    number: "text-xs font-bold opacity-60",
-    prompt: "text-lg font-medium",
-    promptSub: "mt-1 text-sm opacity-60",
-    choice: "border-ink/20 bg-white hover:border-brick-blue/60",
-    choiceSelected: "border-brick-blue bg-brick-blue/10 font-bold",
-    mark: "border-ink/30",
-    markSelected: "border-brick-blue bg-brick-blue text-white",
-  },
-  candy: {
-    section: "rounded-3xl border-4 border-brick-blue/25 bg-white shadow-inner",
-    band: "rounded-full bg-highlight/70 px-4 py-2 text-center",
-    bandTitle:
-      "font-hand text-lg leading-tight font-bold underline decoration-brick-red/50 decoration-wavy underline-offset-4",
-    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-60",
-    divider: "mb-3 border-b-2 border-dotted border-brick-blue/25",
-    number: "text-xs font-bold text-brick-red/70",
-    prompt: "text-lg font-medium",
-    promptSub: "mt-1 text-sm opacity-60",
-    choice:
-      "rounded-full border-brick-blue/25 bg-white hover:border-brick-red/50",
-    choiceSelected: "rounded-full border-brick-red bg-brick-red/10 font-bold",
-    mark: "border-brick-blue/40",
-    markSelected: "border-brick-red bg-brick-red text-white",
-  },
-  lego: {
-    section: "rounded-md border-4 border-ink bg-white",
-    band: "relative rounded-sm border-2 border-ink bg-brick-yellow/60 px-3 pt-3 pb-2 text-center",
-    bandTitle: "font-hand text-lg leading-tight font-bold",
-    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-70",
-    divider: "mb-3 border-b-2 border-ink/20",
-    number: "text-xs font-bold opacity-60",
-    prompt: "text-lg font-bold",
-    promptSub: "mt-1 text-sm opacity-60",
-    choice: "rounded-sm border-ink/40 bg-white hover:border-ink",
-    choiceSelected: "rounded-sm border-ink bg-brick-blue/15 font-bold",
-    mark: "rounded-sm border-ink/50",
-    markSelected: "rounded-sm border-ink bg-brick-blue text-white",
-    studs: true,
-  },
-  cat: {
-    // 칠판 — 분필 글씨. 어두운 면이라 텍스트·테두리를 밝게 뒤집는다
-    section: "rounded-lg border-8 border-[#6b4a2f] bg-[#2f4640] text-[#f4f1e8]",
-    band: "relative border-2 border-dashed border-[#f4f1e8]/50 px-3 py-2 text-center",
-    bandTitle: "font-hand text-lg leading-tight font-bold",
-    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-70",
-    divider: "mb-3 border-b border-dashed border-[#f4f1e8]/30",
-    number: "text-xs font-bold opacity-70",
-    prompt: "font-hand text-lg font-medium",
-    promptSub: "mt-1 text-sm opacity-70",
-    choice: "border-[#f4f1e8]/40 bg-white/5 hover:border-brick-yellow/70",
-    choiceSelected: "border-brick-yellow bg-white/15 font-bold",
-    mark: "border-[#f4f1e8]/50",
-    markSelected: "border-brick-yellow bg-brick-yellow text-ink",
-    paw: true,
-  },
-  excel: {
-    // 평가서 시트 위장 — 셀 헤더 스트립 + 격자 느낌
-    section: "rounded-sm border border-[#c9cfd6] bg-white font-sans",
-    band: "border border-[#c9cfd6] bg-[#e2efda] px-3 py-1.5 text-left",
-    bandTitle: "text-sm font-bold text-[#217346]",
-    bandMeta: "mt-0 text-[10px] text-[#666]",
-    divider: "mb-3 border-b border-[#e3e7eb]",
-    number: "text-xs font-bold text-[#666]",
-    prompt: "text-base font-medium text-[#24292f]",
-    promptSub: "mt-1 text-sm text-[#666]",
-    choice: "rounded-sm border-[#c9cfd6] bg-white hover:bg-[#f6f8f9]",
-    choiceSelected: "rounded-sm border-[#217346] bg-[#e2efda] font-bold",
-    mark: "rounded-sm border-[#c9cfd6]",
-    markSelected: "rounded-sm border-[#217346] bg-[#217346] text-white",
-  },
-};
 
 export default function ExamPage() {
   const { contentId } = useParams<{ contentId: string }>();
@@ -157,18 +57,41 @@ export default function ExamPage() {
     loadSummary();
   }, [loadSummary]);
 
+  // 새로고침·재진입 대비 마킹 임시 저장 (attempt 단위) — 제출·포기 시 제거
+  const marksKey = (id: number) => `exam-marks-${id}`;
+
+  function enterTaking(
+    started: { attempt_id: number; started_at: string; questions: typeof questions },
+    restoreMarks: boolean,
+  ) {
+    setAttemptId(started.attempt_id);
+    setQuestions(started.questions);
+    let restored: (number | null)[] | null = null;
+    if (restoreMarks) {
+      try {
+        const raw = localStorage.getItem(marksKey(started.attempt_id));
+        const parsed = raw ? (JSON.parse(raw) as (number | null)[]) : null;
+        if (parsed && parsed.length === started.questions.length) restored = parsed;
+      } catch {
+        // 복원 실패는 빈 답안으로 진행
+      }
+    }
+    const marks = restored ?? Array(started.questions.length).fill(null);
+    setAnswers(marks);
+    const firstBlank = marks.findIndex((a) => a == null);
+    setCurrent(firstBlank >= 0 ? firstBlank : 0);
+    setGraded(null);
+    // 경과 기준 = 서버 저장 시작 시각 — 화면을 떠났다 와도 이어진다 (2026-07-31)
+    setStartedAt(Date.parse(started.started_at));
+    setPhase("taking");
+  }
+
   async function start() {
     if (summary?.exam_id == null) return;
     setError(null);
     try {
       const started = await examApi.start(summary.exam_id);
-      setAttemptId(started.attempt_id);
-      setQuestions(started.questions);
-      setAnswers(Array(started.questions.length).fill(null));
-      setCurrent(0);
-      setGraded(null);
-      setStartedAt(Date.now());
-      setPhase("taking");
+      enterTaking(started, false);
     } catch (e) {
       // 회차 전환 경합 — archived 시험은 새 응시 불가, 요약을 새로 받는다
       if (e instanceof Error && e.message === "exam_archived") {
@@ -185,12 +108,48 @@ export default function ExamPage() {
   function mark(choice: number) {
     const next = answers.map((a, idx) => (idx === current ? choice : a));
     setAnswers(next);
+    if (attemptId != null) {
+      try {
+        localStorage.setItem(marksKey(attemptId), JSON.stringify(next));
+      } catch {
+        // 저장 실패해도 응시는 계속
+      }
+    }
     // 다음 미마킹 문항으로 자동 이동 — OMR 답안지 흐름
     const following = [...next.keys()].find(
       (idx) => idx > current && next[idx] == null,
     );
     const anyBlank = [...next.keys()].find((idx) => next[idx] == null);
     setCurrent(following ?? anyBlank ?? current);
+  }
+
+  async function resume() {
+    const open = summary?.my_open_attempt;
+    if (summary?.exam_id == null || !open) return;
+    setError(null);
+    try {
+      const started = await examApi.resume(summary.exam_id, open.attempt_id);
+      enterTaking(started, true);
+    } catch {
+      // 이미 제출/삭제된 attempt — 요약 새로고침 후 새 응시 유도
+      loadSummary();
+      setError("이어할 응시가 없어요 — 새로 시작해 주세요.");
+    }
+  }
+
+  async function abandon() {
+    if (summary?.exam_id == null || attemptId == null) return;
+    if (!confirm("이번 응시를 포기할까요? 경과 시간이 초기화돼요.")) return;
+    try {
+      await examApi.abandon(summary.exam_id, attemptId);
+    } catch {
+      // 이미 정리된 attempt — 무시하고 처음 화면으로
+    }
+    localStorage.removeItem(marksKey(attemptId));
+    setAttemptId(null);
+    setStartedAt(null);
+    setPhase("intro");
+    loadSummary();
   }
 
   async function submit() {
@@ -206,6 +165,7 @@ export default function ExamPage() {
       );
       setGraded(result);
       setPhase("result");
+      if (attemptId != null) localStorage.removeItem(marksKey(attemptId));
       loadSummary();
     } catch (e) {
       setError(e instanceof Error ? e.message : "제출하지 못했어요");
@@ -216,8 +176,8 @@ export default function ExamPage() {
 
   const question = questions[current];
   const allMarked = answers.length > 0 && answers.every((a) => a != null);
-  const theme = useAppTheme();
-  const skin = EXAM_SKINS[theme] ?? EXAM_SKINS.note;
+  const skin = useSurfaceSkin();
+  const excelDisguise = skin === SURFACE_SKINS.excel;
 
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-5 sm:px-16 sm:py-10">
@@ -242,7 +202,9 @@ export default function ExamPage() {
       {error && <p className="mb-3 text-sm text-brick-red">{error}</p>}
 
       <div className="mx-auto max-w-3xl">
-        {phase === "intro" && <Intro summary={summary} onStart={start} />}
+        {phase === "intro" && (
+          <Intro summary={summary} onStart={start} onResume={resume} />
+        )}
 
         {phase === "taking" && question && (
           // pb: 모바일 하단 고정 OMR 패널 실측 ~200px + iOS 홈바 — 마지막 문항
@@ -263,7 +225,7 @@ export default function ExamPage() {
                 )}
                 {skin.paw && <PawPrint />}
                 <p className={skin.bandTitle}>
-                  {theme === "excel"
+                  {excelDisguise
                     ? `평가서_${summary?.round ?? 1}회.xlsx`
                     : `제${summary?.round ?? 1}회 어학 평가`}
                 </p>
@@ -327,6 +289,13 @@ export default function ExamPage() {
                     ? "제출하기"
                     : "전부 마킹하면 제출할 수 있어요"}
               </button>
+              <button
+                type="button"
+                onClick={abandon}
+                className="mt-1.5 min-h-9 w-full text-xs opacity-50 hover:underline hover:opacity-80"
+              >
+                포기하기 (경과 초기화)
+              </button>
             </aside>
           </div>
         )}
@@ -379,9 +348,11 @@ function PawPrint() {
 function Intro({
   summary,
   onStart,
+  onResume,
 }: {
   summary: ExamSummary | null;
   onStart: () => void;
+  onResume: () => void;
 }) {
   if (!summary) return <p className="text-sm opacity-60">불러오는 중...</p>;
   if (summary.exam_id == null) {
@@ -425,13 +396,35 @@ function Intro({
           ))}
         </ol>
       )}
-      <button
-        type="button"
-        onClick={onStart}
-        className="mt-4 min-h-11 w-full rounded-md bg-brick-blue font-bold text-white shadow-sm transition hover:opacity-90 sm:w-auto sm:px-8"
-      >
-        응시 시작
-      </button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {summary.my_open_attempt ? (
+          <>
+            {/* 진행 중 응시 — 경과는 서버 시작 시각부터 이어진다 (포기해야 초기화) */}
+            <button
+              type="button"
+              onClick={onResume}
+              className="min-h-11 rounded-md bg-brick-blue px-6 font-bold text-white shadow-sm transition hover:opacity-90"
+            >
+              이어서 응시 (경과 계속)
+            </button>
+            <button
+              type="button"
+              onClick={onStart}
+              className="min-h-11 rounded-md border-2 border-ink/25 bg-white px-4 font-bold transition hover:border-brick-red hover:text-brick-red"
+            >
+              새로 시작
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={onStart}
+            className="min-h-11 w-full rounded-md bg-brick-blue font-bold text-white shadow-sm transition hover:opacity-90 sm:w-auto sm:px-8"
+          >
+            응시 시작
+          </button>
+        )}
+      </div>
     </div>
   );
 }

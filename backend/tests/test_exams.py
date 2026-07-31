@@ -607,3 +607,46 @@ async def test_private_content_exam_hidden_from_nonsubscriber(client, admin_clie
     assert (await client.get(f"/api/contents/{content.id}/exam")).json()["exam_id"] is None
     assert (await client.post(f"/api/exams/{exam_id}/attempts")).status_code == 404
     assert (await client.get(f"/api/exams/{exam_id}/rankings")).status_code == 404
+
+
+async def test_attempt_resume_and_abandon(client, admin_client, db_session):
+    """경과 영속 — 요약에 진행 중 attempt 노출, 재개로 문항·시작시각 복원,
+    포기(DELETE)로 초기화 (2026-07-31 요청)."""
+    _content, exam_id = await make_exam(admin_client, db_session, count=5)
+    await login(client, db_session)
+
+    attempt_id = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+
+    # 요약 — 진행 중 attempt 가 노출된다 (재진입 시 이어서 응시 안내용)
+    summary = (await client.get(f"/api/contents/{_content.id}/exam")).json()
+    assert summary["my_open_attempt"]["attempt_id"] == attempt_id
+    assert summary["my_open_attempt"]["started_at"]
+
+    # 재개 — 시작 시각(서버 저장)과 정답 없는 문항 복원
+    resumed = (await client.get(f"/api/exams/{exam_id}/attempts/{attempt_id}")).json()
+    assert resumed["attempt_id"] == attempt_id
+    assert resumed["started_at"] == summary["my_open_attempt"]["started_at"]
+    assert len(resumed["questions"]) == 5
+    assert all("answer_index" not in q for q in resumed["questions"])
+
+    # 포기 — attempt 삭제(랭킹 무영향), 요약에서 사라짐
+    assert (await client.delete(f"/api/exams/{exam_id}/attempts/{attempt_id}")).status_code == 204
+    summary2 = (await client.get(f"/api/contents/{_content.id}/exam")).json()
+    assert summary2["my_open_attempt"] is None
+    # 삭제된 attempt 재개/재삭제 404
+    assert (await client.get(f"/api/exams/{exam_id}/attempts/{attempt_id}")).status_code == 404
+
+    # 제출된 attempt 는 포기 불가 (409) — 랭킹 반영분 보호
+    key = await answer_key(db_session, exam_id)
+    attempt2 = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+    await client.post(f"/api/exams/{exam_id}/attempts/{attempt2}/submit", json={"answers": key})
+    assert (await client.delete(f"/api/exams/{exam_id}/attempts/{attempt2}")).status_code == 409
+
+    # 타인 attempt 재개/포기 404 (존재 비노출)
+    other = await make_user(db_session, "peek@example.com", "엿보기")
+    await db_session.commit()
+    attempt3 = None
+    await switch_user(client, other)
+    assert (await client.get(f"/api/exams/{exam_id}/attempts/{attempt2}")).status_code == 404
+    assert (await client.delete(f"/api/exams/{exam_id}/attempts/{attempt2}")).status_code == 404
+    assert attempt3 is None

@@ -21,6 +21,8 @@ export interface ExamSummary {
   attempt_count?: number;
   my_best?: ExamBest | null;
   top?: ExamTopEntry[];
+  /** 진행 중(미제출) 응시 — 재진입 시 "이어서 응시" + 경과 영속 (2026-07-31) */
+  my_open_attempt?: { attempt_id: number; started_at: string } | null;
 }
 
 /** 응시 문항 — 정답(answer_index)은 서버만 안다 */
@@ -34,6 +36,8 @@ export interface ExamQuestion {
 
 export interface ExamStart {
   attempt_id: number;
+  /** 서버 저장 시작 시각 — 경과 시계의 기준 (재개해도 이어진다) */
+  started_at: string;
   questions: ExamQuestion[];
 }
 
@@ -99,6 +103,14 @@ export const examApi = {
 
   start: (examId: number) =>
     request<ExamStart>(`/api/exams/${examId}/attempts`, { method: "POST" }),
+
+  resume: (examId: number, attemptId: number) =>
+    request<ExamStart>(`/api/exams/${examId}/attempts/${attemptId}`),
+
+  abandon: (examId: number, attemptId: number) =>
+    request<void>(`/api/exams/${examId}/attempts/${attemptId}`, {
+      method: "DELETE",
+    }),
 
   submit: (examId: number, attemptId: number, answers: number[]) =>
     request<ExamGraded>(`/api/exams/${examId}/attempts/${attemptId}/submit`, {
