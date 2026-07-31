@@ -5,6 +5,7 @@ import { BackLink } from "@/components/nav/BackLink";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SubscribeButton } from "@/components/content/SubscribeButton";
+import { ExamEntryCard } from "@/components/exam/ExamEntryCard";
 import { TranscriptWords } from "@/components/media/TranscriptWords";
 import {
   studyApi,
@@ -342,6 +343,9 @@ export default function LibraryDetailPage() {
             만나요.
           </p>
         )}
+
+        {/* 시험 진입점 — 활성 시험 요약 + [시험 보기] (docs/specs/library-exam.md) */}
+        <ExamEntryCard contentId={detail.id} />
       </div>
     </main>
   );
