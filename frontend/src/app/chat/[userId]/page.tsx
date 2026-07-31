@@ -21,7 +21,7 @@ export default function ChatRoomPage() {
     const prev = document.title;
     document.title =
       theme === "excel"
-        ? `${fakeFilename("재고관리")} - 통합 문서`
+        ? `${fakeFilename("공유문서")} - 통합 문서`
         : "교환 노트";
     return () => {
       document.title = prev;

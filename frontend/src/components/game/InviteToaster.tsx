@@ -72,19 +72,22 @@ export function InviteToaster() {
       // 알림을 보낸다 (2026-07-29 보고: 방만 켜둔 채 다른 일 하는 동안 유실).
       // hidden 만 보면 "브라우저는 보이는데 다른 앱 사용 중"도 놓친다 (07-28).
       // 오피스 테마는 문서 알림으로 위장
-      const engaged =
-        viewing &&
-        !document.hidden &&
-        document.hasFocus() &&
-        isChatInputFocused();
-      if (!engaged && Notification.permission === "granted") {
+      const backgrounded = document.hidden || !document.hasFocus();
+      const engaged = viewing && !backgrounded && isChatInputFocused();
+      // 채널 선택 (2026-07-31 재설계 — 도킹 모드 사각 봉합):
+      //   engaged(그 방 + 전면 + 입력 커서) = 무음
+      //   백그라운드 = OS 알림 (권한 없으면 토스트로 폴백 — 복귀 시 보임)
+      //   전면인데 자리 비움(커서 밖·다른 방·도킹 방치) = 인앱 토스트
+      //   기존엔 viewing 이면 토스트를 막아 도킹+권한없음 조합이 무알림이었다
+      if (engaged) return;
+      if (backgrounded && Notification.permission === "granted") {
         const excel = getAppTheme() === "excel";
         notifyOs(
           excel ? "공유 문서" : msg.from_name,
           excel ? "변경 사항 1건" : body.slice(0, 40),
           `/chat/${msg.sender_id}`,
         );
-      } else if (!viewing) {
+      } else {
         setChatToast({
           fromId: msg.sender_id,
           fromName: msg.from_name,

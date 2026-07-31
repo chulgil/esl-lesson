@@ -22,7 +22,7 @@ export function ExcelSkin(p: ChatSkinProps) {
 
   return (
     <ExcelChrome
-      filename={fakeFilename("재고관리")}
+      filename={fakeFilename("공유문서")}
       formula='=DATA.SYNC("공유", AUTO)'
       cellRef={`C${rowBase + 3}`}
       sheetTabs={["집계", "원본", "백업"]}

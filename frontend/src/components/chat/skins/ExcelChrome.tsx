@@ -212,7 +212,7 @@ export function BlankSheet({
   );
 }
 
-/** 오늘 날짜가 붙은 위장 파일명 — excelkospi 컨셉 (재고관리_20260727.xlsx) */
+/** 오늘 날짜가 붙은 위장 파일명 — excelkospi 컨셉 (공유문서_20260727.xlsx) */
 export function fakeFilename(prefix: string): string {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(
