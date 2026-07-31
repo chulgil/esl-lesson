@@ -48,6 +48,12 @@ export function ExamResult({
             소요 {formatDuration(graded.duration_ms)} · 현재{" "}
             <b className="text-brick-blue">{graded.rank}위</b>
           </p>
+          {/* 보상 체감 — 이번 제출로 얻은 XP (제출 20 + 점수 10점당 1) */}
+          <p className="mt-1.5">
+            <span className="rounded-full bg-brick-green/15 px-2.5 py-1 text-xs font-bold text-brick-green">
+              +{graded.xp_gained} XP 획득!
+            </span>
+          </p>
         </div>
       </div>
 

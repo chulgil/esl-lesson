@@ -14,12 +14,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.models import Exam, ExamAttempt, ExamQuestion, User
+from app.models import Content, Exam, ExamAttempt, ExamQuestion, User
 from app.services.exams import POINTS_PER_QUESTION
+from app.services.notifications import notify
 
 router = APIRouter(tags=["exams"])
 
 RANKING_LIMIT = 50
+
+# 시험 XP — 제출 20(게임 참여 동급) + 점수 10점당 1 (만점 +10). stats 와 동일 산식
+XP_PER_SUBMIT = 20
+
+
+def exam_xp(score: int) -> int:
+    return XP_PER_SUBMIT + score // 10
 
 
 def _aware(dt: datetime) -> datetime:
@@ -71,6 +79,46 @@ async def _best_rows(db: AsyncSession, exam_id: int):
 def _display_name(nickname: str, name: str) -> str:
     """nickname 미설정 유저는 name 폴백 (Phase 3 다이어그램 검토 보강)."""
     return nickname or name
+
+
+@router.get("/exams/open")
+async def open_exams(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """열린 시험 목록 — 학습 허브 도전 카드·라이브러리 시험 칩용.
+
+    active 회차만, 최신 생성 순. 응시자 수·내 최고점·현재 1위 이름을 붙여
+    "도전할 이유"(경쟁 상태)를 목록에서 바로 보여준다 (2026-07-31 goal)."""
+    exams = (
+        await db.execute(
+            select(Exam, Content.title)
+            .join(Content, Content.id == Exam.content_id)
+            .where(Exam.status == "active")
+            .order_by(Exam.id.desc())
+        )
+    ).all()
+
+    items = []
+    for exam, content_title in exams:
+        rows = await _best_rows(db, exam.id)
+        mine = next((r for r in rows if r.user_id == user.id), None)
+        top = rows[0] if rows else None
+        items.append(
+            {
+                "exam_id": exam.id,
+                "content_id": exam.content_id,
+                "content_title": content_title,
+                "round": exam.round,
+                "question_count": exam.question_count,
+                "attempt_user_count": len(rows),
+                "my_best": (
+                    {"score": mine.score, "duration_ms": mine.duration_ms} if mine else None
+                ),
+                "top_name": _display_name(top.nickname, top.name) if top else None,
+            }
+        )
+    return {"items": items}
 
 
 @router.get("/contents/{content_id}/exam")
@@ -205,21 +253,50 @@ async def submit_attempt(
                 "answer_index": question.payload["answer_index"],
             }
         )
+    # 탈환 판정용 — 이 attempt 가 제출되기 전의 1위 (submitted_at NULL 이라 아직 미포함)
+    prev_rows = await _best_rows(db, exam_id)
+    prev_top = prev_rows[0] if prev_rows else None
+
     attempt.submitted_at = now
     attempt.score = correct_count * POINTS_PER_QUESTION
     attempt.correct_count = correct_count
     attempt.duration_ms = max(0, int((now - _aware(attempt.started_at)).total_seconds() * 1000))
     attempt.answers = list(body.answers)
-    await db.commit()
+    await db.flush()
 
     rows = await _best_rows(db, exam_id)
     rank = next((idx + 1 for idx, row in enumerate(rows) if row.user_id == user.id), None)
+
+    # 1위 탈환 알림 — 뺏긴 사람에게만 (자기 갱신·최초 등극 제외, 2026-07-31 goal)
+    new_top = rows[0] if rows else None
+    if (
+        prev_top is not None
+        and new_top is not None
+        and new_top.user_id == user.id
+        and prev_top.user_id != user.id
+    ):
+        exam = await db.get(Exam, exam_id)
+        content = await db.get(Content, exam.content_id) if exam else None
+        await notify(
+            db,
+            prev_top.user_id,
+            "exam_dethroned",
+            {
+                "content_id": exam.content_id if exam else None,
+                "content_title": content.title if content else "",
+                "by_name": _display_name(user.nickname, user.name),
+            },
+        )
+    await db.commit()
+
     return {
         "score": attempt.score,
         "correct_count": correct_count,
         "duration_ms": attempt.duration_ms,
         "rank": rank,
         "results": results,
+        # 보상 체감 — 결과 화면에 "+N XP" 즉시 표시 (stats 산식과 동일)
+        "xp_gained": exam_xp(attempt.score),
     }
 
 

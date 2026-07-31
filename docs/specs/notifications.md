@@ -8,10 +8,10 @@ Jira/Confluence 스타일 개인 알림함. 친구 요청·수락·게임 초대
 
 | 항목 | 결정 |
 |---|---|
-| 소스 | `friend_request` · `friend_accepted` · `game_invite` · `theme_granted`(테마 지급 — theme-mall.md, 2026-07-30 추가) 4종 — 각 API 가 커밋 전에 `notify()` 호출 |
+| 소스 | `friend_request` · `friend_accepted` · `game_invite` · `theme_granted`(테마 지급 — theme-mall.md, 2026-07-30) · `exam_dethroned`(시험 1위 탈환 — library-exam.md, 2026-07-31) 5종 — 각 API 가 커밋 전에 `notify()` 호출 |
 | 읽음 모델 | 행별 `read_at` (null = 안읽음) — 개별 클릭 읽음 + "모두 읽음". 배지 = 안읽음 총수 |
 | 실시간 | 기존 소켓으로 `notif.new` 푸시 → 벨 즉시 재조회 (60초 폴링은 유실 대비 보조) |
-| 클릭 이동 | friend_request/friend_accepted → `/friends`, game_invite → `/game/{game}?join={code}`, theme_granted → `/settings` |
+| 클릭 이동 | friend_request/friend_accepted → `/friends`, game_invite → `/game/{game}?join={code}`, theme_granted → `/settings`, exam_dethroned → `/exam/{content_id}` |
 | payload | 발생 시점 스냅샷(닉네임 등) — 원본이 바뀌어도 알림 문구 불변 (`chat_messages.item_ref` 패턴) |
 | 채팅 | 벨 배지 = 알림 unread + 채팅 unread **합산** (2026-07-28 배지 일원화 — 기존 `ChatNavButton` 개별 배지는 제거). 채팅은 행으로 적재하지 않고 드롭다운 첫 행 "새 메시지 N개" 요약만 |
 

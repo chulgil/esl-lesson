@@ -3,10 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SubscribeButton } from "@/components/content/SubscribeButton";
+import { examApi, type OpenExam } from "@/lib/exam-api";
 import { studyApi, type LibraryContent } from "@/lib/study-api";
 
 export default function LibraryPage() {
   const [contents, setContents] = useState<LibraryContent[]>([]);
+  // 콘텐츠별 열린 시험 — 카드에 시험 칩(1위·내 최고점) 노출 (2026-07-31 goal)
+  const [examByContent, setExamByContent] = useState<Map<number, OpenExam>>(
+    new Map(),
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -14,6 +19,12 @@ export default function LibraryPage() {
       .library()
       .then((res) => setContents(res.items))
       .catch((e) => setError(e.message));
+    examApi
+      .open()
+      .then((res) =>
+        setExamByContent(new Map(res.items.map((e) => [e.content_id, e]))),
+      )
+      .catch(() => undefined);
   }, []);
 
   return (
@@ -56,6 +67,21 @@ export default function LibraryPage() {
                 학습 항목 {c.item_count}개
               </p>
             </Link>
+            {/* 시험 칩 — 도전 상태(내 최고점·1위)를 카드에서 바로 보여준다 */}
+            {examByContent.has(c.id) && (
+              <Link
+                href={`/exam/${c.id}`}
+                className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-full border-2 border-brick-red/40 bg-brick-red/5 px-2.5 py-1 text-xs font-bold text-brick-red transition hover:border-brick-red"
+              >
+                시험 도전
+                {(() => {
+                  const exam = examByContent.get(c.id)!;
+                  if (exam.my_best) return ` · 내 최고 ${exam.my_best.score}점`;
+                  if (exam.top_name) return ` · 1위 ${exam.top_name}`;
+                  return " · 첫 도전자가 돼보세요";
+                })()}
+              </Link>
+            )}
             {/* 개인 콘텐츠는 이미 내 것이라 담기 대상이 아니다 */}
             {!c.mine && (
               <div className="mt-3">

@@ -470,3 +470,124 @@ async def test_rankings_best_tiebreak_and_fallback(client, admin_client, db_sess
     # is_me — 마지막 로그인(plain) 기준
     assert [r["is_me"] for r in rows] == [False, False, True]
     assert rankings["me"]["rank"] == 3
+
+
+# ------------------------------------------------- 발견성·XP·경쟁 (2026-07-31 goal)
+
+
+async def test_open_exams_lists_active_with_competition(client, admin_client, db_session):
+    """열린 시험 목록 — active 만, 콘텐츠 제목·응시자 수·내 최고점·1위 이름."""
+    content_a, exam_a = await make_exam(admin_client, db_session, count=5)
+    content_b, _exam_b1 = await make_exam(admin_client, db_session, count=5)
+    # B 는 재생성 — 이전 회차(archived)는 목록에서 빠지고 새 회차만
+    exam_b2 = (await admin_client.post(f"/api/admin/contents/{content_b.id}/exam")).json()[
+        "exam_id"
+    ]
+
+    me = await login(client, db_session)
+    key_a = await answer_key(db_session, exam_a)
+    attempt = (await client.post(f"/api/exams/{exam_a}/attempts")).json()["attempt_id"]
+    await client.post(f"/api/exams/{exam_a}/attempts/{attempt}/submit", json={"answers": key_a})
+
+    listing = (await client.get("/api/exams/open")).json()["items"]
+    by_exam = {row["exam_id"]: row for row in listing}
+    assert set(by_exam) == {exam_a, exam_b2}
+
+    row_a = by_exam[exam_a]
+    assert row_a["content_id"] == content_a.id
+    assert row_a["content_title"] == content_a.title
+    assert row_a["attempt_user_count"] == 1
+    assert row_a["my_best"]["score"] == 25
+    assert row_a["top_name"] == me.nickname
+
+    row_b = by_exam[exam_b2]
+    assert row_b["round"] == 2
+    assert row_b["my_best"] is None and row_b["top_name"] is None
+
+
+async def test_submit_awards_xp(client, admin_client, db_session):
+    """시험 XP — 제출 20 + 점수 10점당 1 (결과 응답 xp_gained + stats 반영)."""
+    _content, exam_id = await make_exam(admin_client, db_session, count=5)
+    await login(client, db_session)
+    key = await answer_key(db_session, exam_id)
+
+    # 만점 제출 → 20 + 25//10 = 22
+    attempt = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+    res = (
+        await client.post(f"/api/exams/{exam_id}/attempts/{attempt}/submit", json={"answers": key})
+    ).json()
+    assert res["xp_gained"] == 20 + res["score"] // 10
+
+    # 오답 2개 재응시 → 20 + 15//10 = 21, stats 누적 = 22 + 21
+    wrong_two = [(a + 1) % 4 for a in key[:2]] + key[2:]
+    attempt2 = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+    res2 = (
+        await client.post(
+            f"/api/exams/{exam_id}/attempts/{attempt2}/submit", json={"answers": wrong_two}
+        )
+    ).json()
+    assert res2["xp_gained"] == 21
+
+    stats = (await client.get("/api/study/stats")).json()
+    assert stats["xp"] == 43  # 복습·게임 없음 — 시험 XP 만
+
+
+async def test_dethrone_notifies_previous_champion(client, admin_client, db_session):
+    """1위 탈환 알림 — 뺏긴 사람에게만, 자기 갱신·최초 등극은 알림 없음."""
+    from app.models import Notification
+
+    content, exam_id = await make_exam(admin_client, db_session, count=5)
+    key = await answer_key(db_session, exam_id)
+    wrong_two = [(a + 1) % 4 for a in key[:2]] + key[2:]
+    wrong_one = [(key[0] + 1) % 4] + key[1:]
+
+    first = await login(client, db_session)  # 최초 1위 (15점)
+    attempt = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+    await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt}/submit", json={"answers": wrong_two}
+    )
+
+    async def dethrone_rows():
+        return (
+            (
+                await db_session.execute(
+                    select(Notification).where(Notification.type == "exam_dethroned")
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    # 최초 등극 — 알림 없음
+    assert await dethrone_rows() == []
+
+    # 자기 갱신 (15→20, 여전히 1위) — 알림 없음
+    attempt = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+    await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt}/submit", json={"answers": wrong_one}
+    )
+    assert await dethrone_rows() == []
+
+    # 도전자가 만점으로 탈환 — 이전 1위(first)에게만 알림
+    rival = await make_user(db_session, "rival@example.com", "도전자")
+    await db_session.commit()
+    await switch_user(client, rival)
+    attempt = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+    await client.post(f"/api/exams/{exam_id}/attempts/{attempt}/submit", json={"answers": key})
+
+    rows = await dethrone_rows()
+    assert [n.user_id for n in rows] == [first.id]
+    payload = rows[0].payload
+    assert payload["content_id"] == content.id
+    assert payload["by_name"] == rival.nickname
+    assert payload["content_title"] == content.title
+
+    # 이미 뺏긴 상태에서 3위가 2위로 올라와도(1위 불변) 추가 알림 없음
+    third = await make_user(db_session, "third@example.com", "삼등")
+    await db_session.commit()
+    await switch_user(client, third)
+    attempt = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+    await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt}/submit", json={"answers": wrong_one}
+    )
+    assert len(await dethrone_rows()) == 1

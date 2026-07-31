@@ -201,6 +201,11 @@ function notifText(n: NotificationItem): string {
     const note = n.payload.note ? ` (${String(n.payload.note)})` : "";
     return `'${label}' 테마가 열렸어요${note} — 설정에서 바꿔보세요`;
   }
+  if (n.type === "exam_dethroned") {
+    const by = String(n.payload.by_name ?? "누군가");
+    const title = String(n.payload.content_title ?? "시험");
+    return `${by} 님이 '${title}' 시험 1위를 가져갔어요 — 되찾으러 가볼까요?`;
+  }
   // 알 수 없는 타입 (구버전 클라 대비) — 이름만 노출
   return `${from} 님의 새 알림`;
 }
@@ -212,6 +217,8 @@ function notifTarget(n: NotificationItem): string {
     return `/game/${String(n.payload.game ?? "")}?join=${String(n.payload.code ?? "")}${theme}`;
   }
   if (n.type === "theme_granted") return "/settings";
+  if (n.type === "exam_dethroned")
+    return `/exam/${String(n.payload.content_id ?? "")}`;
   return "/friends";
 }
 

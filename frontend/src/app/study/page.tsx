@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { AchievementBadges } from "@/components/study/AchievementBadges";
+import { examApi, type OpenExam } from "@/lib/exam-api";
 import { friendsApi } from "@/lib/friends-api";
 import {
   type Achievement,
@@ -24,8 +25,13 @@ export default function StudyHubPage() {
   const [badges, setBadges] = useState<Achievement[]>([]);
   // null = 아직 로딩/실패 (섹션 숨김) — 빈 배열은 "덱 0개" 빈 상태를 렌더링
   const [decks, setDecks] = useState<StudyDeck[] | null>(null);
+  const [openExams, setOpenExams] = useState<OpenExam[]>([]);
 
   useEffect(() => {
+    examApi
+      .open()
+      .then((res) => setOpenExams(res.items))
+      .catch(() => undefined);
     studyApi
       .stats()
       .then(setStats)
@@ -151,6 +157,62 @@ export default function StudyHubPage() {
               ))}
             </ul>
           )}
+        </section>
+      )}
+
+      {/* 시험 도전 — 준비된 실력을 확인하고 XP·랭킹·업적으로 보상 (2026-07-31 goal) */}
+      {openExams.length > 0 && (
+        <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-red/40 bg-white p-5 shadow-sm">
+          <h2 className="font-hand text-2xl font-bold">시험 도전</h2>
+          <p className="mt-1 text-xs opacity-60">
+            공부한 콘텐츠의 실력을 확인해요 — 제출마다 +20 XP, 점수 10점당 +1
+            XP. 최고점으로 전체 랭킹 경쟁!
+          </p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {openExams.map((exam) => (
+              <li
+                key={exam.exam_id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border-2 border-ink/10 px-3 py-2"
+              >
+                <div className="min-w-40 flex-1">
+                  <p className="text-sm font-bold">
+                    {exam.content_title}
+                    {exam.round > 1 && (
+                      <span className="ml-1.5 rounded bg-ink/10 px-1.5 py-0.5 text-[10px]">
+                        {exam.round}회차
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 text-xs opacity-60">
+                    {exam.question_count}문항 · 응시자 {exam.attempt_user_count}
+                    명
+                    {exam.top_name && (
+                      <span className="ml-1.5 font-bold text-brick-yellow">
+                        1위 {exam.top_name}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {exam.my_best ? (
+                    <span className="rounded bg-highlight/50 px-2 py-0.5 text-xs font-bold">
+                      내 최고 {exam.my_best.score}점
+                    </span>
+                  ) : (
+                    <span className="rounded bg-brick-red/10 px-2 py-0.5 text-xs font-bold text-brick-red">
+                      미응시
+                    </span>
+                  )}
+                  <Link
+                    href={`/exam/${exam.content_id}`}
+                    className="inline-flex min-h-10 items-center rounded-md border-2 border-brick-red/60 bg-white px-3 text-sm font-bold text-brick-red transition hover:-translate-y-0.5 hover:border-brick-red"
+                  >
+                    {exam.my_best ? "다시 도전" : "도전하기"}
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

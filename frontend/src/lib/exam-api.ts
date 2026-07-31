@@ -49,6 +49,20 @@ export interface ExamGraded {
   duration_ms: number;
   rank: number;
   results: ExamResultRow[];
+  /** 이번 제출로 얻은 XP — 제출 20 + 점수 10점당 1 (보상 체감) */
+  xp_gained: number;
+}
+
+/** 열린 시험 — 학습 허브 도전 카드·라이브러리 시험 칩 (경쟁 상태 동봉) */
+export interface OpenExam {
+  exam_id: number;
+  content_id: number;
+  content_title: string;
+  round: number;
+  question_count: number;
+  attempt_user_count: number;
+  my_best: { score: number; duration_ms: number } | null;
+  top_name: string | null;
 }
 
 export interface ExamRankingRow {
@@ -78,6 +92,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const examApi = {
+  open: () => request<{ items: OpenExam[] }>("/api/exams/open"),
+
   summary: (contentId: number) =>
     request<ExamSummary>(`/api/contents/${contentId}/exam`),
 

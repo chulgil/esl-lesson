@@ -49,14 +49,26 @@ exam_attempts               -- 응시 1회. 인덱스 (exam_id, user_id)
 
 | 메서드/경로 | 역할 |
 |---|---|
+| GET /api/exams/open | 열린 시험 목록 (active 만, 최신순) — content_title/응시자 수/my_best/top_name. 학습 허브 도전 카드·라이브러리 시험 칩용 (2026-07-31) |
 | GET /api/contents/{id}/exam | 활성 시험 요약 — exam_id/round/question_count/응시자 수/my_best/TOP3. 없으면 `{exam_id: null}` |
 | POST /api/exams/{id}/attempts | 응시 시작 — attempt 생성 + 정답 없는 문항. archived 409 `exam_archived` |
-| POST /api/exams/{id}/attempts/{aid}/submit | 서버 채점 — score=정답수x5, duration 서버 시각차. 결과+순위+복기 |
+| POST /api/exams/{id}/attempts/{aid}/submit | 서버 채점 — score=정답수x5, duration 서버 시각차. 결과+순위+복기+**xp_gained**. 1위가 바뀌면 이전 1위에게 `exam_dethroned` 알림 (자기 갱신·최초 등극 제외) |
 | GET /api/exams/{id}/rankings | TOP 50 + 내 순위(me) — nickname 없으면 name 폴백, is_me 플래그 |
 | POST /api/admin/contents/{id}/exam | 생성/재생성 (require_admin). 부족 422 `not_enough_items` |
 | GET /api/admin/contents/{id}/exams | 회차 목록 + 문항 미리보기 (정답 포함 — 검수용) |
 
 오류 계약: answers 경계 검증(길이=문항 수, 각 값 0..3) 422 `invalid_answers` · 중복 제출 409 `already_submitted` · 타인/미존재 attempt 404 (존재 비노출) · archived 새 응시 409 (**진행 중 attempt 제출은 허용** — 해당 회차 랭킹 반영).
+
+## XP 보상 (2026-07-31 — "시험 보고 싶게" 기획)
+
+- **제출당 20 XP** (게임 참여와 동급) + **점수 10점당 1 XP** (만점 +10) — 재응시도 매번 지급 (반복 학습 유도).
+- 산식 정본: `api/exams.py exam_xp()` = stats 의 시험 XP 합산과 동일. **건별 floor(score/10) 합** — 합계에 //10 하면 어긋난다.
+- 결과 화면에 "+N XP 획득!" 즉시 표시 (`ExamResult`).
+
+## 경쟁 루프 (2026-07-31)
+
+- **1위 탈환 알림**: submit 에서 이전 1위(이 attempt 제외 best)와 새 1위를 비교 — 새 1위 = 나 && 이전 1위 != 나 일 때만 이전 1위에게 `exam_dethroned` `{content_id, content_title, by_name}` 적재. 벨 문구 "{by} 님이 '{제목}' 시험 1위를 가져갔어요 — 되찾으러 가볼까요?", 탭 -> /exam/{content_id}.
+- **발견성**: 학습 허브 "시험 도전" 섹션(응시자 수·1위 이름·내 최고점/미응시·[도전하기]) + 라이브러리 카드 시험 칩("시험 도전 · 1위 {name}" / "내 최고 N점" / "첫 도전자가 돼보세요").
 
 ## 업적 (family "exam") · 테마 보상
 
@@ -84,7 +96,7 @@ API 클라: `frontend/src/lib/exam-api.ts` (summary/start/submit/rankings) + `ad
 
 ## 범위 외 (후속)
 
-1위 탈환 알림 · 시험 제한시간(타이머 강제 종료 — 소요시간은 기록만) · 문항 수동 편집(재생성으로 갈음) · 주간/시즌 랭킹 리셋(회차 갱신이 대체).
+시험 제한시간(타이머 강제 종료 — 소요시간은 기록만) · 문항 수동 편집(재생성으로 갈음) · 주간/시즌 랭킹 리셋(회차 갱신이 대체).
 
 ## 테스트
 

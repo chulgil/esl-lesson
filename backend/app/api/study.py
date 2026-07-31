@@ -677,10 +677,25 @@ async def get_stats(
             )
         )
     ).scalar_one()
+    # 시험 XP — 제출 20 + 점수 10점당 1 (api/exams.py exam_xp 와 동일 산식).
+    # 건별 floor(score/10) 합 — 합계에 //10 하면 건별 산식과 어긋난다 (25+15: 3 vs 4)
+    from app.models import ExamAttempt
+
+    exam_submits, exam_score_bonus = (
+        await db.execute(
+            select(
+                func.count(ExamAttempt.id),
+                func.coalesce(func.sum(func.floor(ExamAttempt.score / 10.0)), 0),
+            ).where(ExamAttempt.user_id == user.id, ExamAttempt.submitted_at.is_not(None))
+        )
+    ).one()
+
     xp = (
         total_reviews * 10
         + (tetris_played + typing_played + quiz_played + scramble_played + dictation_played) * 20
         + tetris_wins * 30
+        + int(exam_submits) * 20
+        + int(exam_score_bonus)
         + await retention.quest_bonus_xp(db, user.id)
     )
 
