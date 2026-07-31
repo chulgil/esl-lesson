@@ -38,6 +38,17 @@ export const CLOCK_OF: Record<AppTheme, ClockKind> = {
   excel: "cell",
 };
 
+// --- 채팅 메뉴 라벨 — 위장 컨셉과 정합 (2026-07-31) --------------------------------
+
+export const CHAT_LABEL_OF: Record<AppTheme, string> = {
+  note: "교환 노트",
+  candy: "교환 일기",
+  lego: "교환 노트",
+  cat: "냥 쪽지",
+  excel: "공유 문서",
+  school: "쪽지",
+};
+
 // --- 표면(문항 카드) 스킨 — 시험지·학습 세션 공용 --------------------------------
 
 export interface SurfaceSkin {

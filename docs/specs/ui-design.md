@@ -130,3 +130,18 @@
 - 토큰은 `frontend/src/app/globals.css`의 `@theme` (Tailwind 4)으로 1곳 정의.
 - 브릭/카드/칩/진행바는 공용 컴포넌트(`src/components/brick/*`)로 — 페이지별 재구현 금지.
 - 괘선 배경은 CSS repeating-linear-gradient (이미지 에셋 불필요).
+
+
+## 플로팅 슬롯 기준 (2026-07-31)
+
+| 슬롯 | 용도 | 컴포넌트 |
+|---|---|---|
+| 우하단 | **액션 전용** — 채팅 런처(bottom-20 모바일 / bottom-4 데스크톱) | ChatWidget 런처 |
+| 좌하단 | 장식·일시 — 테마 마스코트(HenyangPeek, 좌우 반전 등장), 새 버전 배너(BuildRefreshWatcher) | HenyangPeek·BuildRefreshWatcher |
+| 상단 중앙 | 토스트(초대·테마 축하·채팅) | InviteToaster |
+
+장식은 pointer-events-none — 어떤 슬롯에서도 클릭을 막지 않는다. 새 플로팅 요소는 이 표에 먼저 배치를 정한다 (겹침 재발 방지 — 런처가 헤냥이를 가리던 2026-07-31 보고).
+
+## 채팅 메뉴 라벨 (테마 위장 정합)
+
+탭 라벨은 `theme-surfaces CHAT_LABEL_OF` — 교환 노트(노트·레고)/교환 일기(캔디)/냥 쪽지(헤냥이)/공유 문서(오피스)/쪽지(학교수업).

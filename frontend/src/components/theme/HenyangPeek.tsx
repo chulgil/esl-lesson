@@ -10,7 +10,9 @@ export function HenyangPeek() {
   return (
     <div
       aria-hidden
-      className="henyang-peek pointer-events-none fixed right-1 bottom-1 z-30 origin-bottom-right scale-75 sm:right-3 sm:bottom-2 sm:scale-100"
+      // 플로팅 슬롯 기준(ui-design.md): 우하단=채팅 런처 전용, 장식 마스코트=좌하단.
+      // 런처가 캐릭터를 가리던 문제 (2026-07-31 보고). 좌측 등장이라 좌우 반전
+      className="henyang-peek pointer-events-none fixed bottom-16 left-1 z-30 origin-bottom-left scale-x-[-0.75] scale-y-75 sm:bottom-2 sm:left-3 sm:scale-x-[-1] sm:scale-y-100"
     >
       <svg width="104" height="88" viewBox="0 0 104 88" fill="none">
         {/* 말풍선: 헤헤 */}

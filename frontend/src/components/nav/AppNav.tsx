@@ -7,6 +7,7 @@ import { NotificationBell } from "@/components/nav/NotificationBell";
 import { ProfileMenu } from "@/components/nav/ProfileMenu";
 import { fetchMe, type Me } from "@/lib/api";
 import { getAppTheme, setAppTheme, useAppTheme } from "@/lib/theme";
+import { CHAT_LABEL_OF } from "@/lib/theme-surfaces";
 import { themeApi } from "@/lib/theme-api";
 
 /** 전역 내비게이션 (2026-07-28 재설계 — 표준 SaaS 패턴)
@@ -37,7 +38,7 @@ const TABS = [
   // /my 라우트는 딥링크·기존 데이터 열람용으로 남아 있음
   {
     href: "/chat",
-    label: "채팅",
+    label: "채팅", // 실제 표기는 테마별 CHAT_LABEL_OF (교환 노트/교환 일기/냥 쪽지/공유 문서/쪽지)
     match: (p: string) => p.startsWith("/chat"),
     icon: ChatTabIcon,
   },
@@ -142,7 +143,7 @@ export function AppNav() {
                 }`}
               >
                 <tab.icon />
-                {tab.label}
+                {tab.href === "/chat" ? CHAT_LABEL_OF[theme] : tab.label}
               </Link>
             );
           })}
@@ -219,7 +220,7 @@ export function AppNav() {
               }`}
             >
               <tab.icon />
-              {tab.label}
+              {tab.href === "/chat" ? CHAT_LABEL_OF[theme] : tab.label}
             </Link>
           );
         })}
