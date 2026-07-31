@@ -3,7 +3,6 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMe } from "@/lib/api";
-import { subscribePush } from "@/lib/push";
 import {
   dispatchChatEvent,
   getActiveChatRoom,
@@ -45,11 +44,6 @@ export function InviteToaster() {
     themeKey: string;
     reason: string | null;
   } | null>(null);
-  const [chatToast, setChatToast] = useState<{
-    fromId: number;
-    fromName: string;
-    preview: string;
-  } | null>(null);
 
   const handleMessage = useCallback((msg: ServerMsg) => {
     if (msg.t === "iv.invited") {
@@ -75,25 +69,16 @@ export function InviteToaster() {
       // 오피스 테마는 문서 알림으로 위장
       const backgrounded = document.hidden || !document.hasFocus();
       const engaged = viewing && !backgrounded && isChatInputFocused();
-      // 채널 선택 (2026-07-31 재설계 — 도킹 모드 사각 봉합):
-      //   engaged(그 방 + 전면 + 입력 커서) = 무음
-      //   백그라운드 = OS 알림 (권한 없으면 토스트로 폴백 — 복귀 시 보임)
-      //   전면인데 자리 비움(커서 밖·다른 방·도킹 방치) = 인앱 토스트
-      //   기존엔 viewing 이면 토스트를 막아 도킹+권한없음 조합이 무알림이었다
-      if (engaged) return;
-      if (backgrounded && Notification.permission === "granted") {
+      // 채널 (2026-07-31 최종): engaged = 무음 / 백그라운드 = OS 알림 /
+      // 전면 자리 비움 = 파비콘·탭 제목 배지만 (미니 채팅 토스트는 사용자
+      // 요청으로 제거 — 위장 화면 위에 뜨는 것 자체가 노출)
+      if (!engaged && backgrounded && Notification.permission === "granted") {
         const excel = getAppTheme() === "excel";
         notifyOs(
           excel ? "공유 문서" : msg.from_name,
           excel ? "변경 사항 1건" : body.slice(0, 40),
           `/chat/${msg.sender_id}`,
         );
-      } else {
-        setChatToast({
-          fromId: msg.sender_id,
-          fromName: msg.from_name,
-          preview: body.length > 40 ? body.slice(0, 40) + "…" : body,
-        });
       }
       return;
     }
@@ -146,13 +131,6 @@ export function InviteToaster() {
       socket?.close();
     };
   }, [handleMessage]);
-
-  // 채팅 토스트 자동 소멸
-  useEffect(() => {
-    if (!chatToast) return;
-    const timer = setTimeout(() => setChatToast(null), 5000);
-    return () => clearTimeout(timer);
-  }, [chatToast]);
 
   // 테마 축하 토스트 — 액션 유도가 목적이라 조금 길게 유지 후 자동 소멸
   useEffect(() => {
@@ -237,42 +215,6 @@ export function InviteToaster() {
         </div>
       )}
 
-      {chatToast && (
-        <div className="fixed inset-x-4 top-28 z-50 mx-auto flex max-w-sm items-center gap-2 rounded-lg border-2 border-brick-blue/60 bg-white p-3 shadow-lg">
-          <button
-            type="button"
-            onClick={() => {
-              const target = `/chat/${chatToast.fromId}`;
-              setChatToast(null);
-              router.push(target);
-            }}
-            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left transition hover:-translate-y-0.5"
-          >
-            <ChatBubbleIcon />
-            <span className="min-w-0 flex-1 text-sm">
-              <b>{chatToast.fromName}</b>
-              <span className="mt-0.5 block truncate opacity-70">
-                {chatToast.preview}
-              </span>
-            </span>
-          </button>
-          {/* 알림 권한 미요청 상태 — 백그라운드에선 OS 알림이 유일한 채널이라 유도
-              (2026-07-31 "다른 탭에 있을 때 알림 안 옴" 보고) */}
-          {typeof Notification !== "undefined" &&
-            Notification.permission === "default" && (
-              <button
-                type="button"
-                onClick={() => {
-                  subscribePush().catch(() => undefined);
-                  setChatToast(null);
-                }}
-                className="min-h-9 shrink-0 rounded-md border-2 border-brick-green/60 px-2 text-xs font-bold text-brick-green hover:border-brick-green"
-              >
-                알림 켜기
-              </button>
-            )}
-        </div>
-      )}
     </>
   );
 }
@@ -299,21 +241,3 @@ function notifyOs(title: string, body: string, url: string) {
     .catch(() => {});
 }
 
-function ChatBubbleIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="shrink-0 text-brick-blue"
-      aria-hidden
-    >
-      <path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z" />
-    </svg>
-  );
-}

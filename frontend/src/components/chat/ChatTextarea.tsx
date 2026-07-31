@@ -27,10 +27,9 @@ export function ChatTextarea({
   ariaLabel?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  // Safari(WebKit)는 조합 확정 Enter 를 compositionend 이후 keydown
-  // (isComposing=false)으로 발화 — 확정 직후 Enter 를 전송으로 오인해
-  // 한글 마지막 글자 확정이 곧장 전송되는 버그 방지 (2026-07-31 심층 리뷰)
-  const lastCompositionEnd = useRef(0);
+  // 중복 전송 가드 — Safari 는 조합 확정 Enter 가 compositionend 후 keydown 으로
+  // 한 번 더 오므로, 짧은 창 안의 연속 Enter 는 1회만 전송한다
+  const lastSend = useRef(0);
 
   // 값이 바뀔 때마다 내용 높이에 맞춤 — 8줄 상한은 CSS max-height 가 담당
   useEffect(() => {
@@ -46,20 +45,17 @@ export function ChatTextarea({
       value={value}
       rows={1}
       onChange={(e) => onChange(e.target.value)}
-      onCompositionEnd={() => {
-        lastCompositionEnd.current = Date.now();
-      }}
       onKeyDown={(e) => {
-        // Enter = 전송, Shift+Enter = 줄바꿈 — 전 기기·전 화면 공통 (2026-07-31 최종 확정).
-        // isComposing + compositionend 직후 가드 — WebKit IME 오전송 방지
-        if (
-          e.key === "Enter" &&
-          !e.shiftKey &&
-          !e.nativeEvent.isComposing &&
-          // 30ms: Safari 의 조합확정 후행 keydown(<5ms)만 거르고 사람 Enter(>50ms)는 통과
-          Date.now() - lastCompositionEnd.current > 30
-        ) {
+        // Enter = 전송, Shift+Enter = 줄바꿈 — 전 기기·전 화면 공통 (2026-07-31 최종).
+        // 한글 조합 중(isComposing) Enter 도 전송한다 — 조합 글자는 이미 value 에
+        // 반영돼 있어 전체가 나간다 (카카오 PC 동작. isComposing 을 건너뛰면
+        // "조합 확정용 Enter + 전송용 Enter" 두 번 눌러야 해 간헐 미전송으로 보고됨).
+        // 중복 가드: Safari 가 같은 확정 Enter 를 keydown 으로 한 번 더 쏘는 케이스
+        if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
+          const now = Date.now();
+          if (now - lastSend.current < 150) return;
+          lastSend.current = now;
           onSend();
         }
       }}
