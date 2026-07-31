@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CrownIcon } from "@/components/exam/ExamEntryCard";
 import { ExamRankings } from "@/components/exam/ExamRankings";
 import { ExamResult } from "@/components/exam/ExamResult";
+import { ExamTimer } from "@/components/exam/ExamTimer";
 import { OmrGrid } from "@/components/exam/OmrGrid";
 import { BackLink } from "@/components/nav/BackLink";
 import {
@@ -13,6 +14,7 @@ import {
   type ExamQuestion,
   type ExamSummary,
 } from "@/lib/exam-api";
+import { type AppTheme, useAppTheme } from "@/lib/theme";
 
 /** 시험지 화면 — OMR 답안지 컨셉 (docs/specs/library-exam.md).
  *  intro(요약) -> taking(문항+마킹 그리드) -> result(도장·복기) -> rankings.
@@ -29,6 +31,106 @@ const MODE_LABELS: Record<string, string> = {
 
 const CHOICE_MARKS = ["1", "2", "3", "4"];
 
+/** 테마별 시험지 스킨 — 같은 레이아웃(문항+OMR)에 표면 컨셉만 바꾼다 (2026-07-31 요청).
+ *  노트=종이 시험지 / 캔디=화이트보드(마커) / 레고=블록판(스터드) /
+ *  헤냥이=칠판(분필) / 오피스=평가서 시트(위장). OMR·채점 로직은 공통. */
+const EXAM_SKINS: Record<
+  AppTheme,
+  {
+    section: string;
+    band: string;
+    bandTitle: string;
+    bandMeta: string;
+    divider: string;
+    number: string;
+    prompt: string;
+    promptSub: string;
+    choice: string;
+    choiceSelected: string;
+    mark: string;
+    markSelected: string;
+    studs?: boolean;
+    paw?: boolean;
+  }
+> = {
+  note: {
+    section: "rounded-lg border-2 border-ink/15 bg-white",
+    band: "border-4 border-double border-ink/50 px-3 py-2 text-center",
+    bandTitle: "font-hand text-lg leading-tight font-bold",
+    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-60",
+    divider: "mb-3 border-b border-dashed border-ink/25",
+    number: "text-xs font-bold opacity-60",
+    prompt: "text-lg font-medium",
+    promptSub: "mt-1 text-sm opacity-60",
+    choice: "border-ink/20 bg-white hover:border-brick-blue/60",
+    choiceSelected: "border-brick-blue bg-brick-blue/10 font-bold",
+    mark: "border-ink/30",
+    markSelected: "border-brick-blue bg-brick-blue text-white",
+  },
+  candy: {
+    section: "rounded-3xl border-4 border-brick-blue/25 bg-white shadow-inner",
+    band: "rounded-full bg-highlight/70 px-4 py-2 text-center",
+    bandTitle:
+      "font-hand text-lg leading-tight font-bold underline decoration-brick-red/50 decoration-wavy underline-offset-4",
+    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-60",
+    divider: "mb-3 border-b-2 border-dotted border-brick-blue/25",
+    number: "text-xs font-bold text-brick-red/70",
+    prompt: "text-lg font-medium",
+    promptSub: "mt-1 text-sm opacity-60",
+    choice:
+      "rounded-full border-brick-blue/25 bg-white hover:border-brick-red/50",
+    choiceSelected: "rounded-full border-brick-red bg-brick-red/10 font-bold",
+    mark: "border-brick-blue/40",
+    markSelected: "border-brick-red bg-brick-red text-white",
+  },
+  lego: {
+    section: "rounded-md border-4 border-ink bg-white",
+    band: "relative rounded-sm border-2 border-ink bg-brick-yellow/60 px-3 pt-3 pb-2 text-center",
+    bandTitle: "font-hand text-lg leading-tight font-bold",
+    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-70",
+    divider: "mb-3 border-b-2 border-ink/20",
+    number: "text-xs font-bold opacity-60",
+    prompt: "text-lg font-bold",
+    promptSub: "mt-1 text-sm opacity-60",
+    choice: "rounded-sm border-ink/40 bg-white hover:border-ink",
+    choiceSelected: "rounded-sm border-ink bg-brick-blue/15 font-bold",
+    mark: "rounded-sm border-ink/50",
+    markSelected: "rounded-sm border-ink bg-brick-blue text-white",
+    studs: true,
+  },
+  cat: {
+    // 칠판 — 분필 글씨. 어두운 면이라 텍스트·테두리를 밝게 뒤집는다
+    section: "rounded-lg border-8 border-[#6b4a2f] bg-[#2f4640] text-[#f4f1e8]",
+    band: "relative border-2 border-dashed border-[#f4f1e8]/50 px-3 py-2 text-center",
+    bandTitle: "font-hand text-lg leading-tight font-bold",
+    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-70",
+    divider: "mb-3 border-b border-dashed border-[#f4f1e8]/30",
+    number: "text-xs font-bold opacity-70",
+    prompt: "font-hand text-lg font-medium",
+    promptSub: "mt-1 text-sm opacity-70",
+    choice: "border-[#f4f1e8]/40 bg-white/5 hover:border-brick-yellow/70",
+    choiceSelected: "border-brick-yellow bg-white/15 font-bold",
+    mark: "border-[#f4f1e8]/50",
+    markSelected: "border-brick-yellow bg-brick-yellow text-ink",
+    paw: true,
+  },
+  excel: {
+    // 평가서 시트 위장 — 셀 헤더 스트립 + 격자 느낌
+    section: "rounded-sm border border-[#c9cfd6] bg-white font-sans",
+    band: "border border-[#c9cfd6] bg-[#e2efda] px-3 py-1.5 text-left",
+    bandTitle: "text-sm font-bold text-[#217346]",
+    bandMeta: "mt-0 text-[10px] text-[#666]",
+    divider: "mb-3 border-b border-[#e3e7eb]",
+    number: "text-xs font-bold text-[#666]",
+    prompt: "text-base font-medium text-[#24292f]",
+    promptSub: "mt-1 text-sm text-[#666]",
+    choice: "rounded-sm border-[#c9cfd6] bg-white hover:bg-[#f6f8f9]",
+    choiceSelected: "rounded-sm border-[#217346] bg-[#e2efda] font-bold",
+    mark: "rounded-sm border-[#c9cfd6]",
+    markSelected: "rounded-sm border-[#217346] bg-[#217346] text-white",
+  },
+};
+
 export default function ExamPage() {
   const { contentId } = useParams<{ contentId: string }>();
   const [phase, setPhase] = useState<Phase>("intro");
@@ -41,6 +143,8 @@ export default function ExamPage() {
   const [current, setCurrent] = useState(0);
   const [graded, setGraded] = useState<ExamGraded | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // 응시 시작 시각(클라 표시용) — 판정 시간은 서버 started_at 이 정본
+  const [startedAt, setStartedAt] = useState<number | null>(null);
 
   const loadSummary = useCallback(() => {
     examApi
@@ -63,6 +167,7 @@ export default function ExamPage() {
       setAnswers(Array(started.questions.length).fill(null));
       setCurrent(0);
       setGraded(null);
+      setStartedAt(Date.now());
       setPhase("taking");
     } catch (e) {
       // 회차 전환 경합 — archived 시험은 새 응시 불가, 요약을 새로 받는다
@@ -111,6 +216,8 @@ export default function ExamPage() {
 
   const question = questions[current];
   const allMarked = answers.length > 0 && answers.every((a) => a != null);
+  const theme = useAppTheme();
+  const skin = EXAM_SKINS[theme] ?? EXAM_SKINS.note;
 
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-5 sm:px-16 sm:py-10">
@@ -122,8 +229,12 @@ export default function ExamPage() {
           </span>
         </h1>
         {phase === "taking" && (
-          <span className="ml-auto text-sm font-bold text-brick-blue">
-            {current + 1} / {questions.length}
+          <span className="ml-auto flex items-center gap-3">
+            {/* 경과 시계 — 테마별 컨셉 (제한시간 아님, 동점 순위 참고용) */}
+            {startedAt != null && <ExamTimer startedAt={startedAt} />}
+            <span className="text-sm font-bold text-brick-blue">
+              {current + 1} / {questions.length}
+            </span>
           </span>
         )}
       </header>
@@ -137,14 +248,37 @@ export default function ExamPage() {
           // pb: 모바일 하단 고정 OMR 패널 실측 ~200px + iOS 홈바 — 마지막 문항
           // 선지가 패널에 가려지지 않게 (2026-07-31 심층 리뷰)
           <div className="flex flex-col gap-4 pb-[calc(15rem+env(safe-area-inset-bottom))] sm:flex-row sm:items-start sm:pb-0">
-            {/* 문항 카드 */}
-            <section className="flex-1 rounded-lg border-2 border-ink/15 bg-white p-4 sm:p-5">
-              <p className="mb-2 text-xs font-bold opacity-60">
+            {/* 문항 카드 — 테마별 시험지 스킨 (EXAM_SKINS): 종이/화이트보드/블록판/칠판/평가서 */}
+            <section className={`flex-1 p-4 sm:p-5 ${skin.section}`}>
+              <div className={`mb-3 ${skin.band}`}>
+                {skin.studs && (
+                  <span className="absolute -top-1.5 left-1/2 flex -translate-x-1/2 gap-2">
+                    {[0, 1, 2, 3].map((i) => (
+                      <span
+                        key={i}
+                        className="h-2.5 w-4 rounded-sm border-2 border-ink bg-brick-yellow"
+                      />
+                    ))}
+                  </span>
+                )}
+                {skin.paw && <PawPrint />}
+                <p className={skin.bandTitle}>
+                  {theme === "excel"
+                    ? `평가서_${summary?.round ?? 1}회.xlsx`
+                    : `제${summary?.round ?? 1}회 어학 평가`}
+                </p>
+                <p className={skin.bandMeta}>
+                  {questions.length}문항 · {questions.length * 5}점 만점 ·
+                  제한시간 없음
+                </p>
+              </div>
+              <div className={skin.divider} />
+              <p className={`mb-2 ${skin.number}`}>
                 {current + 1}번 · {MODE_LABELS[question.quiz_mode] ?? "고르기"}
               </p>
-              <p className="text-lg font-medium">{question.prompt}</p>
+              <p className={skin.prompt}>{question.prompt}</p>
               {question.prompt_ko && (
-                <p className="mt-1 text-sm opacity-60">{question.prompt_ko}</p>
+                <p className={skin.promptSub}>{question.prompt_ko}</p>
               )}
               <ol className="mt-4 flex flex-col gap-2">
                 {question.choices.map((choice, idx) => {
@@ -155,16 +289,12 @@ export default function ExamPage() {
                         type="button"
                         onClick={() => mark(idx)}
                         className={`flex min-h-11 w-full items-center gap-3 rounded-md border-2 px-3 py-2 text-left text-sm transition ${
-                          selected
-                            ? "border-brick-blue bg-brick-blue/10 font-bold"
-                            : "border-ink/20 bg-white hover:border-brick-blue/60"
+                          selected ? skin.choiceSelected : skin.choice
                         }`}
                       >
                         <span
                           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
-                            selected
-                              ? "border-brick-blue bg-brick-blue text-white"
-                              : "border-ink/30"
+                            selected ? skin.markSelected : skin.mark
                           }`}
                         >
                           {CHOICE_MARKS[idx]}
@@ -225,6 +355,24 @@ export default function ExamPage() {
         )}
       </div>
     </main>
+  );
+}
+
+/** 칠판 스킨 장식 — 분필로 그린 고양이 발자국 (헤냥이) */
+function PawPrint() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="absolute top-1.5 right-2 h-4 w-4 opacity-50"
+      fill="currentColor"
+      aria-hidden
+    >
+      <ellipse cx="12" cy="15" rx="4" ry="3.2" />
+      <circle cx="6.5" cy="10" r="1.7" />
+      <circle cx="10.2" cy="7.5" r="1.7" />
+      <circle cx="13.8" cy="7.5" r="1.7" />
+      <circle cx="17.5" cy="10" r="1.7" />
+    </svg>
   );
 }
 
