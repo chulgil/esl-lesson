@@ -503,7 +503,7 @@ function PatternQuiz({
             type="button"
             disabled={disabled}
             onClick={() => setPicked((p) => p.filter((_, j) => j !== i))}
-            className="mb-1 mr-1 min-h-10 rounded-md bg-brick-blue px-3 py-1 text-sm font-bold text-white transition-colors hover:bg-brick-blue/80"
+            className="mb-1 mr-1 min-h-10 rounded-md bg-brick-blue px-3 py-1 text-sm font-bold text-brick-label transition-colors hover:bg-brick-blue/80"
           >
             {chips[chipIdx]}
           </button>
@@ -642,13 +642,13 @@ const RATING_BUTTONS: {
   {
     rating: 3,
     label: "알맞음",
-    active: "border-brick-green bg-brick-green text-white",
+    active: "border-brick-green bg-brick-green text-brick-label",
     idle: "border-brick-green/40 bg-white text-brick-green",
   },
   {
     rating: 4,
     label: "쉬움",
-    active: "border-brick-blue bg-brick-blue text-white",
+    active: "border-brick-blue bg-brick-blue text-brick-label",
     idle: "border-brick-blue/40 bg-white text-brick-blue",
   },
 ];
@@ -819,7 +819,7 @@ function Feedback({
             type="button"
             disabled={submitting}
             onClick={() => pick(1)}
-            className="flex min-h-14 w-full flex-col items-center justify-center rounded-md border-2 border-brick-red bg-brick-red font-bold text-white transition hover:-translate-y-0.5 disabled:opacity-50"
+            className="flex min-h-14 w-full flex-col items-center justify-center rounded-md border-2 border-brick-red bg-brick-red font-bold text-brick-label transition hover:-translate-y-0.5 disabled:opacity-50"
           >
             <span>다시 학습</span>
             {againMin != null && (

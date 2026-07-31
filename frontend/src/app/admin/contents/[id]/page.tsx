@@ -150,7 +150,7 @@ export default function ContentDetailPage() {
           <button
             type="button"
             onClick={approveAll}
-            className="ml-auto mb-1 rounded bg-brick-green px-3 py-1 text-xs font-bold text-white"
+            className="ml-auto mb-1 rounded bg-brick-green px-3 py-1 text-xs font-bold text-brick-label"
           >
             pending 일괄 승인
           </button>

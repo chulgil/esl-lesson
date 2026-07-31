@@ -94,7 +94,12 @@ export default function ExamPage() {
     if (summary?.exam_id == null) return;
     setError(null);
     try {
+      // 새로 시작 = 서버가 옛 미제출 attempt 를 삭제 — 그 마킹 키도 정리 (고아 방지)
+      const stale = summary.my_open_attempt?.attempt_id;
       const started = await examApi.start(summary.exam_id);
+      if (stale != null && stale !== started.attempt_id) {
+        localStorage.removeItem(marksKey(stale));
+      }
       enterTaking(started, false);
     } catch (e) {
       // 회차 전환 경합 — archived 시험은 새 응시 불가, 요약을 새로 받는다
@@ -285,7 +290,7 @@ export default function ExamPage() {
                 type="button"
                 onClick={submit}
                 disabled={!allMarked || submitting}
-                className="mt-2 min-h-11 w-full rounded-md bg-brick-red font-bold text-white shadow-sm transition enabled:hover:opacity-90 disabled:opacity-40"
+                className="mt-2 min-h-11 w-full rounded-md bg-brick-red font-bold text-brick-label shadow-sm transition enabled:hover:opacity-90 disabled:opacity-40"
               >
                 {submitting
                   ? "채점 중..."
@@ -298,7 +303,7 @@ export default function ExamPage() {
                   <button
                     type="button"
                     onClick={abandon}
-                    className="min-h-9 flex-1 rounded-md border-2 border-brick-red bg-white text-xs font-bold text-brick-red transition hover:bg-brick-red hover:text-white"
+                    className="min-h-9 flex-1 rounded-md border-2 border-brick-red bg-white text-xs font-bold text-brick-red transition hover:bg-brick-red hover:text-brick-label"
                   >
                     정말 포기 (경과 초기화)
                   </button>
@@ -426,7 +431,7 @@ function Intro({
             <button
               type="button"
               onClick={onResume}
-              className="min-h-11 rounded-md bg-brick-blue px-6 font-bold text-white shadow-sm transition hover:opacity-90"
+              className="min-h-11 rounded-md bg-brick-blue px-6 font-bold text-brick-label shadow-sm transition hover:opacity-90"
             >
               이어서 응시 (경과 계속)
             </button>
@@ -442,7 +447,7 @@ function Intro({
           <button
             type="button"
             onClick={onStart}
-            className="min-h-11 w-full rounded-md bg-brick-blue font-bold text-white shadow-sm transition hover:opacity-90 sm:w-auto sm:px-8"
+            className="min-h-11 w-full rounded-md bg-brick-blue font-bold text-brick-label shadow-sm transition hover:opacity-90 sm:w-auto sm:px-8"
           >
             응시 시작
           </button>

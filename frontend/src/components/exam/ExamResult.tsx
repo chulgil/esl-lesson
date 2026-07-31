@@ -61,7 +61,7 @@ export function ExamResult({
         <button
           type="button"
           onClick={onRetry}
-          className="min-h-11 rounded-md bg-brick-blue px-4 font-bold text-white shadow-sm transition hover:opacity-90"
+          className="min-h-11 rounded-md bg-brick-blue px-4 font-bold text-brick-label shadow-sm transition hover:opacity-90"
         >
           다시 도전
         </button>

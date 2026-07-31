@@ -9,6 +9,7 @@ import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { BackLink } from "@/components/nav/BackLink";
 import { fetchMe } from "@/lib/api";
 import { useInviteTheme } from "@/lib/use-invite-theme";
+import { useSurfaceSkin } from "@/lib/theme-surfaces";
 import {
   GameSocket,
   type GameReviewItem,
@@ -48,6 +49,8 @@ function ScrambleInner() {
   const [phase, setPhase] = useState<Phase>("lobby");
   // 초대 입장(?theme=)이면 게임 동안 초대자 테마 — 종료/이탈 시 자동 복원
   useInviteTheme(phase === "ended");
+  // 조립창·단어 칩 — 시험지/학습과 같은 테마 표면 스킨 (2026-07-31 게임 테마화)
+  const skin = useSurfaceSkin();
   // 결과가 화면 하단에 묻혀 안 보이는 문제(모바일) — 종료 시 결과 섹션을 상단으로 스크롤
   const resultRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -377,7 +380,7 @@ function ScrambleInner() {
           </div>
 
           {/* 조립창 — 물이 차오르며 시간 압박 (남으면 파랑, 촉박하면 빨강) */}
-          <div className="relative overflow-hidden rounded-lg border-2 border-ink/10 bg-white p-5">
+          <div className={`relative overflow-hidden ${skin.section} p-5`}>
             <div
               className={`water-fill ${timeRatio < 0.25 ? "low" : ""}`}
               style={{ height: `${(1 - timeRatio) * 100}%` }}
@@ -432,10 +435,10 @@ function ScrambleInner() {
                       type="button"
                       disabled={chip.used}
                       onClick={() => tapChip(chip)}
-                      className={`min-h-11 rounded-md border-2 px-3 text-sm font-bold transition ${
+                      className={`min-h-11 border-2 px-3 text-sm font-bold transition ${skin.radius} ${
                         chip.used
-                          ? "border-ink/5 bg-ink/5 text-ink/25"
-                          : "cursor-pointer border-ink/20 bg-white hover:-translate-y-0.5 hover:border-brick-blue"
+                          ? `${skin.choice} cursor-default opacity-30`
+                          : `${skin.choice} cursor-pointer hover:-translate-y-0.5`
                       } ${wrongId === chip.id ? "miss-shake border-brick-red" : ""}`}
                     >
                       {chip.word}

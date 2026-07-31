@@ -85,7 +85,7 @@ theme_reward_rules (d1e2f3a4b5c6, 2026-07-30)
 
 `frontend/src/lib/theme-surfaces.ts` 가 화면별 테마 분기의 단일 정의처:
 `SURFACE_SKINS`(시험지·학습 세션 문항 카드 공용 표면), `CLOCK_OF`(경과 시계 컨셉),
-`boardThemeOf`(게임 보드 폴백 — 전용 스킨은 note/candy/lego/cat). **새 테마 추가 =
+`boardThemeOf`(게임 보드 폴백 — 전용 스킨은 note/candy/lego/cat/school, excel 은 위장 유지로 노트 폴백. 보드 자체 렌더는 `BoardCanvas` 의 PALETTES·drawBrickBody·drawBackground). 퀴즈 선지·어순 칩은 `SURFACE_SKINS.choice` 재사용 (2026-07-31 게임 테마화). **새 테마 추가 =
 theme.ts 카탈로그 + globals.css 토큰 + theme-surfaces + 백엔드 THEME_ACCESS + layout.tsx 부트 스크립트 화이트리스트 5곳** —
 화면 컴포넌트에 테마 하드코딩 금지.
 
@@ -97,6 +97,7 @@ theme.ts 카탈로그 + globals.css 토큰 + theme-surfaces + 백엔드 THEME_AC
 | 잠긴 테마 욕망 설계 | 설정 잠금 배지 "'첫 친구' 달성 시 열려요" + 진행률 "진행 0/1" (unlock_key 로 업적 API 와 조인) |
 | 스티커 보상 예고 | 업적 스티커에 칩 — 미달성 "보상: 캔디 테마" / 달성 "캔디 테마 획득" (achievements API 의 reward_theme) |
 | 멘탈모델 카피 | 설정 테마 섹션 부제 "새 테마는 업적을 달성하거나 이벤트로 받으면 열려요" |
+| 대비 토큰 | 유색(brick-*) 배경 버튼의 글자는 `text-brick-label` 강제 — 파스텔 테마에서 잉크색으로 재정의되므로 `text-white` 하드코딩 금지 (2026-07-31 일괄 치환) |
 
 ## 초기 지급
 

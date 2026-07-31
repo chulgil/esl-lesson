@@ -6,21 +6,64 @@ import type { BoardState } from "@/lib/game-ws";
 const ROWS = 12;
 
 /** 보드 배경 테마 — 전역 앱 테마(설정 > 테마)를 따른다 */
-export type BoardTheme = "candy" | "note" | "lego" | "cat";
+export type BoardTheme = "candy" | "note" | "lego" | "cat" | "school";
 
 const THEME_BORDER: Record<BoardTheme, string> = {
   candy: "border-[#F0C4E0]",
   note: "border-[#E8D9A8]",
   lego: "border-[#BFD4F2]",
   cat: "border-[#EFD4AF]",
+  school: "border-[#8A6A48]", // 칠판 나무 프레임
 };
 
-// 캔디 팔레트 — 밝은 파스텔 + 글로시 하이라이트 (Candy Crush 계열 비주얼 언어)
-const CANDY_COLORS = ["#FF9EB8", "#FFB85C", "#7CC7F2", "#92DBA8", "#C9A0E8"];
-const CANDY_TEXT = "#4A2545";
-const GARBAGE_COLOR = "#B9BAC9"; // 회색 젤리 (상대 공격)
-const GARBAGE_TEXT = "#54545E";
-const ITEM_COLOR = "#FFD34E"; // 별사탕
+/** 테마별 낙하물 팔레트 — 몸통 색 순환 + 텍스트/가비지/아이템 (2026-07-31
+ *  낙하물 테마화: 배경만 테마였고 브릭은 전 테마 캔디 모양이던 것을 교정) */
+interface BoardPalette {
+  colors: string[];
+  text: string;
+  garbage: string;
+  garbageText: string;
+}
+const PALETTES: Record<BoardTheme, BoardPalette> = {
+  // 캔디: 밝은 파스텔 + 글로시 하이라이트 (Candy Crush 계열 비주얼 언어)
+  candy: {
+    colors: ["#FF9EB8", "#FFB85C", "#7CC7F2", "#92DBA8", "#C9A0E8"],
+    text: "#4A2545",
+    garbage: "#B9BAC9",
+    garbageText: "#54545E",
+  },
+  // 노트: 파스텔 종이 쪽지 (포스트잇)
+  note: {
+    colors: ["#FFF6C9", "#FFE3EA", "#DFF0FF", "#E4F9DC", "#F0E6FF"],
+    text: "#3A3A55",
+    garbage: "#D4D4D0",
+    garbageText: "#63635E",
+  },
+  // 레고: 클래식 브릭 원색 (텍스트는 진네이비 — 노랑 위 가독성)
+  lego: {
+    colors: ["#EF3340", "#FFCF00", "#2E8AE6", "#4CAF50", "#FF8A3D"],
+    text: "#1E2A47",
+    garbage: "#9AA3AF",
+    garbageText: "#3E4552",
+  },
+  // 헤냥이: 크림·살구 톤 고양이 브릭
+  cat: {
+    colors: ["#FFE6C7", "#FFD9A0", "#F9CFCF", "#EFE1C6", "#FFE9D9"],
+    text: "#6B4A2B",
+    garbage: "#D9CDBE",
+    garbageText: "#6E6154",
+  },
+  // 학교수업: 칠판지우개 펠트 톤 (텍스트는 분필 화이트)
+  school: {
+    colors: ["#4E5A68", "#5C4F63", "#4F6157", "#6B5147", "#54586E"],
+    text: "#FFFFFF",
+    garbage: "#3A3F4A",
+    garbageText: "#C9CDD6",
+  },
+};
+
+const ITEM_COLOR = "#FFD34E"; // 별사탕 — 아이템 어포던스는 전 테마 공통 금색
+const ITEM_TEXT = "#4A2545";
 
 interface Particle {
   x: number;
@@ -95,7 +138,9 @@ export function BoardCanvas({
             rings.current,
             width / 2,
             rowToY(brick.y, height),
-            pickColor(brick.id),
+            themeRef.current === "school"
+              ? "rgba(255,255,255,0.85)" // 분필 가루
+              : pickColor(themeRef.current, brick.id),
           );
         }
       }
@@ -170,8 +215,9 @@ function rowToY(row: number, height: number): number {
   return (row / ROWS) * height;
 }
 
-function pickColor(id: number): string {
-  return CANDY_COLORS[id % CANDY_COLORS.length];
+function pickColor(theme: BoardTheme, id: number): string {
+  const colors = PALETTES[theme].colors;
+  return colors[id % colors.length];
 }
 
 /** 버블 팝 — 확장 링 + 방사형 방울 파티클 (juice 레이어링) */
@@ -279,6 +325,25 @@ function drawBackground(
     }
     return;
   }
+  if (theme === "school") {
+    // 딥그린 칠판 + 지운 자국 + 하단 분필 가루 (학교수업)
+    ctx.fillStyle = "#2E5B46";
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = "rgba(255,255,255,0.05)";
+    const wipes = [
+      [0.3, 0.25, 90, 26, -0.3],
+      [0.7, 0.55, 110, 30, 0.2],
+      [0.4, 0.8, 80, 22, -0.15],
+    ] as const;
+    for (const [wx, wy, rx, ry, rot] of wipes) {
+      ctx.beginPath();
+      ctx.ellipse(wx * width, wy * height, rx, ry, rot, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fillRect(0, height - 5, width, 5);
+    return;
+  }
   // candy: 파스텔 그라데이션 + 은은한 버블
   const g = ctx.createLinearGradient(0, 0, 0, height);
   g.addColorStop(0, "#FFF4FA");
@@ -382,53 +447,39 @@ function draw(
       const brickWidth = Math.min(maxBrickWidth, Math.max(56, textWidth + 26));
       const x = (width - brickWidth) / 2;
       const radius = Math.min(brickHeight / 2, 14);
+      const palette = PALETTES[theme];
       const bodyColor = brick.garbage
-        ? GARBAGE_COLOR
+        ? palette.garbage
         : brick.item
           ? ITEM_COLOR
-          : pickColor(brick.id);
+          : pickColor(theme, brick.id);
 
-      // 캔디 몸통 (아이템은 금색 글로우)
+      // 몸통 — 테마별 오브젝트 렌더 (아이템은 금색 글로우 공통)
       if (brick.item) {
         ctx.save();
         ctx.shadowColor = ITEM_COLOR;
         ctx.shadowBlur = 12 + 6 * Math.sin(performance.now() / 150);
       }
-      ctx.fillStyle = bodyColor;
-      roundRect(ctx, x, y, brickWidth, brickHeight, radius);
-      ctx.fill();
+      drawBrickBody(
+        ctx,
+        theme,
+        x,
+        y,
+        brickWidth,
+        brickHeight,
+        radius,
+        bodyColor,
+      );
       if (brick.item) {
         ctx.restore();
       }
 
-      // 젤리 두께감 — 아랫면 그림자
-      ctx.fillStyle = "rgba(0,0,0,0.10)";
-      roundRect(
-        ctx,
-        x,
-        y + brickHeight * 0.55,
-        brickWidth,
-        brickHeight * 0.45,
-        radius,
-      );
-      ctx.fill();
-
-      // 캔디 광택 — 왼쪽 위 글로시 하이라이트
-      ctx.fillStyle = "rgba(255,255,255,0.55)";
-      ctx.beginPath();
-      ctx.ellipse(
-        x + Math.min(brickWidth * 0.25, 30),
-        y + brickHeight * 0.3,
-        Math.min(brickWidth * 0.18, 24),
-        brickHeight * 0.16,
-        -0.25,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-
       // 텍스트 (폰트는 fitFontSize 에서 확정됨)
-      ctx.fillStyle = brick.garbage ? GARBAGE_TEXT : CANDY_TEXT;
+      ctx.fillStyle = brick.garbage
+        ? palette.garbageText
+        : brick.item
+          ? ITEM_TEXT
+          : palette.text;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(label, x + brickWidth / 2, y + brickHeight / 2 + 1);
@@ -521,6 +572,130 @@ function draw(
   }
 
   ctx.restore();
+}
+
+/** 테마별 낙하물 몸통 — 캔디=젤리, 노트=쪽지, 레고=스터드 브릭,
+ *  헤냥이=고양이 귀 브릭, 학교수업=칠판지우개 (2026-07-31 낙하물 테마화) */
+function drawBrickBody(
+  ctx: CanvasRenderingContext2D,
+  theme: BoardTheme,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number,
+  color: string,
+): void {
+  if (theme === "note") {
+    // 파스텔 쪽지 — 옅은 그림자 + 잉크 테두리 + 접힌 모서리
+    ctx.fillStyle = "rgba(0,0,0,0.08)";
+    roundRect(ctx, x + 2, y + 3, w, h, 4);
+    ctx.fill();
+    ctx.fillStyle = color;
+    roundRect(ctx, x, y, w, h, 4);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(58,58,85,0.25)";
+    ctx.lineWidth = 1;
+    roundRect(ctx, x, y, w, h, 4);
+    ctx.stroke();
+    const fold = Math.min(12, h * 0.4);
+    ctx.fillStyle = "rgba(0,0,0,0.10)";
+    ctx.beginPath();
+    ctx.moveTo(x + w - fold, y);
+    ctx.lineTo(x + w, y + fold);
+    ctx.lineTo(x + w - fold, y + fold);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (theme === "lego") {
+    // 하드 오프셋 그림자 + 각진 브릭 + 상단 스터드 + 하단 셰이드
+    ctx.fillStyle = "rgba(30,60,120,0.20)";
+    roundRect(ctx, x + 3, y + 4, w, h, 3);
+    ctx.fill();
+    ctx.fillStyle = color;
+    roundRect(ctx, x, y, w, h, 3);
+    ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.14)";
+    ctx.fillRect(x, y + h * 0.82, w, h * 0.18);
+    const studs = Math.max(2, Math.min(5, Math.floor(w / 36)));
+    const studR = Math.min(5.5, h * 0.16);
+    for (let i = 0; i < studs; i++) {
+      const sx = x + (w * (i + 0.5)) / studs;
+      const sy = y + studR + 3;
+      ctx.fillStyle = "rgba(0,0,0,0.15)";
+      ctx.beginPath();
+      ctx.arc(sx + 1, sy + 1, studR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.beginPath();
+      ctx.arc(sx, sy, studR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+  if (theme === "cat") {
+    // 고양이 브릭 — 귀 2개(몸통이 밑변을 덮음) + 크림 몸통 + 아랫면 음영
+    const earW = Math.min(10, w * 0.12);
+    for (const ex of [x + w * 0.22, x + w * 0.78]) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(ex - earW, y + 3);
+      ctx.lineTo(ex, y - earW);
+      ctx.lineTo(ex + earW, y + 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,150,150,0.55)";
+      ctx.beginPath();
+      ctx.moveTo(ex - earW * 0.45, y + 2);
+      ctx.lineTo(ex, y - earW * 0.5);
+      ctx.lineTo(ex + earW * 0.45, y + 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = color;
+    roundRect(ctx, x, y, w, h, radius);
+    ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.07)";
+    roundRect(ctx, x, y + h * 0.6, w, h * 0.4, radius);
+    ctx.fill();
+    return;
+  }
+  if (theme === "school") {
+    // 칠판지우개 — 하드 그림자 + 펠트 몸통 + 상단 손잡이 띠 + 분필 자국
+    ctx.fillStyle = "rgba(0,0,0,0.30)";
+    roundRect(ctx, x + 2, y + 3, w, h, 4);
+    ctx.fill();
+    ctx.fillStyle = color;
+    roundRect(ctx, x, y, w, h, 4);
+    ctx.fill();
+    ctx.fillStyle = "#E8E2D4";
+    roundRect(ctx, x, y, w, Math.max(6, h * 0.24), 4);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fillRect(x + w * 0.12, y + h * 0.55, w * 0.3, 3);
+    ctx.fillRect(x + w * 0.55, y + h * 0.72, w * 0.25, 3);
+    return;
+  }
+  // candy: 젤리 몸통 + 아랫면 그림자 + 글로시 하이라이트
+  ctx.fillStyle = color;
+  roundRect(ctx, x, y, w, h, radius);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.10)";
+  roundRect(ctx, x, y + h * 0.55, w, h * 0.45, radius);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.beginPath();
+  ctx.ellipse(
+    x + Math.min(w * 0.25, 30),
+    y + h * 0.3,
+    Math.min(w * 0.18, 24),
+    h * 0.16,
+    -0.25,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
 }
 
 function roundRect(

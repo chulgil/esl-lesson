@@ -44,7 +44,7 @@ export function ExamEntryCard({ contentId }: { contentId: number }) {
         </div>
         <Link
           href={`/exam/${contentId}`}
-          className="ml-auto flex min-h-11 items-center rounded-md bg-brick-blue px-5 font-bold text-white shadow-sm transition hover:opacity-90"
+          className="ml-auto flex min-h-11 items-center rounded-md bg-brick-blue px-5 font-bold text-brick-label shadow-sm transition hover:opacity-90"
         >
           시험 보기
         </Link>

@@ -201,7 +201,7 @@ export default function VocabNetworkPage() {
                       type="button"
                       disabled={adding}
                       onClick={() => addToDeck(selected.id)}
-                      className="min-h-11 rounded-md bg-brick-green px-4 font-bold text-white disabled:opacity-50"
+                      className="min-h-11 rounded-md bg-brick-green px-4 font-bold text-brick-label disabled:opacity-50"
                     >
                       + 학습에 추가
                     </button>

@@ -11,11 +11,15 @@ import { type AppTheme, useAppTheme } from "@/lib/theme";
 
 // --- 게임 보드 -----------------------------------------------------------------
 
-/** BoardCanvas 가 전용 스킨을 가진 테마 — 나머지는 노트 보드로 폴백 */
-export type BoardSkinTheme = "note" | "candy" | "lego" | "cat";
+/** BoardCanvas 가 전용 스킨을 가진 테마 — excel 만 노트 보드로 폴백
+ *  (오피스 위장 중 화려한 게임 보드 금지 결정 유지, docs/specs/chat.md) */
+export type BoardSkinTheme = "note" | "candy" | "lego" | "cat" | "school";
 
 export function boardThemeOf(theme: AppTheme): BoardSkinTheme {
-  return theme === "candy" || theme === "lego" || theme === "cat"
+  return theme === "candy" ||
+    theme === "lego" ||
+    theme === "cat" ||
+    theme === "school"
     ? theme
     : "note";
 }

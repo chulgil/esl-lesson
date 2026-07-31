@@ -6,6 +6,7 @@ import { InviteFriends } from "@/components/game/InviteFriends";
 import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { useInviteTheme } from "@/lib/use-invite-theme";
+import { useSurfaceSkin } from "@/lib/theme-surfaces";
 import type {
   GameReviewItem,
   QrEndMsg,
@@ -34,6 +35,8 @@ export function QuizRoyale({
   const [phase, setPhase] = useState<Phase>("waiting");
   // 초대 입장(?theme=)이면 게임 동안 초대자 테마 — 종료/이탈 시 자동 복원
   useInviteTheme(phase === "ended");
+  // 문제 카드·선지 — 시험지/학습과 같은 테마 표면 스킨 (2026-07-31 게임 테마화)
+  const skin = useSurfaceSkin();
   // 결과가 화면 하단에 묻혀 안 보이는 문제(모바일) — 종료 시 결과 섹션을 상단으로 스크롤
   const resultRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -193,36 +196,39 @@ export function QuizRoyale({
             </div>
           </div>
 
-          <div className="rounded-lg border-2 border-ink/10 bg-white p-6 text-center">
-            <p className="font-hand text-4xl font-bold">{round.prompt}</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {round.choices.map((choice) => {
-              const isAnswer = reveal?.answer === choice;
-              const isPicked = picked === choice;
-              return (
-                <button
-                  key={choice}
-                  type="button"
-                  disabled={picked !== null || phase === "reveal"}
-                  onClick={() => pick(choice)}
-                  className={`min-h-14 rounded-md border-2 px-4 py-2 text-left font-medium transition active:scale-95 ${
-                    phase === "reveal"
-                      ? isAnswer
-                        ? "border-brick-green bg-brick-green/15 font-bold"
+          {/* 선지를 문제 카드(스킨 섹션) 안에 함께 — 칠판(헤냥이) 스킨의
+              반투명 선지는 어두운 섹션 위에서만 보인다 */}
+          <div className={`${skin.section} p-6`}>
+            <p className="text-center font-hand text-4xl font-bold">
+              {round.prompt}
+            </p>
+            <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {round.choices.map((choice) => {
+                const isAnswer = reveal?.answer === choice;
+                const isPicked = picked === choice;
+                return (
+                  <button
+                    key={choice}
+                    type="button"
+                    disabled={picked !== null || phase === "reveal"}
+                    onClick={() => pick(choice)}
+                    className={`min-h-14 border-2 px-4 py-2 text-left font-medium transition active:scale-95 ${skin.radius} ${
+                      phase === "reveal"
+                        ? isAnswer
+                          ? "border-brick-green bg-brick-green/15 font-bold"
+                          : isPicked
+                            ? "border-brick-red bg-brick-red/10 opacity-70"
+                            : `${skin.choice} opacity-40`
                         : isPicked
-                          ? "border-brick-red bg-brick-red/10 opacity-70"
-                          : "border-ink/10 opacity-40"
-                      : isPicked
-                        ? "border-brick-blue bg-brick-blue/10 font-bold"
-                        : "border-ink/15 bg-white hover:-translate-y-0.5 hover:border-brick-blue disabled:opacity-60"
-                  }`}
-                >
-                  {choice}
-                </button>
-              );
-            })}
+                          ? skin.choiceSelected
+                          : `${skin.choice} hover:-translate-y-0.5 disabled:opacity-60`
+                    }`}
+                  >
+                    {choice}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {phase === "round" && (

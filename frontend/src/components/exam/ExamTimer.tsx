@@ -34,7 +34,7 @@ export function ExamTimer({ startedAt }: { startedAt: number }) {
   if (clock === "digital") {
     // 디지털 브릭 타이머 — 스터드 2개 + 모노 숫자
     return (
-      <span className="relative inline-flex min-h-8 items-center rounded-md border-2 border-ink bg-brick-red px-2.5 pt-1 font-mono text-sm font-bold text-white">
+      <span className="relative inline-flex min-h-8 items-center rounded-md border-2 border-ink bg-brick-red px-2.5 pt-1 font-mono text-sm font-bold text-brick-label">
         <span className="absolute -top-1.5 left-2 h-2 w-3 rounded-sm border-2 border-ink bg-brick-red" />
         <span className="absolute -top-1.5 right-2 h-2 w-3 rounded-sm border-2 border-ink bg-brick-red" />
         {label}

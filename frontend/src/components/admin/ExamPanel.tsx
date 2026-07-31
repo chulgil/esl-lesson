@@ -61,7 +61,7 @@ export function ExamPanel({ contentId }: { contentId: number }) {
           type="button"
           onClick={generate}
           disabled={busy}
-          className="min-h-9 rounded bg-brick-green px-4 text-sm font-bold text-white transition enabled:hover:opacity-90 disabled:opacity-50"
+          className="min-h-9 rounded bg-brick-green px-4 text-sm font-bold text-brick-label transition enabled:hover:opacity-90 disabled:opacity-50"
         >
           {busy
             ? "생성 중..."
