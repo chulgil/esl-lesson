@@ -45,6 +45,9 @@ export default function ExamPage() {
   const [submitting, setSubmitting] = useState(false);
   // 응시 시작 시각(클라 표시용) — 판정 시간은 서버 started_at 이 정본
   const [startedAt, setStartedAt] = useState<number | null>(null);
+  // 포기 2단계 확인 — window.confirm 은 브라우저가 대화상자를 차단하면
+  // 조용히 false 라 "버튼이 안 먹는" 것처럼 보인다 (2026-07-31 보고)
+  const [abandonAsk, setAbandonAsk] = useState(false);
 
   const loadSummary = useCallback(() => {
     examApi
@@ -83,6 +86,7 @@ export default function ExamPage() {
     setGraded(null);
     // 경과 기준 = 서버 저장 시작 시각 — 화면을 떠났다 와도 이어진다 (2026-07-31)
     setStartedAt(Date.parse(started.started_at));
+    setAbandonAsk(false);
     setPhase("taking");
   }
 
@@ -139,7 +143,7 @@ export default function ExamPage() {
 
   async function abandon() {
     if (summary?.exam_id == null || attemptId == null) return;
-    if (!confirm("이번 응시를 포기할까요? 경과 시간이 초기화돼요.")) return;
+    setAbandonAsk(false);
     try {
       await examApi.abandon(summary.exam_id, attemptId);
     } catch {
@@ -289,13 +293,32 @@ export default function ExamPage() {
                     ? "제출하기"
                     : "전부 마킹하면 제출할 수 있어요"}
               </button>
-              <button
-                type="button"
-                onClick={abandon}
-                className="mt-1.5 min-h-9 w-full text-xs opacity-50 hover:underline hover:opacity-80"
-              >
-                포기하기 (경과 초기화)
-              </button>
+              {abandonAsk ? (
+                <div className="mt-1.5 flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={abandon}
+                    className="min-h-9 flex-1 rounded-md border-2 border-brick-red bg-white text-xs font-bold text-brick-red transition hover:bg-brick-red hover:text-white"
+                  >
+                    정말 포기 (경과 초기화)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAbandonAsk(false)}
+                    className="min-h-9 flex-1 rounded-md border-2 border-ink/20 bg-white text-xs font-bold"
+                  >
+                    계속 풀기
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAbandonAsk(true)}
+                  className="mt-1.5 min-h-9 w-full text-xs opacity-50 hover:underline hover:opacity-80"
+                >
+                  포기하기 (경과 초기화)
+                </button>
+              )}
             </aside>
           </div>
         )}

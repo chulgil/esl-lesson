@@ -2,6 +2,7 @@
 
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
+import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { BackLink } from "@/components/nav/BackLink";
 import type { ChatSkinProps } from "./types";
 
@@ -72,17 +73,12 @@ export function NoteSkin(p: ChatSkinProps) {
                   )}
                   {/* 내 글 삭제 — 확인 후 "삭제되었습니다" 로 치환 (2026-07-31) */}
                   {mine && !m.deleted && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm("이 메시지를 삭제할까요?"))
-                          p.onDeleteMessage(m.id);
-                      }}
-                      aria-label="메시지 삭제"
+                    <DeleteMessageButton
+                      label="지우기"
+                      confirmLabel="정말 지우기?"
                       className="ml-auto opacity-30 hover:opacity-80"
-                    >
-                      지우기
-                    </button>
+                      onDelete={() => p.onDeleteMessage(m.id)}
+                    />
                   )}
                 </div>
                 {m.deleted && (

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
+import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { BlankSheet, ExcelChrome, fakeFilename } from "./ExcelChrome";
 import type { ChatSkinProps } from "./types";
 
@@ -89,17 +90,12 @@ export function ExcelSkin(p: ChatSkinProps) {
                     )}
                     {/* 내 행 삭제 — 문서 위장 톤 ("행 삭제") */}
                     {mine && !m.deleted && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm("이 행을 삭제할까요?"))
-                            p.onDeleteMessage(m.id);
-                        }}
-                        aria-label="메시지 삭제"
+                      <DeleteMessageButton
+                        label="행 삭제"
+                        confirmLabel="정말 삭제?"
                         className="ml-1.5 text-[#c0504d] opacity-40 hover:opacity-90"
-                      >
-                        행 삭제
-                      </button>
+                        onDelete={() => p.onDeleteMessage(m.id)}
+                      />
                     )}
                   </div>
                   {m.deleted && (

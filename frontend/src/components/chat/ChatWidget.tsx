@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
+import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
 import { useChatRoom } from "@/components/chat/useChatRoom";
 import { fetchMe } from "@/lib/api";
@@ -396,17 +397,12 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
                 )}
                 {/* 내 글 삭제 — 전체 페이지와 동일 사양 (2026-07-31) */}
                 {mine && !m.deleted && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm("이 메시지를 삭제할까요?"))
-                        p.onDeleteMessage(m.id);
-                    }}
-                    aria-label="메시지 삭제"
+                  <DeleteMessageButton
+                    label={excel ? "행 삭제" : "지우기"}
+                    confirmLabel="정말 지우기?"
                     className="ml-auto opacity-30 hover:opacity-80"
-                  >
-                    {excel ? "행 삭제" : "지우기"}
-                  </button>
+                    onDelete={() => p.onDeleteMessage(m.id)}
+                  />
                 )}
               </div>
               {m.deleted && (
