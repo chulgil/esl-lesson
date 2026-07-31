@@ -2,17 +2,17 @@
 
 import { useEffect, useRef } from "react";
 
-/** 자동 확장 채팅 입력 — Enter 전송, Shift+Enter 줄바꿈, 최대 8줄 (docs/specs/chat.md).
+/** 자동 확장 채팅 입력 — Enter = 줄바꿈, 전송은 버튼으로만 (카카오톡 모바일 방식,
+ *  2026-07-31 요청 — Enter 전송에서 변경). 최대 8줄, docs/specs/chat.md.
  *
  *  높이는 내용에 맞춰 자라고 8줄에서 멈춘 뒤 내부 스크롤. 전송으로 값이 비면
- *  1줄로 복귀. IME 조합 중 Enter 는 무시 (한글 입력 중 오전송 방지). */
+ *  1줄로 복귀. */
 
 const MAX_LINES = 8;
 
 export function ChatTextarea({
   value,
   onChange,
-  onSend,
   onPasteImage,
   placeholder,
   className,
@@ -20,7 +20,6 @@ export function ChatTextarea({
 }: {
   value: string;
   onChange: (v: string) => void;
-  onSend: () => void;
   onPasteImage: (file: File) => void;
   placeholder: string;
   className: string;
@@ -42,13 +41,6 @@ export function ChatTextarea({
       value={value}
       rows={1}
       onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => {
-        // Enter = 전송(줄바꿈 포함 전체), Shift+Enter = 줄바꿈
-        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-          e.preventDefault();
-          onSend();
-        }
-      }}
       onPaste={(e) => {
         // 클립보드 이미지 붙여넣기 → 파일 첨부와 같은 업로드 파이프라인
         const file = Array.from(e.clipboardData.files).find((f) =>

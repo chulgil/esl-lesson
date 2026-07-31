@@ -191,7 +191,7 @@ export function ExcelSkin(p: ChatSkinProps) {
             </div>
           )}
 
-          {/* 입력줄 — excelkospi 의 "입력 후 Enter" 바 컨셉, 리스트 하단에 고정 */}
+          {/* 입력줄 — 리스트 하단 고정. Enter = 줄바꿈, 전송은 [입력] 버튼만 */}
           {/* items-end — 입력창이 여러 줄로 자라도 버튼은 바닥에 붙는다 */}
           <div className="flex items-end gap-1.5 border-t border-[#d8dde3] bg-white px-2 py-1.5">
             <ChatToolsMenu
@@ -203,9 +203,8 @@ export function ExcelSkin(p: ChatSkinProps) {
             <ChatTextarea
               value={p.input}
               onChange={p.onInputChange}
-              onSend={p.onSend}
               onPasteImage={p.onAttachImageFile}
-              placeholder="내용 입력 후 Enter (Shift+Enter 줄바꿈)"
+              placeholder="내용 입력"
               ariaLabel="내용 입력"
               className="min-h-11 flex-1 rounded-sm border border-[#c9cfd6] px-2.5 py-2.5 text-base focus:border-[#217346] focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px]"
             />

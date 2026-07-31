@@ -186,9 +186,8 @@ export function NoteSkin(p: ChatSkinProps) {
           <ChatTextarea
             value={p.input}
             onChange={p.onInputChange}
-            onSend={p.onSend}
             onPasteImage={p.onAttachImageFile}
-            placeholder="한 줄 적기... (Shift+Enter 줄바꿈)"
+            placeholder="한 줄 적기..."
             className="min-h-11 flex-1 rounded-md border-2 border-ink/20 px-3 py-2.5 text-base transition-colors focus:border-brick-blue focus:outline-none sm:text-sm"
           />
           <button
