@@ -148,6 +148,18 @@ export function useChatRoom(otherId: number) {
       .catch(() => {});
   }, [otherId, markReadAndSignal, scrollToBottom]);
 
+  // 새 메시지(수신·낙관 렌더) 도착 시 최하단 고정 — WS 핸들러의 rAF 는 React
+  // 렌더 전에 돌아 옛 높이로 스크롤되는 경합이 있었다 (2026-07-31 보고:
+  // 챗이 와도 안 내려감). 렌더 후 effect 에서 스크롤해야 새 높이가 반영된다
+  const lastCount = useRef(0);
+  useEffect(() => {
+    const count = messages.length + pending.length;
+    if (count > lastCount.current && stickBottom.current) {
+      requestAnimationFrame(scrollToBottom);
+    }
+    lastCount.current = count;
+  }, [messages, pending, scrollToBottom]);
+
   // 탭 복귀·창 포커스 시 재동기화 — 백그라운드 스로틀/절전으로 WS 이벤트를
   // 놓친 경우의 안전망 (2026-07-31 보고: 영역 이탈 후 갱신 안 됨)
   useEffect(() => {
