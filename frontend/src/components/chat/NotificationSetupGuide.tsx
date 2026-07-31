@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { fetchMe } from "@/lib/api";
-import { subscribePush } from "@/lib/push";
+import { showLocalTestNotification, subscribePush } from "@/lib/push";
 
 /** 알림 설정 온보딩 — 1회 팝업 (2026-07-31 요청, Slack/Notion 프라이머 참고).
  *
  *  백그라운드(다른 탭·다른 앱·모바일)에선 OS 알림/웹푸시가 유일한 채널인데
  *  권한·OS 설정 두 단계가 다 필요해 사용자가 놓친다. 플랫폼(맥/윈도우/안드/iOS)
  *  을 감지해 해당 안내만 보여주고, [알림 켜기]가 권한 요청 + 푸시 구독을
- *  한 번에 처리한다. 노출 1회 (localStorage), 설정에서 다시 열기 이벤트 지원. */
+ *  한 번에 처리한다. Mac/Windows 는 실제 OS 알림 설정 화면 딥링크 버튼 제공,
+ *  권한이 이미 있으면 [테스트 알림]으로 OS 차단 여부를 즉석 진단 (2차 피드백).
+ *  노출 1회 (localStorage), 설정에서 다시 열기 이벤트 지원. */
 
 const SEEN_KEY = "notif-guide-seen";
 export const OPEN_GUIDE_EVENT = "esl-open-notif-guide";
@@ -32,22 +34,38 @@ function notifPermission(): NotificationPermission | "unsupported" {
     : Notification.permission;
 }
 
-const OS_STEPS: Record<Platform, { title: string; steps: string[] }> = {
+const OS_STEPS: Record<
+  Platform,
+  {
+    title: string;
+    steps: string[];
+    // OS 알림 설정 화면 딥링크 — 브라우저가 "설정 앱을 열까요?" 확인 후 이동
+    settings?: { label: string; uri: string };
+  }
+> = {
   mac: {
     title: "Mac 사용 중이시네요",
     steps: [
       "아래 [알림 켜기]를 누르고 브라우저 요청에서 '허용'을 선택하세요",
-      "Mac 시스템 설정 > 알림 > 사용 중인 브라우저를 '허용'으로 켜주세요",
+      "아래 [Mac 알림 설정 열기]에서 사용 중인 브라우저(Chrome/Safari)를 찾아 '알림 허용'을 켜주세요",
       "집중 모드(방해금지)가 켜져 있으면 알림이 조용히 숨겨져요 — 확인!",
     ],
+    settings: {
+      label: "Mac 알림 설정 열기",
+      uri: "x-apple.systempreferences:com.apple.preference.notifications",
+    },
   },
   windows: {
     title: "Windows 사용 중이시네요",
     steps: [
       "아래 [알림 켜기]를 누르고 브라우저 요청에서 '허용'을 선택하세요",
-      "Windows 설정 > 시스템 > 알림에서 브라우저 알림을 켜주세요",
+      "아래 [Windows 알림 설정 열기]에서 브라우저 알림이 켜져 있는지 확인하세요",
       "집중 지원(방해 금지 모드)이 켜져 있으면 알림이 숨겨져요 — 확인!",
     ],
+    settings: {
+      label: "Windows 알림 설정 열기",
+      uri: "ms-settings:notifications",
+    },
   },
   android: {
     title: "Android 사용 중이시네요",
@@ -78,12 +96,14 @@ export function NotificationSetupGuide() {
   const [open, setOpen] = useState(false);
   const [platform, setPlatform] = useState<Platform>("other");
   const [phase, setPhase] = useState<"ask" | "denied" | "done">("ask");
+  const [testResult, setTestResult] = useState<"sent" | "blocked" | null>(null);
 
   useEffect(() => {
     const detected = detectPlatform();
     setPlatform(detected);
     // 설정 화면의 "가이드 다시 보기" — 언제든 재오픈
     const reopen = () => {
+      setTestResult(null);
       setPhase(notifPermission() === "denied" ? "denied" : "ask");
       setOpen(true);
     };
@@ -136,8 +156,17 @@ export function NotificationSetupGuide() {
     }
   }
 
+  async function sendTest() {
+    // 권한은 있는데 알림이 안 보이는 원인 분리 — 로컬 표시가 실패하면
+    // 서버가 아니라 OS/브라우저 설정 문제다 (push.ts 진단 헬퍼 재사용)
+    const shown = await showLocalTestNotification();
+    setTestResult(shown ? "sent" : "blocked");
+  }
+
   if (!open) return null;
   const guide = OS_STEPS[platform];
+  const settingsLink = guide.settings;
+  const granted = notifPermission() === "granted";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/30 p-4 sm:items-center">
@@ -169,22 +198,56 @@ export function NotificationSetupGuide() {
                 설정) &gt; 알림을 [허용]으로 바꾼 뒤 새로고침하면 켤 수 있어요.
               </p>
             )}
-            <div className="mt-4 flex gap-2">
-              {phase !== "denied" && (
-                <button
-                  type="button"
-                  onClick={enable}
-                  className="min-h-11 flex-1 rounded-md bg-brick-green font-bold text-brick-label transition hover:opacity-90"
-                >
-                  알림 켜기
-                </button>
-              )}
+            {testResult === "sent" && (
+              <p className="mt-3 rounded-md bg-brick-green/10 p-2 text-xs text-brick-green">
+                테스트 알림을 보냈어요 — 화면 구석에 안 보이면 OS 알림 설정에서
+                브라우저가 허용돼 있는지 확인해주세요.
+              </p>
+            )}
+            {testResult === "blocked" && (
+              <p className="mt-3 rounded-md bg-brick-red/10 p-2 text-xs text-brick-red">
+                브라우저가 알림을 표시하지 못했어요 — OS 알림 설정에서 사용 중인
+                브라우저를 허용으로 켜주세요.
+              </p>
+            )}
+            {settingsLink && (
+              <button
+                type="button"
+                onClick={() => {
+                  // 커스텀 스킴 — 브라우저가 "설정 앱을 열까요?" 확인 후
+                  // 실제 OS 알림 설정 화면으로 이동 (페이지는 유지됨)
+                  window.location.href = settingsLink.uri;
+                }}
+                className="mt-3 flex min-h-10 w-full items-center justify-center rounded-md border-2 border-brick-blue/50 bg-brick-blue/5 text-sm font-bold text-brick-blue transition hover:bg-brick-blue/10"
+              >
+                {settingsLink.label}
+              </button>
+            )}
+            <div className="mt-3 flex gap-2">
+              {phase !== "denied" &&
+                (granted ? (
+                  <button
+                    type="button"
+                    onClick={sendTest}
+                    className="min-h-11 flex-1 rounded-md bg-brick-green font-bold text-brick-label transition hover:opacity-90"
+                  >
+                    테스트 알림 보내기
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={enable}
+                    className="min-h-11 flex-1 rounded-md bg-brick-green font-bold text-brick-label transition hover:opacity-90"
+                  >
+                    알림 켜기
+                  </button>
+                ))}
               <button
                 type="button"
                 onClick={dismiss}
                 className="min-h-11 flex-1 rounded-md border-2 border-ink/20 bg-white font-bold"
               >
-                나중에
+                {granted ? "닫기" : "나중에"}
               </button>
             </div>
           </>
