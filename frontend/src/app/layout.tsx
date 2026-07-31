@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppNav } from "@/components/nav/AppNav";
 import { ChatWidget } from "@/components/chat/ChatWidget";
 import { BuildRefreshWatcher } from "@/components/nav/BuildRefreshWatcher";
+import { NotificationSetupGuide } from "@/components/chat/NotificationSetupGuide";
 import { InviteToaster } from "@/components/game/InviteToaster";
 import { HenyangPeek } from "@/components/theme/HenyangPeek";
 
@@ -74,6 +75,7 @@ export default function RootLayout({
         <InviteToaster />
         <ChatWidget />
         <BuildRefreshWatcher />
+        <NotificationSetupGuide />
         <HenyangPeek />
         {children}
       </body>

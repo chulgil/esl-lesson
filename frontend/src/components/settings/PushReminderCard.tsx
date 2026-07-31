@@ -108,6 +108,15 @@ export function PushReminderCard() {
         </div>
       )}
       {message && <p className="mt-2 text-xs opacity-70">{message}</p>}
+      <button
+        type="button"
+        onClick={() =>
+          window.dispatchEvent(new Event("esl-open-notif-guide"))
+        }
+        className="mt-3 text-xs font-bold text-brick-blue hover:underline"
+      >
+        알림 설정 가이드 보기 (Mac/Windows/모바일)
+      </button>
     </section>
   );
 }

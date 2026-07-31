@@ -17,6 +17,7 @@ const BADGE_ID = "favicon-unread-badge";
 
 let lastCount = 0;
 let removedLinks: HTMLLinkElement[] = [];
+let titleObserver: MutationObserver | null = null;
 
 function drawBadge(shown: number): string | null {
   const size = 64;
@@ -39,11 +40,25 @@ function drawBadge(shown: number): string | null {
   return canvas.toDataURL("image/png");
 }
 
+function applyTitlePrefix(count: number): void {
+  const bare = document.title.replace(/^\(\d+\+?\) /, "");
+  const next = count > 0 ? `(${count > 99 ? "99+" : count}) ${bare}` : bare;
+  if (document.title !== next) document.title = next;
+}
+
 function setTitleBadge(count: number): void {
   // 탭 제목 "(N) " 프리픽스 — OS 알림 권한이 없어도 다른 탭에서 인지 가능.
-  // 문서류 제목에도 흔한 표기라 위장 훼손 없음 (2026-07-31 백그라운드 알림 보강)
-  const bare = document.title.replace(/^\(\d+\) /, "");
-  document.title = count > 0 ? `(${count > 99 ? "99+" : count}) ${bare}` : bare;
+  // 문서류 제목에도 흔한 표기라 위장 훼손 없음 (2026-07-31 백그라운드 알림 보강).
+  // 페이지(위장 제목 등)가 title 을 다시 쓰면 프리픽스가 지워진다 — <title>
+  // 변경을 감시해 재적용 (2026-07-31 "파비콘 알람 제대로 안 뜸" 보강)
+  applyTitlePrefix(count);
+  titleObserver?.disconnect();
+  titleObserver = null;
+  const titleEl = document.querySelector("title");
+  if (count > 0 && titleEl) {
+    titleObserver = new MutationObserver(() => applyTitlePrefix(lastCount));
+    titleObserver.observe(titleEl, { childList: true });
+  }
 }
 
 export function setFaviconBadge(count: number): void {
@@ -80,7 +95,10 @@ export function setFaviconBadge(count: number): void {
     ),
   )) {
     if (link.id !== BADGE_ID) {
-      removedLinks.push(link);
+      // 라우팅마다 Next 가 원본 링크를 되살려 중복 축적됨 — href 기준 1개만 보관
+      if (!removedLinks.some((kept) => kept.href === link.href)) {
+        removedLinks.push(link);
+      }
       link.remove();
     }
   }
