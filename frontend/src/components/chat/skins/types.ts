@@ -32,6 +32,8 @@ export interface ChatSkinProps {
   onInputChange: (value: string) => void;
   onSend: () => void;
   onRetry: (entry: PendingMessage) => void;
+  /** 내 메시지 삭제 — 확인 후 soft delete, "삭제되었습니다" 로 치환 */
+  onDeleteMessage: (id: number) => void;
   onPickKaomoji: (k: string) => void;
   onAttachItem: (item: ShareableItem) => void;
   onDetachItem: () => void;

@@ -180,12 +180,42 @@ export function useChatRoom(otherId: number) {
         typingTimer.current = setTimeout(() => setTyping(false), 5000);
       } else if (msg.t === "presence" && msg.user_id === otherId) {
         setOnline(msg.online);
+      } else if (msg.t === "chat.deleted") {
+        // 상대(또는 내 다른 탭)가 삭제 — "삭제되었습니다" 로 즉시 치환
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msg.message_id
+              ? {
+                  ...m,
+                  deleted: true,
+                  body: "",
+                  item_ref: null,
+                  image_url: null,
+                }
+              : m,
+          ),
+        );
       } else if (msg.t === "chat.resync") {
         // WS 재접속 — 끊김 동안 놓친 메시지 캐치업
         resync();
       }
     });
   }, [otherId, scrollToBottom, markReadAndSignal, resync]);
+
+  // 내 메시지 삭제 — 낙관적 치환 후 서버 확정 (실패 시 재동기화로 복원)
+  const onDeleteMessage = useCallback(
+    (id: number) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === id
+            ? { ...m, deleted: true, body: "", item_ref: null, image_url: null }
+            : m,
+        ),
+      );
+      chatApi.deleteMessage(id).catch(() => resync());
+    },
+    [resync],
+  );
 
   // 위로 무한스크롤 — in-flight 가드 + id 중복 제거 (같은 페이지 이중 프리펜드 방지)
   const loadOlder = useCallback(async () => {
@@ -341,6 +371,7 @@ export function useChatRoom(otherId: number) {
     },
     onSend: () => send(),
     onRetry: (entry: PendingMessage) => send(entry),
+    onDeleteMessage,
     onPickKaomoji: (k: string) => setInput((v) => v + k),
     onAttachItem: setAttachedItem,
     onDetachItem: () => setAttachedItem(null),

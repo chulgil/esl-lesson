@@ -51,6 +51,8 @@ class ChatMessage(Base, PkMixin):
     item_ref: Mapped[dict | None] = mapped_column(JsonDict, nullable=True)
     # 업로드 이미지 파일명 (uuid.ext) — 참여자만 GET /api/chat/uploads/{name} 로 열람
     image_path: Mapped[str | None] = mapped_column(Text)
+    # soft delete — 행·커서는 보존, 내용은 소거 후 "삭제되었습니다" 표기 (2026-07-31)
+    deleted_at: Mapped[datetime | None]
     client_msg_id: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

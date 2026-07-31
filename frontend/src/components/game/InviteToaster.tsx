@@ -95,6 +95,7 @@ export function InviteToaster() {
     }
     if (
       msg.t === "chat.read" ||
+      msg.t === "chat.deleted" ||
       msg.t === "chat.typing" ||
       msg.t === "presence" ||
       msg.t === "notif.new"

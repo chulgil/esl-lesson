@@ -394,7 +394,28 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
                     }`}
                   />
                 )}
+                {/* 내 글 삭제 — 전체 페이지와 동일 사양 (2026-07-31) */}
+                {mine && !m.deleted && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("이 메시지를 삭제할까요?"))
+                        p.onDeleteMessage(m.id);
+                    }}
+                    aria-label="메시지 삭제"
+                    className="ml-auto opacity-30 hover:opacity-80"
+                  >
+                    {excel ? "행 삭제" : "지우기"}
+                  </button>
+                )}
               </div>
+              {m.deleted && (
+                <span
+                  className={`text-xs italic ${excel ? "text-[#999]" : "opacity-40"}`}
+                >
+                  삭제되었습니다
+                </span>
+              )}
               {m.item_ref && (
                 <span
                   className={`mr-1.5 rounded px-1 text-xs ${

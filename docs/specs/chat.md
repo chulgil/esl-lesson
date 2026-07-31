@@ -47,6 +47,7 @@ chat_reads
 | GET `/api/chat/with/{user_id}/messages?before={id}&limit=50` | 히스토리 커서 페이지네이션 (id DESC → 클라에서 역순 렌더) |
 | POST `/api/chat/messages` | 전송 `{to_user_id, body, client_msg_id, item_ref?}` → 저장·캐시 갱신·WS 푸시·오프라인이면 웹푸시. 같은 `client_msg_id` 재전송은 기존 행 반환 (멱등) |
 | POST `/api/chat/with/{user_id}/read` | 읽음 갱신 → 상대에게 WS `chat.read` 푸시 |
+| DELETE `/api/chat/messages/{id}` | 본인 메시지 soft delete (2026-07-31) — 행·커서 보존, 내용(body·item_ref·image_path) 물리 소거 + `deleted_at`. 타인/미존재 404, 재삭제 멱등 204. 양측에 WS `chat.deleted` 푸시, 최근 캐시 동기 갱신. 클라는 "삭제되었습니다" 표기 |
 | GET `/api/chat/shareable-items` | 단어 공유 카드 검색 — 내 학습 항목(가시성 통과분)만 |
 | POST `/api/chat/uploads` / GET `/api/chat/uploads/{name}` | 이미지 업로드/열람 (아래 "이미지 전송") |
 
@@ -59,6 +60,7 @@ chat_reads
 |---|---|---|
 | 서버→클라 | `chat.message` | 새 메시지 (본문 전체) — 수신자에게 |
 | 서버→클라 | `chat.read` | `{conversation_id, user_id, last_read_message_id}` — 읽음 "1" 제거용 |
+| 서버→클라 | `chat.deleted` | `{conversation_id, message_id}` — 열린 대화방이 "삭제되었습니다" 로 치환 |
 | 서버→클라 | `chat.typing` | `{from_user_id}` — 입력 중 표시 (5초 자동 소멸, 저장 안 함) |
 | 서버→클라 | `presence` | `{user_id, online}` — 친구 접속 상태 실시간 갱신 |
 | 클라→서버 | `chat.typing` | `{to_user_id}` — 스로틀 3초 (클라) |

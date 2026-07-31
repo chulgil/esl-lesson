@@ -50,15 +50,20 @@ def _invalidate_unread(*user_ids: int) -> None:
 
 
 def message_dict(m: ChatMessage) -> dict:
+    deleted = m.deleted_at is not None
     return {
         "id": m.id,
         "conversation_id": m.conversation_id,
         "sender_id": m.sender_id,
-        "body": m.body,
-        "item_ref": m.item_ref,
-        "image_url": f"/api/chat/uploads/{m.image_path}" if m.image_path else None,
+        # 삭제 메시지는 내용 소거 이중 방어 — 행에 남았더라도 응답엔 절대 미노출
+        "body": "" if deleted else m.body,
+        "item_ref": None if deleted else m.item_ref,
+        "image_url": (
+            None if deleted else (f"/api/chat/uploads/{m.image_path}" if m.image_path else None)
+        ),
         "client_msg_id": m.client_msg_id,
         "created_at": m.created_at.isoformat() if m.created_at else None,
+        "deleted": deleted,
     }
 
 
@@ -192,6 +197,42 @@ async def send_message(
         _recent[conv.id].append(data)
     _invalidate_unread(to_user_id)
     return data, True
+
+
+async def delete_message(db: AsyncSession, user: User, message_id: int) -> None:
+    """본인 메시지 soft delete — 행·커서 보존, 내용 소거, 양측에 WS 반영.
+
+    타인/미존재는 404 (존재 비노출), 이미 삭제는 멱등 no-op (2026-07-31)."""
+    msg = await db.get(ChatMessage, message_id)
+    if msg is None or msg.sender_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "message_not_found")
+    if msg.deleted_at is None:
+        msg.deleted_at = datetime.now(UTC)
+        # 내용은 물리 소거 — soft delete 라도 본문·첨부는 남기지 않는다
+        msg.body = ""
+        msg.item_ref = None
+        msg.image_path = None
+        await db.commit()
+
+    # 최근 캐시 반영 — 캐시 히트 조회에서 본문이 되살아나지 않게
+    buf = _recent.get(msg.conversation_id)
+    if buf is not None:
+        refreshed = message_dict(msg)
+        for idx, entry in enumerate(buf):
+            if entry["id"] == message_id:
+                buf[idx] = refreshed
+                break
+
+    # 열린 대화방 실시간 반영 — 양측 모두
+    conv = await db.get(Conversation, msg.conversation_id)
+    if conv is not None:
+        event = {
+            "t": "chat.deleted",
+            "conversation_id": msg.conversation_id,
+            "message_id": message_id,
+        }
+        await deliver_ws(conv.user_lo_id, event)
+        await deliver_ws(conv.user_hi_id, event)
 
 
 # --- 조회 ----------------------------------------------------------------------

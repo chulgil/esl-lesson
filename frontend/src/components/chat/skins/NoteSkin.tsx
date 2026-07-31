@@ -70,7 +70,26 @@ export function NoteSkin(p: ChatSkinProps) {
                       className="inline-block h-1.5 w-1.5 rounded-full bg-brick-yellow align-middle"
                     />
                   )}
+                  {/* 내 글 삭제 — 확인 후 "삭제되었습니다" 로 치환 (2026-07-31) */}
+                  {mine && !m.deleted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("이 메시지를 삭제할까요?"))
+                          p.onDeleteMessage(m.id);
+                      }}
+                      aria-label="메시지 삭제"
+                      className="ml-auto opacity-30 hover:opacity-80"
+                    >
+                      지우기
+                    </button>
+                  )}
                 </div>
+                {m.deleted && (
+                  <span className="text-xs italic opacity-40">
+                    삭제되었습니다
+                  </span>
+                )}
                 {m.item_ref && (
                   <span className="mr-2 rounded bg-highlight/50 px-1.5 py-0.5 text-xs">
                     <b>{m.item_ref.en_text}</b>

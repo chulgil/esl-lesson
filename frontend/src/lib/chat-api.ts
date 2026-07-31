@@ -12,6 +12,8 @@ export interface ChatMessage {
     ko_text: string;
   } | null;
   image_url: string | null;
+  /** soft delete — true 면 "삭제되었습니다" 표기 (내용은 서버가 소거) */
+  deleted: boolean;
   client_msg_id: string;
   created_at: string | null;
 }
@@ -47,6 +49,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const chatApi = {
+  deleteMessage: (id: number) =>
+    request<void>(`/api/chat/messages/${id}`, { method: "DELETE" }),
+
   conversations: () =>
     request<{ items: ChatConversation[] }>("/api/chat/conversations"),
   unreadTotal: () => request<{ total: number }>("/api/chat/unread-total"),

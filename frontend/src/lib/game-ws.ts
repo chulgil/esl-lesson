@@ -318,6 +318,7 @@ export type ChatServerMsg =
         ko_text: string;
       } | null;
       image_url: string | null;
+      deleted: boolean;
       client_msg_id: string;
       created_at: string | null;
     }
@@ -327,6 +328,7 @@ export type ChatServerMsg =
       user_id: number;
       last_read_message_id: number;
     }
+  | { t: "chat.deleted"; conversation_id: number; message_id: number }
   | { t: "chat.typing"; from_user_id: number }
   | { t: "presence"; user_id: number; online: boolean }
   // 클라 합성 신호 (서버 발신 아님) — WS 재접속 시 열린 대화방 재동기화 트리거

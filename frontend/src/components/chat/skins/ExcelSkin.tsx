@@ -87,7 +87,26 @@ export function ExcelSkin(p: ChatSkinProps) {
                         {m.id > p.otherRead ? "미확인" : "확인"}
                       </span>
                     )}
+                    {/* 내 행 삭제 — 문서 위장 톤 ("행 삭제") */}
+                    {mine && !m.deleted && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm("이 행을 삭제할까요?"))
+                            p.onDeleteMessage(m.id);
+                        }}
+                        aria-label="메시지 삭제"
+                        className="ml-1.5 text-[#c0504d] opacity-40 hover:opacity-90"
+                      >
+                        행 삭제
+                      </button>
+                    )}
                   </div>
+                  {m.deleted && (
+                    <span className="text-xs italic text-[#999]">
+                      삭제되었습니다
+                    </span>
+                  )}
                   {m.item_ref && (
                     <span className="mr-1.5 rounded-sm bg-[#e2efda] px-1 text-xs">
                       {m.item_ref.en_text} ({m.item_ref.ko_text})

@@ -181,6 +181,16 @@ async def send(
     return {**data, "created": created}
 
 
+@router.delete("/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_message(
+    message_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """본인 메시지 삭제 (soft delete) — 클라는 "삭제되었습니다" 표기 (2026-07-31)."""
+    await chat.delete_message(db, user, message_id)
+
+
 @router.post("/with/{other_id}/read")
 async def mark_read(
     other_id: int,

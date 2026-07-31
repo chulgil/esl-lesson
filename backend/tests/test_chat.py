@@ -525,3 +525,59 @@ async def test_image_upload_validations(client, db_session, upload_dir):
         },
     )
     assert ghost.status_code == 422
+
+
+# --- 메시지 삭제 (2026-07-31) ---------------------------------------------------
+
+
+async def test_delete_own_message_soft_deletes(client, db_session):
+    """삭제 = soft delete — 행 보존 + 내용 소거 + deleted 표기, 멱등 204."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    sent = (
+        await client.post("/api/chat/messages", json=send_body(b.id, "지울 메시지", "cid-del00001"))
+    ).json()
+
+    res = await client.delete(f"/api/chat/messages/{sent['id']}")
+    assert res.status_code == 204
+    # 멱등 — 이미 삭제된 메시지 재삭제도 204
+    assert (await client.delete(f"/api/chat/messages/{sent['id']}")).status_code == 204
+
+    listing = (await client.get(f"/api/chat/with/{b.id}/messages")).json()["items"]
+    row = next(m for m in listing if m["id"] == sent["id"])
+    assert row["deleted"] is True
+    assert row["body"] == "" and row["item_ref"] is None and row["image_url"] is None
+
+    # 행은 보존 (기록·커서 안정성) — 본문만 소거
+    db_row = await db_session.get(ChatMessage, sent["id"])
+    assert db_row is not None and db_row.deleted_at is not None
+    assert db_row.body == ""
+
+
+async def test_delete_requires_sender(client, db_session):
+    """타인 메시지 삭제는 404 (존재 비노출) — 수신자도 불가."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    sent = (
+        await client.post("/api/chat/messages", json=send_body(b.id, "a의 메시지", "cid-del00002"))
+    ).json()
+
+    await login(client, db_session, b)
+    assert (await client.delete(f"/api/chat/messages/{sent['id']}")).status_code == 404
+    assert (await client.delete("/api/chat/messages/999999")).status_code == 404
+
+
+async def test_delete_updates_recent_cache(client, db_session):
+    """인프로세스 최근 캐시도 삭제 반영 — 캐시 히트 조회에서 본문 잔존 금지."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    sent = (
+        await client.post("/api/chat/messages", json=send_body(b.id, "캐시 확인", "cid-del00003"))
+    ).json()
+    # 캐시 웜업 (최신 50 요청 = 캐시 경로)
+    await client.get(f"/api/chat/with/{b.id}/messages")
+    await client.delete(f"/api/chat/messages/{sent['id']}")
+
+    listing = (await client.get(f"/api/chat/with/{b.id}/messages")).json()["items"]
+    row = next(m for m in listing if m["id"] == sent["id"])
+    assert row["deleted"] is True and row["body"] == ""
