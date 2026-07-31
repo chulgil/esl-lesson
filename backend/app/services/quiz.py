@@ -91,12 +91,17 @@ def _pattern_answer(item: LearningItem) -> str:
     return item.en_text
 
 
-# 템플릿 자리표시자 — ___/~/.../단독 X 는 "학습자가 채울 변수부" (데이터 실측 형태)
-_PLACEHOLDER_RE = re.compile(r"^(?:_{2,}|~|\.{3,}|x)$")
+# 템플릿 자리표시자 — ___/~/.../단독 X. 구두점이 붙은 형태(`___?` `___.`)도 인식
+# (프로드 실측: 미인식 시 90건 중 40건이 불필요 폴백 — 2026-07-31 데이터 검증)
+_PLACEHOLDER_RE = re.compile(r"^\W*(?:_{2,}|~|\.{3,})\W*$")
 
 
 def _norm_word(word: str) -> str:
     return re.sub(r"[^a-z0-9']", "", word.lower())
+
+
+def _is_placeholder(token: str) -> bool:
+    return bool(_PLACEHOLDER_RE.match(token)) or _norm_word(token) == "x"
 
 
 def pattern_blank_split(item: LearningItem) -> tuple[str, list[str]] | None:
@@ -104,7 +109,11 @@ def pattern_blank_split(item: LearningItem) -> tuple[str, list[str]] | None:
 
     레벨3 은 밑줄 부분만 조립해야 한다 (2026-07-31 보고 — 전체 문장 조립은
     고정부까지 다시 맞추게 해 템플릿 표시와 어긋남). 템플릿의 고정 세그먼트를
-    문장에서 순서대로 찾아 표시하고, 사이를 채우는 단어들만 조립 대상으로 남긴다.
+    문장에서 순서대로 찾고, **자리표시자 위치의 단어만** 조립 대상으로 남긴다.
+
+    템플릿 밖 주변부(문장 앞뒤의 "And," 같은 잉여 단어)는 밑줄이 아니라
+    문맥 — 템플릿이 그 가장자리에 자리표시자를 둘 때만 밑줄로 취급한다
+    (프로드 실측: 미처리 시 17건이 사실상 전체 조립으로 퇴화).
     자리표시자가 없거나 고정부가 문장과 안 맞으면 None — 전체 조립 폴백.
     """
     sentence = _pattern_answer(item)
@@ -114,12 +123,14 @@ def pattern_blank_split(item: LearningItem) -> tuple[str, list[str]] | None:
     segments: list[list[str]] = [[]]
     has_placeholder = False
     for token in template_words:
-        if _PLACEHOLDER_RE.match(_norm_word(token) or token):
+        if _is_placeholder(token):
             has_placeholder = True
             if segments[-1]:
                 segments.append([])
         else:
             segments[-1].append(_norm_word(token))
+    leading_placeholder = bool(template_words) and _is_placeholder(template_words[0])
+    trailing_placeholder = bool(template_words) and _is_placeholder(template_words[-1])
     segments = [seg for seg in segments if seg]
     if not has_placeholder or not segments:
         return None
@@ -127,6 +138,7 @@ def pattern_blank_split(item: LearningItem) -> tuple[str, list[str]] | None:
     norm_words = [_norm_word(w) for w in words]
     fixed = [False] * len(words)
     pos = 0
+    first_start = last_end = None
     for seg in segments:
         found = -1
         for start in range(pos, len(norm_words) - len(seg) + 1):
@@ -137,7 +149,18 @@ def pattern_blank_split(item: LearningItem) -> tuple[str, list[str]] | None:
             return None  # 고정부 불일치 — 안전 폴백
         for i in range(found, found + len(seg)):
             fixed[i] = True
+        if first_start is None:
+            first_start = found
+        last_end = found + len(seg)
         pos = found + len(seg)
+
+    # 템플릿 스팬 밖 가장자리 — 그 자리에 자리표시자가 없으면 문맥(고정 표시)
+    if not leading_placeholder and first_start is not None:
+        for i in range(first_start):
+            fixed[i] = True
+    if not trailing_placeholder and last_end is not None:
+        for i in range(last_end, len(words)):
+            fixed[i] = True
 
     blanks = [w for w, is_fixed in zip(words, fixed, strict=True) if not is_fixed]
     if not blanks or len(blanks) == len(words):

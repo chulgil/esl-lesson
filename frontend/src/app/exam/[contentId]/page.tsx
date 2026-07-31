@@ -134,7 +134,9 @@ export default function ExamPage() {
         {phase === "intro" && <Intro summary={summary} onStart={start} />}
 
         {phase === "taking" && question && (
-          <div className="flex flex-col gap-4 pb-40 sm:flex-row sm:items-start sm:pb-0">
+          // pb: 모바일 하단 고정 OMR 패널 실측 ~200px + iOS 홈바 — 마지막 문항
+          // 선지가 패널에 가려지지 않게 (2026-07-31 심층 리뷰)
+          <div className="flex flex-col gap-4 pb-[calc(15rem+env(safe-area-inset-bottom))] sm:flex-row sm:items-start sm:pb-0">
             {/* 문항 카드 */}
             <section className="flex-1 rounded-lg border-2 border-ink/15 bg-white p-4 sm:p-5">
               <p className="mb-2 text-xs font-bold opacity-60">

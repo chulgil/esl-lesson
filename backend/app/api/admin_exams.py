@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,9 +29,14 @@ async def generate_exam(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
     try:
         exam = await create_exam(db, content_id, admin.id)
+        await db.commit()
     except NotEnoughItemsError:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "not_enough_items") from None
-    await db.commit()
+    except IntegrityError:
+        # 동시 재생성 경합 — 부분 유니크 인덱스(uq_exams_content_active)·round 유니크가
+        # 이중 active 를 차단. 한쪽만 성공, 나머지는 409 (2026-07-31 심층 리뷰)
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "regenerate_conflict") from None
     return {"exam_id": exam.id, "round": exam.round, "question_count": exam.question_count}
 
 

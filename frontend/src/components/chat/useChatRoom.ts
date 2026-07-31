@@ -128,6 +128,15 @@ export function useChatRoom(otherId: number) {
           const known = new Set(prev.map((m) => m.id));
           const fresh = res.items.filter((m) => !known.has(m.id));
           if (fresh.length === 0) return prev;
+          // 최신 페이지가 기존과 전혀 안 겹치면(50개 초과 유실) 이어붙이지 않고
+          // 최신 페이지로 리셋 — 중간 구멍이 영구 미표시되는 문제 방지.
+          // 과거분은 위로 스크롤 페이징이 새 oldest 부터 연속으로 채운다 (심층 리뷰)
+          const prevMax = prev.length ? prev[prev.length - 1].id : 0;
+          const overlaps = res.items.some((m) => known.has(m.id));
+          if (prev.length > 0 && !overlaps && fresh[0].id > prevMax) {
+            setHasMore(res.items.length >= 50);
+            return [...res.items].sort((a, b) => a.id - b.id);
+          }
           return [...prev, ...fresh].sort((a, b) => a.id - b.id);
         });
         setOnline(res.online);

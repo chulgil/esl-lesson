@@ -591,3 +591,19 @@ async def test_dethrone_notifies_previous_champion(client, admin_client, db_sess
         f"/api/exams/{exam_id}/attempts/{attempt}/submit", json={"answers": wrong_one}
     )
     assert len(await dethrone_rows()) == 1
+
+
+async def test_private_content_exam_hidden_from_nonsubscriber(client, admin_client, db_session):
+    """비공개 콘텐츠의 시험 — 미구독자에게 목록·요약·시작·랭킹 전부 비노출 (심층 리뷰)."""
+    content = await make_content(db_session)
+    content.visibility = "private"
+    await seed_exam_items(db_session, content, count=5, item_type="word")
+    await db_session.commit()
+    exam_id = (await admin_client.post(f"/api/admin/contents/{content.id}/exam")).json()["exam_id"]
+
+    await login(client, db_session)  # 미구독 학습자
+    open_ids = [e["exam_id"] for e in (await client.get("/api/exams/open")).json()["items"]]
+    assert exam_id not in open_ids
+    assert (await client.get(f"/api/contents/{content.id}/exam")).json()["exam_id"] is None
+    assert (await client.post(f"/api/exams/{exam_id}/attempts")).status_code == 404
+    assert (await client.get(f"/api/exams/{exam_id}/rankings")).status_code == 404

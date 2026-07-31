@@ -10,10 +10,12 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     ForeignKey,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +32,15 @@ class Exam(Base, PkMixin, CreatedAtMixin):
     __table_args__ = (
         UniqueConstraint("content_id", "round", name="uq_exams_content_round"),
         CheckConstraint("status IN ('active','archived')", name="ck_exams_status"),
+        # 콘텐츠당 active 1개를 DB 가 강제 — 동시 재생성 경합으로 active 2개가
+        # 남으면 요약 조회가 영구 500 (2026-07-31 심층 리뷰). 부분 유니크 인덱스
+        Index(
+            "uq_exams_content_active",
+            "content_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+            sqlite_where=text("status = 'active'"),
+        ),
     )
 
     content_id: Mapped[int] = mapped_column(

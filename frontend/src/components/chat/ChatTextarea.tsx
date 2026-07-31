@@ -28,15 +28,26 @@ export function ChatTextarea({
   ariaLabel?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  // Safari(WebKit)는 조합 확정 Enter 를 compositionend 이후 keydown
+  // (isComposing=false)으로 발화 — 확정 직후 Enter 를 전송으로 오인해
+  // 한글 마지막 글자 확정이 곧장 전송되는 버그 방지 (2026-07-31 심층 리뷰)
+  const lastCompositionEnd = useRef(0);
 
-  // PC 판별 — ChatWidget 의 isDesktop 과 동일 기준(sm 640px)
+  // PC 판별 — 화면 폭(sm 640px, ChatWidget isDesktop 동일 기준) + 정밀 포인터.
+  // 폭만 보면 태블릿·폰 가로모드가 Enter=전송이 되는데 가상 키보드엔 Shift 가
+  // 없어 줄바꿈 자체가 불가 (2026-07-31 심층 리뷰)
   const [enterSends, setEnterSends] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 640px)");
-    const apply = () => setEnterSends(mq.matches);
+    const wide = window.matchMedia("(min-width: 640px)");
+    const fine = window.matchMedia("(pointer: fine)");
+    const apply = () => setEnterSends(wide.matches && fine.matches);
     apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
+    wide.addEventListener("change", apply);
+    fine.addEventListener("change", apply);
+    return () => {
+      wide.removeEventListener("change", apply);
+      fine.removeEventListener("change", apply);
+    };
   }, []);
 
   // 값이 바뀔 때마다 내용 높이에 맞춤 — 8줄 상한은 CSS max-height 가 담당
@@ -53,13 +64,18 @@ export function ChatTextarea({
       value={value}
       rows={1}
       onChange={(e) => onChange(e.target.value)}
+      onCompositionEnd={() => {
+        lastCompositionEnd.current = Date.now();
+      }}
       onKeyDown={(e) => {
-        // PC: Enter 전송 (Shift+Enter 줄바꿈) / 모바일: Enter 는 그대로 줄바꿈
+        // PC: Enter 전송 (Shift+Enter 줄바꿈) / 모바일: Enter 는 그대로 줄바꿈.
+        // isComposing + compositionend 직후 100ms 이중 가드 — WebKit IME 오전송 방지
         if (
           enterSends &&
           e.key === "Enter" &&
           !e.shiftKey &&
-          !e.nativeEvent.isComposing
+          !e.nativeEvent.isComposing &&
+          Date.now() - lastCompositionEnd.current > 100
         ) {
           e.preventDefault();
           onSend();
