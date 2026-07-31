@@ -8,6 +8,7 @@ import {
   type LeaderboardEntry,
 } from "@/lib/game-api";
 import { useAppTheme } from "@/lib/theme";
+import { boardThemeOf } from "@/lib/theme-surfaces";
 import { useInviteTheme } from "@/lib/use-invite-theme";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
@@ -63,8 +64,8 @@ function TetrisInner() {
   // 초대 입장(?theme=)이면 게임 동안 초대자 테마 — 종료/이탈 시 자동 복원
   const inviteTheme = useInviteTheme(phase === "ended");
   const effectiveTheme = inviteTheme ?? appTheme;
-  // 오피스(위장) 테마는 게임 보드 스킨이 없어 노트 보드로 폴백
-  const boardTheme = effectiveTheme === "excel" ? "note" : effectiveTheme;
+  // 전용 보드 스킨이 없는 테마는 노트 보드로 폴백 — 매핑은 theme-surfaces 단일 정의
+  const boardTheme = boardThemeOf(effectiveTheme);
   const [profile, setProfile] = useState<GameProfile | null>(null);
   const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
   const socketRef = useRef<GameSocket | null>(null);

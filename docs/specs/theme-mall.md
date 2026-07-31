@@ -2,7 +2,7 @@
 
 > 최종 검증: 2026-07-30 (코드 대조 완료) · 설계 승인: 2026-07-30 (사용자)
 
-앱 테마 5종(note/candy/lego/cat/excel — `frontend/src/lib/theme.ts` APP_THEMES)을 전원 무료에서 **엔타이틀먼트(보유권) 기반** 자산으로 전환한다. 이번 범위는 엔타이틀먼트 기반 + 백오피스 수동 지급/회수 + 헤냥이(cat) 제한이며, 결제(PG) 연동은 후속이다.
+앱 테마 6종(note/candy/lego/cat/excel/school — `frontend/src/lib/theme.ts` APP_THEMES. school=학교수업(칠판 그린+갱지 모눈), 2026-07-31 신설·restricted)을 전원 무료에서 **엔타이틀먼트(보유권) 기반** 자산으로 전환한다. 이번 범위는 엔타이틀먼트 기반 + 백오피스 수동 지급/회수 + 헤냥이(cat) 제한이며, 결제(PG) 연동은 후속이다.
 
 ## 전략 3단
 
@@ -80,6 +80,14 @@ theme_reward_rules (d1e2f3a4b5c6, 2026-07-30)
 | 백오피스 `/admin/themes` | 테마 목록(키·라벨·정책·전환 버튼·보유자 수) — 전환 버튼으로 무료<->제한(note 는 "기본 고정"), restricted 행 클릭 → 보유자 목록·지급 폼·회수. 무료 테마 선택 시 지급 패널 숨김(서버 422 방지) |
 
 - 조회 실패(오프라인 등) 시 잠그지 않는다 — 코스메틱 자산이라 가용성 우선.
+
+## 테마 컨셉 단일 레지스트리 (2026-07-31 — 유지보수 계약)
+
+`frontend/src/lib/theme-surfaces.ts` 가 화면별 테마 분기의 단일 정의처:
+`SURFACE_SKINS`(시험지·학습 세션 문항 카드 공용 표면), `CLOCK_OF`(경과 시계 컨셉),
+`boardThemeOf`(게임 보드 폴백 — 전용 스킨은 note/candy/lego/cat). **새 테마 추가 =
+theme.ts 카탈로그 + globals.css 토큰 + theme-surfaces + 백엔드 THEME_ACCESS 4곳** —
+화면 컴포넌트에 테마 하드코딩 금지.
 
 ## 멘탈모델 접점 4종 (2026-07-30 — "테마 = 업적 보상" 각인)
 

@@ -82,6 +82,31 @@ html[data-theme="lego"] {
   --color-highlight: #ffe066;
 }
 
+/* 전역 테마: 학교수업 — 칠판 그린 + 갱지(모눈) 교실 톤 */
+html[data-theme="school"] {
+  --color-paper: #f7f4e9;
+  --color-paper-line: #d9d2ba;
+  --color-margin-red: #d98c7a;
+  --color-ink: #2f3e35;
+  --color-brick-red: #c96a4f;
+  --color-brick-red-shadow: #a75440;
+  --color-brick-yellow: #e5b64e;
+  --color-brick-yellow-shadow: #c2963a;
+  --color-brick-blue: #4f7d9e;
+  --color-brick-blue-shadow: #3d6480;
+  --color-brick-green: #3f7d5a;
+  --color-brick-green-shadow: #2f6246;
+  --color-highlight: #e9e0b8;
+}
+
+/* 학교수업: 줄노트 대신 원고지풍 모눈 */
+html[data-theme="school"] .notebook-lines {
+  background-image:
+    linear-gradient(rgba(63, 125, 90, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63, 125, 90, 0.09) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+
 /* 전역 테마: 헤냥이 — 크림 고양이 톤, 몰랑몰랑 파스텔 */
 html[data-theme="cat"] {
   --color-paper: #fff6ea;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAppTheme } from "@/lib/theme";
+import { CLOCK_OF } from "@/lib/theme-surfaces";
 
 /** 응시 경과 시계 — 제한시간은 없고 "지금까지 몇 분째" 를 보여준다
  *  (동점 순위는 소요시간이 가르므로 인지 가치가 있음, 2026-07-31 요청).
@@ -21,7 +22,8 @@ export function ExamTimer({ startedAt }: { startedAt: number }) {
   const ss = String(secs % 60).padStart(2, "0");
   const label = `${mm}:${ss}`;
 
-  if (theme === "excel") {
+  const clock = CLOCK_OF[theme] ?? "analog";
+  if (clock === "cell") {
     // 셀/상태바 위장 — 문서 느낌 유지
     return (
       <span className="inline-flex min-h-8 items-center rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] px-2 font-mono text-xs text-[#217346]">
@@ -29,7 +31,7 @@ export function ExamTimer({ startedAt }: { startedAt: number }) {
       </span>
     );
   }
-  if (theme === "lego") {
+  if (clock === "digital") {
     // 디지털 브릭 타이머 — 스터드 2개 + 모노 숫자
     return (
       <span className="relative inline-flex min-h-8 items-center rounded-md border-2 border-ink bg-brick-red px-2.5 pt-1 font-mono text-sm font-bold text-white">
@@ -54,7 +56,7 @@ export function ExamTimer({ startedAt }: { startedAt: number }) {
         strokeLinecap="round"
         aria-hidden
       >
-        {theme === "cat" && (
+        {clock === "analog-cat" && (
           // 고양이 귀
           <>
             <path
@@ -71,19 +73,19 @@ export function ExamTimer({ startedAt }: { startedAt: number }) {
             />
           </>
         )}
-        {theme === "candy" && (
+        {clock === "analog-candy" && (
           // 막대사탕 손잡이
           <path d="M12 22v7" strokeWidth="2.2" />
         )}
         <circle cx="12" cy="14" r="8.5" fill="var(--color-paper, #fff)" />
-        {theme === "candy" && (
+        {clock === "analog-candy" && (
           // 사탕 소용돌이
           <path
             d="M12 14a3 3 0 013-3 5 5 0 00-8 4 6.5 6.5 0 0010 4"
             opacity="0.35"
           />
         )}
-        {theme === "cat" && (
+        {clock === "analog-cat" && (
           // 수염
           <>
             <path

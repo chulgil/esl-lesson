@@ -8,6 +8,7 @@ import { InsightSheet } from "@/components/study/InsightSheet";
 import { SegmentPlayer } from "@/components/media/SegmentPlayer";
 import { SpectateHost } from "@/components/study/SpectateHost";
 import { studyApi, type AnswerResult, type Question } from "@/lib/study-api";
+import { useSurfaceSkin } from "@/lib/theme-surfaces";
 
 type Phase = "loading" | "empty" | "question" | "feedback" | "done";
 
@@ -368,8 +369,10 @@ function QuestionCard({
   const choiceHighlight =
     hintOn && question.hint_answer ? question.hint_answer : null;
 
+  // 학습 카드도 테마 컨셉을 따른다 — 시험지와 동일 표면 스킨 (theme-surfaces)
+  const skin = useSurfaceSkin();
   return (
-    <div className="max-w-xl -rotate-[0.4deg] rounded-lg border-2 border-ink/10 bg-white p-6 shadow-md">
+    <div className={`max-w-xl -rotate-[0.4deg] p-6 shadow-md ${skin.section}`}>
       <p className="mb-1 text-xs opacity-50">레벨 {question.level}</p>
       {(question.quiz_mode === "choice_en2ko" ||
         question.quiz_mode === "choice_ko2en" ||
@@ -427,6 +430,7 @@ function ChoiceQuiz({
   highlight?: string | null;
   onSubmit: (answer: string) => void;
 }) {
+  const skin = useSurfaceSkin();
   return (
     <div>
       <p className="text-2xl font-bold">{prompt}</p>
@@ -448,10 +452,10 @@ function ChoiceQuiz({
             type="button"
             disabled={disabled}
             onClick={() => onSubmit(choice)}
-            className={`min-h-11 rounded-md border-2 px-4 py-2 text-left font-medium transition hover:-translate-y-0.5 hover:border-brick-blue disabled:opacity-50 ${
+            className={`min-h-11 rounded-md border-2 px-4 py-2 text-left font-medium transition hover:-translate-y-0.5 disabled:opacity-50 ${
               highlight === choice
-                ? "border-brick-yellow bg-highlight/50"
-                : "border-ink/15 bg-paper"
+                ? "border-brick-yellow bg-highlight/50 text-ink"
+                : skin.choice
             }`}
           >
             <span className="mr-2 text-xs opacity-40">{i + 1}</span>
