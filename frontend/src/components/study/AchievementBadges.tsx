@@ -13,8 +13,9 @@ const FAMILY_LABELS: Record<string, string> = {
   streak: "꾸준함",
   game: "게임",
   social: "친구",
+  exam: "시험",
 };
-const FAMILY_ORDER = ["study", "streak", "game", "social"];
+const FAMILY_ORDER = ["study", "streak", "game", "social", "exam"];
 
 const TIER_LABELS: Record<AchievementTier, string> = {
   beginner: "초급",
@@ -213,6 +214,14 @@ const CALENDAR = (
 const TARGET = (
   <path d="M12 21a9 9 0 100-18 9 9 0 000 18zm0-4a5 5 0 100-10 5 5 0 000 10zm0-4a1 1 0 100-2 1 1 0 000 2z" />
 );
+// 시험지 — 시험 패밀리 / 왕관 — 1위 등극 / 메달 — 만점
+const PAPER = (
+  <path d="M7 2h7l5 5v14a1 1 0 01-1 1H7a1 1 0 01-1-1V3a1 1 0 011-1zm7 0v5h5M9 12h6M9 16h6" />
+);
+const CROWN = <path d="M3 8l4 4 5-6 5 6 4-4-1.5 10h-15L3 8z" />;
+const MEDAL = (
+  <path d="M12 14a4.5 4.5 0 100-9 4.5 4.5 0 000 9zm-2.5 1.5L8 21l4-2 4 2-1.5-5.5" />
+);
 
 const ICON_PATHS: Record<string, React.ReactNode> = {
   first_review: PENCIL,
@@ -220,6 +229,9 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   first_friend: PEOPLE,
   streak_30: CALENDAR,
   streak_365: CALENDAR,
+  first_exam: PAPER,
+  exam_perfect: MEDAL,
+  exam_champion: CROWN,
 };
 
 const PREFIX_ICON_PATHS: Record<string, React.ReactNode> = {
@@ -231,4 +243,6 @@ const PREFIX_ICON_PATHS: Record<string, React.ReactNode> = {
   typing: KEYBOARD,
   friends: PEOPLE,
   goal: TARGET,
+  exam: PAPER,
+  exams: PAPER,
 };

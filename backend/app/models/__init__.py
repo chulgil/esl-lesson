@@ -10,6 +10,7 @@ from app.models.content import (
     ExtractionJob,
     TranscriptSegment,
 )
+from app.models.exam import Exam, ExamAttempt, ExamQuestion
 from app.models.friend import Friendship
 from app.models.game import (
     DailyPuzzlePlay,
@@ -37,6 +38,9 @@ __all__ = [
     "Content",
     "ContentPermission",
     "ContentSubscription",
+    "Exam",
+    "ExamAttempt",
+    "ExamQuestion",
     "ExtractionJob",
     "Friendship",
     "GameMatch",

@@ -269,6 +269,50 @@ async def test_achievement_grants_theme_and_keeps_it(client, admin_client, db_se
     assert by_key["candy"]["allowed"] is True
 
 
+async def test_exam_achievement_grants_theme(client, db_session):
+    """AC-5.1: exam_perfect → excel 매핑 시 기존 보상 엔진이 지급 (엔진 무수정)."""
+    from datetime import UTC, datetime
+
+    from app.models import Content, Exam, ExamAttempt, ThemeRewardRule
+
+    db_session.add(ThemeRewardRule(achievement_key="exam_perfect", theme_key="excel"))
+    await db_session.commit()
+
+    me = await login(client, db_session)
+    by_key = await themes_by_key(client)
+    assert by_key["excel"]["allowed"] is False
+    # 잠금 배지 힌트 — 해금 업적 제목 노출
+    assert by_key["excel"]["unlock"] == "만점"
+
+    # 100점 응시 기록 → 다음 테마 조회에서 소급 지급
+    content = Content(source="manual", title="보상 시험", status="ready")
+    db_session.add(content)
+    await db_session.flush()
+    exam = Exam(content_id=content.id, round=1, question_count=20)
+    db_session.add(exam)
+    await db_session.flush()
+    db_session.add(
+        ExamAttempt(
+            exam_id=exam.id,
+            user_id=me.id,
+            submitted_at=datetime.now(UTC),
+            score=100,
+            correct_count=20,
+            duration_ms=60000,
+            answers=[0] * 20,
+        )
+    )
+    await db_session.commit()
+
+    by_key = await themes_by_key(client)
+    assert by_key["excel"]["allowed"] is True
+    grant = (
+        await db_session.execute(select(ThemeGrant).where(ThemeGrant.theme_key == "excel"))
+    ).scalar_one()
+    assert grant.user_id == me.id
+    assert "만점" in (grant.note or "")
+
+
 async def test_themes_unlock_hint_from_rules(client, db_session):
     """잠긴 테마에 해금 업적 힌트 — 설정 화면 배지 문구용."""
     from app.models import ThemeRewardRule

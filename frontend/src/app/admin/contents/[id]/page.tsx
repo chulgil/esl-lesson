@@ -2,13 +2,14 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ExamPanel } from "@/components/admin/ExamPanel";
 import { Brick } from "@/components/brick/Brick";
 import { StatusBadge as ContentStatusBadge } from "@/components/content/StatusBadge";
 import { adminApi, type ContentDetail, type Item } from "@/lib/admin-api";
 
-type Tab = "script" | "word" | "idiom" | "pattern" | "sentence";
+type Tab = "script" | "word" | "idiom" | "pattern" | "sentence" | "exam";
 
-const TAB_LABELS: Record<Exclude<Tab, "script">, string> = {
+const TAB_LABELS: Record<Exclude<Tab, "script" | "exam">, string> = {
   word: "단어",
   idiom: "숙어",
   pattern: "패턴",
@@ -130,14 +131,21 @@ export default function ContentDetailPage() {
           active={tab === "script"}
           onClick={() => setTab("script")}
         />
-        {(Object.keys(TAB_LABELS) as Exclude<Tab, "script">[]).map((t) => (
-          <TabButton
-            key={t}
-            label={`${TAB_LABELS[t]} ${itemsByType(t).length}`}
-            active={tab === t}
-            onClick={() => setTab(t)}
-          />
-        ))}
+        {(Object.keys(TAB_LABELS) as Exclude<Tab, "script" | "exam">[]).map(
+          (t) => (
+            <TabButton
+              key={t}
+              label={`${TAB_LABELS[t]} ${itemsByType(t).length}`}
+              active={tab === t}
+              onClick={() => setTab(t)}
+            />
+          ),
+        )}
+        <TabButton
+          label="시험"
+          active={tab === "exam"}
+          onClick={() => setTab("exam")}
+        />
         {detail.items.some((i) => i.review_status === "pending") && (
           <button
             type="button"
@@ -153,6 +161,8 @@ export default function ContentDetailPage() {
 
       {tab === "script" ? (
         <ScriptTable detail={detail} />
+      ) : tab === "exam" ? (
+        <ExamPanel contentId={contentId} />
       ) : (
         <ItemTable
           items={itemsByType(tab)}

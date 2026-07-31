@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     DictationRace,
+    ExamAttempt,
     GameMatch,
     LearningItem,
     QuizRoyaleMatch,
@@ -148,6 +149,30 @@ DEFINITIONS = (
     ("first_friend", "첫 친구", "첫 친구와 연결됐어요", 1, None, "social", "friends"),
     ("friends_5", "우정 입문", "친구 5명과 연결됐어요", 5, "beginner", "social", "friends"),
     ("friends_10", "마당발", "친구 10명과 연결됐어요", 10, "intermediate", "social", "friends"),
+    # 시험 — 제출·만점·1위 (docs/specs/library-exam.md)
+    ("first_exam", "첫 시험", "첫 시험을 제출했어요", 1, None, "exam", "exam_submits"),
+    ("exam_perfect", "만점", "시험에서 100점을 받았어요", 1, None, "exam", "exam_perfect"),
+    # 공동 1위 = best score 동률 기준 (duration 무관 — 최고 점수 도달 성취 인정)
+    ("exam_champion", "1위 등극", "시험 랭킹 1위에 올랐어요", 1, None, "exam", "exam_champion"),
+    ("exams_10", "응시 입문", "시험 10회를 제출했어요", 10, "beginner", "exam", "exam_submits"),
+    (
+        "exams_30",
+        "응시 중수",
+        "시험 30회를 제출했어요",
+        30,
+        "intermediate",
+        "exam",
+        "exam_submits",
+    ),
+    (
+        "exams_100",
+        "응시 고수",
+        "시험 100회를 제출했어요",
+        100,
+        "advanced",
+        "exam",
+        "exam_submits",
+    ),
 )
 
 
@@ -272,6 +297,40 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
         ),
     )
 
+    # 시험 — 제출 완료 attempt 만 집계 (진행 중/이탈은 무영향)
+    exam_submits = await _count(
+        db,
+        select(func.count(ExamAttempt.id)).where(
+            ExamAttempt.user_id == user_id, ExamAttempt.submitted_at.is_not(None)
+        ),
+    )
+    exam_perfect = await _count(
+        db,
+        select(func.count(ExamAttempt.id)).where(
+            ExamAttempt.user_id == user_id, ExamAttempt.score == 100
+        ),
+    )
+    # 현 1위 시험 수 — 공동 1위 = best score 동률 기준 (duration 무관, spec §4).
+    # 순위를 뺏기면 스티커는 꺼질 수 있으나 테마 보상 grant 는 영구 (기존 원칙)
+    my_best = (
+        select(ExamAttempt.exam_id, func.max(ExamAttempt.score).label("mine"))
+        .where(ExamAttempt.user_id == user_id, ExamAttempt.submitted_at.is_not(None))
+        .group_by(ExamAttempt.exam_id)
+        .subquery()
+    )
+    overall_best = (
+        select(ExamAttempt.exam_id, func.max(ExamAttempt.score).label("best"))
+        .where(ExamAttempt.submitted_at.is_not(None))
+        .group_by(ExamAttempt.exam_id)
+        .subquery()
+    )
+    exam_champion = await _count(
+        db,
+        select(func.count())
+        .select_from(my_best.join(overall_best, my_best.c.exam_id == overall_best.c.exam_id))
+        .where(my_best.c.mine == overall_best.c.best),
+    )
+
     # 지표 하나가 티어 여러 개를 먹인다 — 정의는 metric 키로 조회
     currents = {
         "reviews": total_reviews,
@@ -288,6 +347,9 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
         + dictation_played,
         "typing": peak_cpm,
         "friends": friends,
+        "exam_submits": exam_submits,
+        "exam_perfect": exam_perfect,
+        "exam_champion": exam_champion,
     }
 
     items = []

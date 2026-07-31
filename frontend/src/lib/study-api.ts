@@ -91,7 +91,7 @@ export interface Achievement {
   /** 난이도 티어 — null 은 단발 업적 (첫 걸음 등) */
   tier: AchievementTier | null;
   /** 스티커 벽 섹션 그룹 */
-  family: "study" | "streak" | "game" | "social";
+  family: "study" | "streak" | "game" | "social" | "exam";
   /** 달성 시 지급되는 테마 키 — 보상 규칙이 있을 때만 (theme-mall.md) */
   reward_theme: string | null;
 }
