@@ -5,7 +5,15 @@
 
 from sqlalchemy import select
 
-from app.models import Content, Exam, ExamAttempt, ExamQuestion, ItemOccurrence, LearningItem
+from app.models import (
+    Content,
+    Exam,
+    ExamAttempt,
+    ExamQuestion,
+    ItemOccurrence,
+    LearningItem,
+    User,
+)
 from tests.test_friends import make_user
 from tests.test_study import login
 
@@ -235,3 +243,216 @@ async def test_exam_admin_forbidden_for_learner(client, db_session):
     await login(client, db_session)
     assert (await client.post(f"/api/admin/contents/{content.id}/exam")).status_code == 403
     assert (await client.get(f"/api/admin/contents/{content.id}/exams")).status_code == 403
+
+
+# ---------------------------------------------------------------- J3: 응시
+
+
+async def make_exam(admin_client, db, count=5, item_type="word"):
+    """콘텐츠 + 승인 항목 + 활성 시험지 준비. (content, exam_id) 반환."""
+    content = await make_content(db)
+    await seed_exam_items(db, content, count=count, item_type=item_type)
+    await db.commit()
+    res = await admin_client.post(f"/api/admin/contents/{content.id}/exam")
+    assert res.status_code == 200
+    return content, res.json()["exam_id"]
+
+
+async def answer_key(db, exam_id) -> list[int]:
+    """seq 순 정답 인덱스 — 테스트가 서버 스냅샷에서 직접 읽는다."""
+    questions = (
+        (
+            await db.execute(
+                select(ExamQuestion)
+                .where(ExamQuestion.exam_id == exam_id)
+                .order_by(ExamQuestion.seq)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [q.payload["answer_index"] for q in questions]
+
+
+async def switch_user(client, user):
+    from app.core.security import SESSION_COOKIE, create_session_token
+
+    client.cookies.set(SESSION_COOKIE, create_session_token(user))
+
+
+async def test_attempt_flow_start_and_submit(client, admin_client, db_session):
+    """AC-3: 시작 시 정답 없는 문항 + 서버 채점 (score=정답수x5, duration 서버 계산)."""
+    content, exam_id = await make_exam(admin_client, db_session, count=5)
+    me = await login(client, db_session)
+
+    # 시험 없는 콘텐츠 요약 — 오류 없이 exam_id null
+    empty = await make_content(db_session)
+    await db_session.commit()
+    res = await client.get(f"/api/contents/{empty.id}/exam")
+    assert res.status_code == 200 and res.json()["exam_id"] is None
+
+    # 요약 — 응시 전
+    summary = (await client.get(f"/api/contents/{content.id}/exam")).json()
+    assert summary["exam_id"] == exam_id
+    assert summary["round"] == 1 and summary["question_count"] == 5
+    assert summary["attempt_count"] == 0 and summary["my_best"] is None
+    assert summary["top"] == []
+
+    # 시작 — 정답(answer_index) 미포함 문항
+    res = await client.post(f"/api/exams/{exam_id}/attempts")
+    assert res.status_code == 200
+    started = res.json()
+    assert len(started["questions"]) == 5
+    for q in started["questions"]:
+        assert "answer_index" not in q and "en_text" not in q
+        assert len(q["choices"]) == 4
+
+    # 제출 — 정답 3 + 오답 2
+    key = await answer_key(db_session, exam_id)
+    answers = list(key)
+    answers[3] = (key[3] + 1) % 4
+    answers[4] = (key[4] + 1) % 4
+    res = await client.post(
+        f"/api/exams/{exam_id}/attempts/{started['attempt_id']}/submit",
+        json={"answers": answers},
+    )
+    assert res.status_code == 200
+    graded = res.json()
+    assert graded["score"] == 15 and graded["correct_count"] == 3
+    assert graded["duration_ms"] >= 0
+    assert graded["rank"] == 1
+    assert [r["correct"] for r in graded["results"]] == [True, True, True, False, False]
+    assert [r["answer_index"] for r in graded["results"]] == key
+
+    # 요약 — 제출 후 내 최고점 반영
+    summary = (await client.get(f"/api/contents/{content.id}/exam")).json()
+    assert summary["attempt_count"] == 1
+    assert summary["my_best"]["score"] == 15 and summary["my_best"]["rank"] == 1
+    assert summary["top"][0]["nickname"] == me.nickname
+
+
+async def test_submit_validations(client, admin_client, db_session):
+    """AC-3.1: 길이/범위 422, 중복 제출 409, 타인 attempt 404."""
+    _content, exam_id = await make_exam(admin_client, db_session, count=5)
+    me = await login(client, db_session)
+    attempt_id = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+
+    # 길이 불일치 / 범위 밖 → 422
+    bad_len = await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt_id}/submit", json={"answers": [0, 1]}
+    )
+    assert bad_len.status_code == 422
+    bad_range = await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt_id}/submit",
+        json={"answers": [0, 1, 2, 3, 4]},
+    )
+    assert bad_range.status_code == 422
+
+    # 정상 제출 후 중복 → 409
+    key = await answer_key(db_session, exam_id)
+    ok = await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt_id}/submit", json={"answers": key}
+    )
+    assert ok.status_code == 200
+    dup = await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt_id}/submit", json={"answers": key}
+    )
+    assert dup.status_code == 409
+    assert dup.json()["detail"] == "already_submitted"
+
+    # 타인 attempt → 404 (존재 노출 금지)
+    other = await make_user(db_session, "other@example.com", "타인")
+    await db_session.commit()
+    await switch_user(client, other)
+    stolen = await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt_id}/submit", json={"answers": key}
+    )
+    assert stolen.status_code == 404
+    ghost = await client.post(f"/api/exams/{exam_id}/attempts/99999/submit", json={"answers": key})
+    assert ghost.status_code == 404
+    assert me.id != other.id
+
+
+async def test_archived_start_blocked_but_inflight_submit_allowed(client, admin_client, db_session):
+    """AC-3.1: archived 시험 새 응시 409 — 진행 중 attempt 제출은 허용(그 회차 랭킹)."""
+    from app.core.security import SESSION_COOKIE
+
+    content, exam_id = await make_exam(admin_client, db_session, count=5)
+    # admin_client 는 client 와 동일 인스턴스(쿠키만 admin) — login 이 덮기 전에 보관
+    admin_cookie = admin_client.cookies.get(SESSION_COOKIE)
+    me = await login(client, db_session)
+    attempt_id = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+    key = await answer_key(db_session, exam_id)
+
+    # 회차 재생성 → 기존 exam archived (admin 쿠키 복원 후 호출)
+    admin_client.cookies.set(SESSION_COOKIE, admin_cookie)
+    regen = await admin_client.post(f"/api/admin/contents/{content.id}/exam")
+    assert regen.status_code == 200 and regen.json()["round"] == 2
+    await switch_user(client, me)
+
+    # archived 시험에 새 응시 시작 → 409
+    blocked = await client.post(f"/api/exams/{exam_id}/attempts")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"] == "exam_archived"
+
+    # 진행 중이던 attempt 제출은 허용 — 그 회차 랭킹에 반영
+    res = await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt_id}/submit", json={"answers": key}
+    )
+    assert res.status_code == 200 and res.json()["rank"] == 1
+    old_rankings = (await client.get(f"/api/exams/{exam_id}/rankings")).json()
+    assert len(old_rankings["items"]) == 1
+
+    # 활성 회차(2)의 랭킹은 비어 있다 — 회차 분리
+    new_exam_id = regen.json()["exam_id"]
+    new_rankings = (await client.get(f"/api/exams/{new_exam_id}/rankings")).json()
+    assert new_rankings["items"] == []
+
+
+async def test_rankings_best_tiebreak_and_fallback(client, admin_client, db_session):
+    """AC-4: 유저별 best 1행, 동점은 duration 짧은 쪽 상위, nickname 없으면 name."""
+    from datetime import UTC, datetime, timedelta
+
+    _content, exam_id = await make_exam(admin_client, db_session, count=5)
+    key = await answer_key(db_session, exam_id)
+    wrong_two = list(key)
+    wrong_two[0] = (key[0] + 1) % 4
+    wrong_two[1] = (key[1] + 1) % 4
+
+    async def attempt_as(user, answers, slow_seconds=0):
+        await switch_user(client, user)
+        attempt_id = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+        if slow_seconds:
+            row = await db_session.get(ExamAttempt, attempt_id)
+            row.started_at = datetime.now(UTC) - timedelta(seconds=slow_seconds)
+            await db_session.commit()
+        res = await client.post(
+            f"/api/exams/{exam_id}/attempts/{attempt_id}/submit", json={"answers": answers}
+        )
+        assert res.status_code == 200
+        return res.json()
+
+    fast = await make_user(db_session, "fast@example.com", "빠른이")
+    slow = await make_user(db_session, "slow@example.com", "느린이")
+    plain = User(google_sub="g-plain", email="plain@example.com", name="이름폴백")
+    db_session.add(plain)
+    await db_session.commit()
+
+    # slow: 만점(느림) / fast: 오답 2 -> 재응시 만점(빠름) — best 만 랭킹에 남는다
+    await attempt_as(slow, key, slow_seconds=60)
+    await attempt_as(fast, wrong_two)
+    await attempt_as(fast, key)
+    await attempt_as(plain, wrong_two)
+
+    rankings = (await client.get(f"/api/exams/{exam_id}/rankings")).json()
+    rows = rankings["items"]
+    assert [(r["rank"], r["nickname"], r["score"]) for r in rows] == [
+        (1, "빠른이", 25),
+        (2, "느린이", 25),
+        (3, "이름폴백", 15),
+    ]
+    # 동점(25) — duration 짧은 빠른이가 상위
+    assert rows[0]["duration_ms"] <= rows[1]["duration_ms"]
+    # is_me — 마지막 로그인(plain) 기준
+    assert [r["is_me"] for r in rows] == [False, False, True]
+    assert rankings["me"]["rank"] == 3

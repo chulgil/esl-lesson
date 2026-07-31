@@ -1,0 +1,261 @@
+"""시험 응시 — 요약·시작·제출 채점·랭킹 (docs/specs/library-exam.md).
+
+채점·순위 판정 전부 서버 — 클라이언트 입력은 answers 배열만 경계 검증한다.
+랭킹 = 유저별 best(score DESC, duration ASC, submitted_at ASC) 실시간 집계.
+"""
+
+from datetime import UTC, datetime
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.db import get_db
+from app.core.security import get_current_user
+from app.models import Exam, ExamAttempt, ExamQuestion, User
+from app.services.exams import POINTS_PER_QUESTION
+
+router = APIRouter(tags=["exams"])
+
+RANKING_LIMIT = 50
+
+
+def _aware(dt: datetime) -> datetime:
+    """sqlite(테스트) 왕복 시 naive 로 돌아온다 — UTC 저장 규칙이라 그대로 부착."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+async def _best_rows(db: AsyncSession, exam_id: int):
+    """유저별 best 1행 — 랭킹 순서(score DESC, duration ASC, submitted_at ASC)로 반환."""
+    rn = (
+        func.row_number()
+        .over(
+            partition_by=ExamAttempt.user_id,
+            order_by=(
+                ExamAttempt.score.desc(),
+                ExamAttempt.duration_ms.asc(),
+                ExamAttempt.submitted_at.asc(),
+            ),
+        )
+        .label("rn")
+    )
+    inner = (
+        select(
+            ExamAttempt.user_id,
+            ExamAttempt.score,
+            ExamAttempt.duration_ms,
+            ExamAttempt.submitted_at,
+            rn,
+        )
+        .where(ExamAttempt.exam_id == exam_id, ExamAttempt.submitted_at.is_not(None))
+        .subquery()
+    )
+    return (
+        await db.execute(
+            select(
+                inner.c.user_id,
+                inner.c.score,
+                inner.c.duration_ms,
+                User.nickname,
+                User.name,
+            )
+            .join(User, User.id == inner.c.user_id)
+            .where(inner.c.rn == 1)
+            .order_by(inner.c.score.desc(), inner.c.duration_ms.asc(), inner.c.submitted_at.asc())
+        )
+    ).all()
+
+
+def _display_name(nickname: str, name: str) -> str:
+    """nickname 미설정 유저는 name 폴백 (Phase 3 다이어그램 검토 보강)."""
+    return nickname or name
+
+
+@router.get("/contents/{content_id}/exam")
+async def exam_summary(
+    content_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """활성 시험 요약 — 시험 없으면 exam_id null (오류 아님, 시나리오 4)."""
+    exam = (
+        await db.execute(select(Exam).where(Exam.content_id == content_id, Exam.status == "active"))
+    ).scalar_one_or_none()
+    if exam is None:
+        return {"exam_id": None}
+    rows = await _best_rows(db, exam.id)
+    mine = next(((idx + 1, row) for idx, row in enumerate(rows) if row.user_id == user.id), None)
+    return {
+        "exam_id": exam.id,
+        "round": exam.round,
+        "question_count": exam.question_count,
+        # 응시자 수 — 제출 완료 기준 distinct 유저 (유저별 best 1행이므로 행 수 = 유저 수)
+        "attempt_count": len(rows),
+        "my_best": None
+        if mine is None
+        else {
+            "score": mine[1].score,
+            "duration_ms": mine[1].duration_ms,
+            "rank": mine[0],
+        },
+        "top": [
+            {
+                "nickname": _display_name(row.nickname, row.name),
+                "score": row.score,
+                "duration_ms": row.duration_ms,
+            }
+            for row in rows[:3]
+        ],
+    }
+
+
+@router.post("/exams/{exam_id}/attempts")
+async def start_attempt(
+    exam_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """응시 시작 — attempt INSERT(started_at 서버 시각) + 정답 없는 문항 반환."""
+    exam = await db.get(Exam, exam_id)
+    if exam is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "exam not found")
+    if exam.status != "active":
+        # 회차 보존 = 새 응시 시작 차단 (진행 중 attempt 제출은 허용 — submit 참조)
+        raise HTTPException(status.HTTP_409_CONFLICT, "exam_archived")
+    attempt = ExamAttempt(exam_id=exam_id, user_id=user.id)
+    db.add(attempt)
+    await db.flush()
+    questions = (
+        (
+            await db.execute(
+                select(ExamQuestion)
+                .where(ExamQuestion.exam_id == exam_id)
+                .order_by(ExamQuestion.seq)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    await db.commit()
+    return {
+        "attempt_id": attempt.id,
+        "questions": [
+            {
+                "seq": q.seq,
+                "quiz_mode": q.payload.get("quiz_mode"),
+                "prompt": q.payload.get("prompt"),
+                "prompt_ko": q.payload.get("prompt_ko"),
+                "choices": q.payload.get("choices", []),
+            }
+            for q in questions
+        ],
+    }
+
+
+class SubmitBody(BaseModel):
+    answers: list[int]
+
+
+@router.post("/exams/{exam_id}/attempts/{attempt_id}/submit")
+async def submit_attempt(
+    exam_id: int,
+    attempt_id: int,
+    body: SubmitBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """서버 채점 — score=정답수x5, duration=제출-시작 서버 시각차.
+
+    archived 시험이라도 진행 중 attempt 는 제출 허용(시작한 시험지를 마칠 권리)
+    — 해당 회차 랭킹에 반영된다 (spec §4, Phase 4.5 지적 반영).
+    """
+    attempt = await db.get(ExamAttempt, attempt_id)
+    if attempt is None or attempt.exam_id != exam_id or attempt.user_id != user.id:
+        # 타인 attempt 는 존재 자체를 노출하지 않는다
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "attempt not found")
+    if attempt.submitted_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "already_submitted")
+    questions = (
+        (
+            await db.execute(
+                select(ExamQuestion)
+                .where(ExamQuestion.exam_id == exam_id)
+                .order_by(ExamQuestion.seq)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # 신뢰 경계 검증 — 길이=문항 수, 각 값 0..3
+    if len(body.answers) != len(questions) or any(a < 0 or a > 3 for a in body.answers):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_answers")
+
+    now = datetime.now(UTC)
+    results = []
+    correct_count = 0
+    for question, answer in zip(questions, body.answers, strict=True):
+        correct = answer == question.payload["answer_index"]
+        correct_count += int(correct)
+        results.append(
+            {
+                "seq": question.seq,
+                "correct": correct,
+                "answer_index": question.payload["answer_index"],
+            }
+        )
+    attempt.submitted_at = now
+    attempt.score = correct_count * POINTS_PER_QUESTION
+    attempt.correct_count = correct_count
+    attempt.duration_ms = max(0, int((now - _aware(attempt.started_at)).total_seconds() * 1000))
+    attempt.answers = list(body.answers)
+    await db.commit()
+
+    rows = await _best_rows(db, exam_id)
+    rank = next((idx + 1 for idx, row in enumerate(rows) if row.user_id == user.id), None)
+    return {
+        "score": attempt.score,
+        "correct_count": correct_count,
+        "duration_ms": attempt.duration_ms,
+        "rank": rank,
+        "results": results,
+    }
+
+
+@router.get("/exams/{exam_id}/rankings")
+async def exam_rankings(
+    exam_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """TOP 50 + 내 순위 — archived 회차도 조회 가능 (읽기 전용 보존)."""
+    exam = await db.get(Exam, exam_id)
+    if exam is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "exam not found")
+    rows = await _best_rows(db, exam_id)
+    items = [
+        {
+            "rank": idx + 1,
+            "nickname": _display_name(row.nickname, row.name),
+            "score": row.score,
+            "duration_ms": row.duration_ms,
+            "is_me": row.user_id == user.id,
+        }
+        for idx, row in enumerate(rows[:RANKING_LIMIT])
+    ]
+    mine = next(
+        (
+            {
+                "rank": idx + 1,
+                "nickname": _display_name(row.nickname, row.name),
+                "score": row.score,
+                "duration_ms": row.duration_ms,
+                "is_me": True,
+            }
+            for idx, row in enumerate(rows)
+            if row.user_id == user.id
+        ),
+        None,
+    )
+    return {"items": items, "me": mine}

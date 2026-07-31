@@ -17,6 +17,7 @@ from app.api.auth import me_router
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.contents import router as contents_router
+from app.api.exams import router as exams_router
 from app.api.friends import router as friends_router
 from app.api.game import router as game_router
 from app.api.game import ws_router as game_ws_router
@@ -66,6 +67,7 @@ app.include_router(admin_exams_router, prefix="/api")
 app.include_router(admin_themes_router, prefix="/api")
 app.include_router(admin_users_router, prefix="/api")
 app.include_router(contents_router, prefix="/api")
+app.include_router(exams_router, prefix="/api")
 app.include_router(my_contents_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 app.include_router(study_router, prefix="/api")
