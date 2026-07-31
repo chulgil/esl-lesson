@@ -86,7 +86,7 @@ theme_reward_rules (d1e2f3a4b5c6, 2026-07-30)
 `frontend/src/lib/theme-surfaces.ts` 가 화면별 테마 분기의 단일 정의처:
 `SURFACE_SKINS`(시험지·학습 세션 문항 카드 공용 표면), `CLOCK_OF`(경과 시계 컨셉),
 `boardThemeOf`(게임 보드 폴백 — 전용 스킨은 note/candy/lego/cat). **새 테마 추가 =
-theme.ts 카탈로그 + globals.css 토큰 + theme-surfaces + 백엔드 THEME_ACCESS 4곳** —
+theme.ts 카탈로그 + globals.css 토큰 + theme-surfaces + 백엔드 THEME_ACCESS + layout.tsx 부트 스크립트 화이트리스트 5곳** —
 화면 컴포넌트에 테마 하드코딩 금지.
 
 ## 멘탈모델 접점 4종 (2026-07-30 — "테마 = 업적 보상" 각인)
