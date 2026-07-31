@@ -3,6 +3,7 @@ import { Gaegu, IBM_Plex_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { AppNav } from "@/components/nav/AppNav";
 import { ChatWidget } from "@/components/chat/ChatWidget";
+import { BuildRefreshWatcher } from "@/components/nav/BuildRefreshWatcher";
 import { InviteToaster } from "@/components/game/InviteToaster";
 import { HenyangPeek } from "@/components/theme/HenyangPeek";
 
@@ -72,6 +73,7 @@ export default function RootLayout({
         <AppNav />
         <InviteToaster />
         <ChatWidget />
+        <BuildRefreshWatcher />
         <HenyangPeek />
         {children}
       </body>

@@ -9,6 +9,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # 서버 RAM 2GB 제약 — Node 힙 상한을 낮춰 OOM/데몬 멈춤 방지 (2026-07-12)
 ENV NODE_OPTIONS=--max-old-space-size=1280
+# 클라 번들에 빌드 SHA 를 새김 — 오래 열린 탭의 구버전 감지 (2026-07-31)
+ARG GIT_SHA=dev
+ENV NEXT_PUBLIC_BUILD_SHA=$GIT_SHA
 RUN npm run build
 
 FROM node:22-alpine AS runner

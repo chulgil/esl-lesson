@@ -254,7 +254,10 @@ function WatchInner() {
             <input
               value={chat}
               onChange={(e) => setChat(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendChat()}
+              // 채팅 Enter 계약과 정렬 — IME 조합 확정 Enter 오전송 방지
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) sendChat();
+              }}
               maxLength={100}
               placeholder="응원 한마디 (친구 화면에 떠올라요)"
               className="min-h-11 flex-1 rounded-md border-2 border-ink/20 bg-white px-3 text-sm transition-colors focus:border-brick-blue focus:outline-none"
