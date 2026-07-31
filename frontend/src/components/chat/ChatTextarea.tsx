@@ -30,6 +30,9 @@ export function ChatTextarea({
   // 중복 전송 가드 — Safari 는 조합 확정 Enter 가 compositionend 후 keydown 으로
   // 한 번 더 오므로, 짧은 창 안의 연속 Enter 는 1회만 전송한다
   const lastSend = useRef(0);
+  // 조합 중 전송 시각 — 전송으로 비운 입력창에 IME 가 마지막 조합 글자를
+  // 다시 커밋해 잔여 글자가 남는다 (2026-07-31 보고). 조합 종료 직후 재소거
+  const sentWhileComposing = useRef(0);
 
   // 값이 바뀔 때마다 내용 높이에 맞춤 — 8줄 상한은 CSS max-height 가 담당
   useEffect(() => {
@@ -56,7 +59,15 @@ export function ChatTextarea({
           const now = Date.now();
           if (now - lastSend.current < 150) return;
           lastSend.current = now;
+          if (e.nativeEvent.isComposing) sentWhileComposing.current = now;
           onSend();
+        }
+      }}
+      onCompositionEnd={() => {
+        // 전송 직후의 조합 확정 커밋만 소거 — 정상 타이핑의 조합 종료는 무관
+        if (Date.now() - sentWhileComposing.current < 300) {
+          sentWhileComposing.current = 0;
+          onChange("");
         }
       }}
       onPaste={(e) => {

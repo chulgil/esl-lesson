@@ -5,6 +5,7 @@ WS 접속(페이지별 다중 소켓)을 유저 단위로 추적하고, 대기�
 """
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
 
 from app.services.themes import THEME_ACCESS
@@ -48,10 +49,22 @@ class InviteHub:
     def __init__(self) -> None:
         self.sockets: dict[int, list[Sender]] = {}
         self.names: dict[int, str] = {}
+        # 사용자별 마지막 클라 메시지(하트비트 포함) 시각 — 프리즈된 모바일 탭은
+        # TCP send 가 "성공"해도 JS 가 멈춰 알림을 못 띄운다. 최근 하트비트가
+        # 없으면 좀비로 보고 웹푸시로 폴백 (2026-07-31 "알림 안 옴" 근본 수정)
+        self.last_seen: dict[int, float] = {}
 
     def attach(self, user_id: int, name: str, send: Sender) -> None:
         self.sockets.setdefault(user_id, []).append(send)
         self.names[user_id] = name
+        self.touch(user_id)
+
+    def touch(self, user_id: int) -> None:
+        self.last_seen[user_id] = time.monotonic()
+
+    def alive(self, user_id: int, ttl: float = 90.0) -> bool:
+        seen = self.last_seen.get(user_id)
+        return seen is not None and time.monotonic() - seen < ttl
 
     def detach(self, user_id: int, send: Sender) -> None:
         sends = self.sockets.get(user_id, [])

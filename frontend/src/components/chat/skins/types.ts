@@ -12,6 +12,16 @@ export interface PendingMessage {
   imageId: string | null;
   imageUrl: string | null;
   failed: boolean;
+  /** 답장 인용 (낙관 렌더용 — 서버 확정 시 reply_to 로 치환) */
+  replyToId?: number | null;
+  replyPreview?: string | null;
+}
+
+/** 답장 작성 상태 — 입력줄 위 인용 배너 (2026-07-31 카톡식 답장) */
+export interface ReplyDraft {
+  id: number;
+  senderId: number;
+  preview: string;
 }
 
 export interface ChatSkinProps {
@@ -34,6 +44,10 @@ export interface ChatSkinProps {
   onRetry: (entry: PendingMessage) => void;
   /** 내 메시지 삭제 — 확인 후 soft delete, "삭제되었습니다" 로 치환 */
   onDeleteMessage: (id: number) => void;
+  /** 답장 — 대상 지정 시 입력줄 위 인용 배너, 전송에 reply_to_id 포함 */
+  replyDraft: ReplyDraft | null;
+  onReplyTo: (msg: ChatMessage) => void;
+  onCancelReply: () => void;
   onPickKaomoji: (k: string) => void;
   onAttachItem: (item: ShareableItem) => void;
   onDetachItem: () => void;

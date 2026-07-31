@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 RECENT_CACHE_SIZE = 50  # 대화별 최근 메시지 링버퍼 크기 = 기본 페이지 크기
 UNREAD_TTL_SECONDS = 30
-PUSH_THROTTLE = timedelta(minutes=5)  # 같은 대화 웹푸시 최소 간격
+PUSH_THROTTLE = timedelta(seconds=60)  # 같은 대화 웹푸시 최소 간격
 BODY_MAX = 2000
 
 # --- 인프로세스 캐시 -----------------------------------------------------------
@@ -64,7 +64,39 @@ def message_dict(m: ChatMessage) -> dict:
         "client_msg_id": m.client_msg_id,
         "created_at": m.created_at.isoformat() if m.created_at else None,
         "deleted": deleted,
+        # 답장 인용 대상 — 미리보기(reply_to)는 읽기 시점에 attach_reply_previews 로
+        "reply_to_id": None if deleted else m.reply_to_id,
     }
+
+
+async def attach_reply_previews(db: AsyncSession, items: list[dict]) -> list[dict]:
+    """답장 인용 미리보기를 읽기 시점에 해석해 부착 (2026-07-31).
+
+    스냅샷 저장 방식은 원문 삭제 후에도 내용이 남아 물리 소거 원칙과 충돌 —
+    항상 현재 행 기준으로 미리보기를 만든다 (삭제된 원문 = "삭제되었습니다").
+    캐시 dict 를 제자리 갱신하므로 캐시 히트 경로에서도 최신 상태가 유지된다."""
+    ids = {m["reply_to_id"] for m in items if m.get("reply_to_id")}
+    if not ids:
+        return items
+    rows = (
+        (await db.execute(select(ChatMessage).where(ChatMessage.id.in_(ids)))).scalars().all()
+    )
+    by_id: dict[int, dict] = {}
+    for r in rows:
+        if r.deleted_at is not None:
+            preview = "삭제되었습니다"
+        else:
+            preview = r.body or ("[사진]" if r.image_path else "[단어 카드]")
+        by_id[r.id] = {
+            "id": r.id,
+            "sender_id": r.sender_id,
+            "deleted": r.deleted_at is not None,
+            "preview": preview[:80],
+        }
+    for m in items:
+        rid = m.get("reply_to_id")
+        m["reply_to"] = by_id.get(rid) if rid else None
+    return items
 
 
 # --- 친구·대화 -----------------------------------------------------------------
@@ -135,6 +167,7 @@ async def send_message(
     client_msg_id: str,
     item_id: int | None = None,
     image_path: str | None = None,
+    reply_to_id: int | None = None,
 ) -> tuple[dict, bool]:
     """저장 + 캐시 갱신. 반환 (메시지 dict, 신규 여부). 멱등: 같은 client_msg_id 는 기존 행."""
     if to_user_id == sender.id:
@@ -155,6 +188,12 @@ async def send_message(
     item_ref = await snapshot_item(db, sender.id, item_id) if item_id is not None else None
     conv = await get_or_create_conversation(db, sender.id, to_user_id)
 
+    # 답장 대상 검증 — 반드시 같은 대화의 메시지 (타 대화 인용 = 정보 유출 경로)
+    if reply_to_id is not None:
+        target = await db.get(ChatMessage, reply_to_id)
+        if target is None or target.conversation_id != conv.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "reply_target_not_found")
+
     existing = (
         await db.execute(
             select(ChatMessage).where(
@@ -164,7 +203,7 @@ async def send_message(
         )
     ).scalar_one_or_none()
     if existing is not None:
-        return message_dict(existing), False
+        return (await attach_reply_previews(db, [message_dict(existing)]))[0], False
 
     msg = ChatMessage(
         conversation_id=conv.id,
@@ -173,6 +212,7 @@ async def send_message(
         item_ref=item_ref,
         image_path=image_path,
         client_msg_id=client_msg_id,
+        reply_to_id=reply_to_id,
     )
     db.add(msg)
     conv.last_message_at = datetime.now(UTC)
@@ -192,7 +232,7 @@ async def send_message(
         return message_dict(existing), False
     await db.refresh(msg)
 
-    data = message_dict(msg)
+    data = (await attach_reply_previews(db, [message_dict(msg)]))[0]
     if conv.id in _recent:
         _recent[conv.id].append(data)
     _invalidate_unread(to_user_id)
@@ -275,7 +315,7 @@ async def get_messages(
         buf = _recent.get(conv.id)
         if buf is None:
             buf = await _load_recent(db, conv.id)
-        return list(buf)[-limit:]
+        return await attach_reply_previews(db, list(buf)[-limit:])
     rows = (
         (
             await db.execute(
@@ -288,7 +328,7 @@ async def get_messages(
         .scalars()
         .all()
     )
-    return [message_dict(m) for m in reversed(rows)]
+    return await attach_reply_previews(db, [message_dict(m) for m in reversed(rows)])
 
 
 async def list_conversations(db: AsyncSession, user: User) -> list[dict]:
@@ -482,7 +522,9 @@ async def deliver_ws(user_id: int, message: dict) -> bool:
             delivered = True
         except Exception:  # noqa: BLE001 — 한 소켓 실패가 나머지를 막으면 안 됨
             logger.warning("chat ws deliver failed user=%s", user_id)
-    return delivered
+    # 프리즈된 탭은 send 성공 + JS 정지 상태 — 최근 하트비트 없으면 미전달로
+    # 간주해 웹푸시 폴백 (클라는 30초 간격 ping, TTL 90초)
+    return delivered and invite_hub.alive(user_id)
 
 
 def should_push(conversation_id: int, to_user_id: int) -> bool:

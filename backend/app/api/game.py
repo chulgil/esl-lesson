@@ -549,6 +549,8 @@ async def game_ws(websocket: WebSocket) -> None:
         while True:
             msg = await websocket.receive_json()
             t = msg.get("t")
+            # 모든 클라 메시지 = 생존 신호 (하트비트 ping 포함) — deliver_ws 좀비 판정 근거
+            invite_hub.touch(user_id)
             if t == "ping":
                 await send({"t": "pong"})
             # --- 채팅 (docs/specs/chat.md — 수신·읽음은 REST 가 WS 로 푸시, 입력중만 클라→서버) ---

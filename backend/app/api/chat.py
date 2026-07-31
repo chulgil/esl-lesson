@@ -138,6 +138,7 @@ class SendBody(BaseModel):
     client_msg_id: str = Field(min_length=8, max_length=64)
     item_id: int | None = None
     image_id: str | None = None
+    reply_to_id: int | None = None
 
 
 @router.post("/messages", status_code=status.HTTP_201_CREATED)
@@ -159,6 +160,7 @@ async def send(
         payload.client_msg_id,
         item_id=payload.item_id,
         image_path=payload.image_id,
+        reply_to_id=payload.reply_to_id,
     )
     if created:
         message = {"t": "chat.message", "from_name": user.nickname, **data}

@@ -109,30 +109,87 @@ export function InviteToaster() {
   useEffect(() => {
     let socket: GameSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+    // 마지막 수신(pong 포함) 시각 — onclose 없이 조용히 죽은 소켓 감지 근거
+    const lastAlive = { t: Date.now() };
+
+    // 재접속 루프 (2026-07-31 근본 수정): 이전 구현은 fetchMe 1회 실패(배포 중
+    // 서버 순단 포함)로 재시도가 영구 중단돼 "새로고침해야 복구" 를 만들었다.
+    // null 이어도 백오프로 계속 재확인 — /api/me 30초 폴링은 만료 세션에도 저부하
+    function scheduleRetry(delay: number) {
+      if (stopped || retry) return;
+      retry = setTimeout(() => {
+        retry = null;
+        fetchMe().then((me) => {
+          if (stopped) return;
+          if (me) connect();
+          else scheduleRetry(30000);
+        });
+      }, delay);
+    }
 
     function connect() {
-      socket = new GameSocket(
-        handleMessage,
+      if (stopped) return;
+      lastAlive.t = Date.now();
+      const s = new GameSocket(
+        (msg) => {
+          lastAlive.t = Date.now();
+          handleMessage(msg);
+        },
         () => {
+          if (socket !== s) return; // 교체된 옛 소켓의 잔여 close — 무시
           setChatSocket(null);
-          // 세션 만료 탭이 15초마다 403 을 만드는 것을 차단 — 재확인 후에만 재접속
-          retry = setTimeout(() => {
-            fetchMe().then((me) => {
-              if (me) connect();
-            });
-          }, 15000);
+          scheduleRetry(5000);
         },
         // 재접속 성공 = 끊김 동안 메시지를 놓쳤을 수 있음 — 열린 대화방 재동기화
         () => dispatchChatEvent({ t: "chat.resync" }),
       );
-      socket.connect();
-      setChatSocket(socket); // 대화방의 입력중 신호 전송용 (두 번째 소켓 금지)
+      socket = s;
+      s.connect();
+      setChatSocket(s); // 대화방의 입력중 신호 전송용 (두 번째 소켓 금지)
     }
     fetchMe().then((me) => {
+      if (stopped) return;
       if (me) connect();
+      else scheduleRetry(30000);
     });
+
+    // 하트비트 — 30초 ping(서버 좀비 판정용 last_seen 갱신), 70초 무소식이면
+    // 죽은 소켓으로 보고 close → onclose 재접속 경로 (절전·네트워크 전환 회수)
+    const hb = setInterval(() => {
+      if (!socket?.isOpen()) return;
+      if (Date.now() - lastAlive.t > 70000) socket.close();
+      else socket.ping();
+    }, 30000);
+
+    // 탭 복귀·네트워크 복구 — 대기 없이 즉시 점검 (배포로 끊긴 소켓 회수)
+    const ensureAlive = () => {
+      if (stopped) return;
+      if (socket?.isOpen()) {
+        socket.ping();
+        return;
+      }
+      socket?.close();
+      if (retry) {
+        clearTimeout(retry);
+        retry = null;
+      }
+      scheduleRetry(0);
+    };
+    const onVisible = () => {
+      if (!document.hidden) ensureAlive();
+    };
+    window.addEventListener("online", ensureAlive);
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
+      stopped = true;
+      clearInterval(hb);
       if (retry) clearTimeout(retry);
+      window.removeEventListener("online", ensureAlive);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
       setChatSocket(null);
       socket?.close();
     };

@@ -98,6 +98,30 @@ const OS_STEPS: Record<
   },
 };
 
+/** 차단(denied) 해제 경로 — 기종별. 웹에서 Android/iOS 설정 딥링크는 불가 */
+const DENIED_STEPS: Record<Platform, string[]> = {
+  mac: [
+    "주소창 왼쪽 자물쇠 > 알림을 [허용]으로 바꾼 뒤 새로고침",
+    "그래도 안 되면 아래 [Mac 알림 설정 열기]에서 브라우저 알림 허용",
+  ],
+  windows: [
+    "주소창 왼쪽 자물쇠 > 알림을 [허용]으로 바꾼 뒤 새로고침",
+    "그래도 안 되면 아래 [Windows 알림 설정 열기]에서 브라우저 알림 허용",
+  ],
+  android: [
+    "주소창 왼쪽 자물쇠(또는 ⓘ) > 권한 > 알림을 허용으로",
+    "안 보이면 Chrome ⋮ 메뉴 > 설정 > 사이트 설정 > 알림 > 이 사이트 허용",
+    "Android 설정 > 애플리케이션 > Chrome > 알림도 켜져 있어야 해요",
+    "바꾼 뒤 [다시 시도]를 눌러주세요",
+  ],
+  ios: [
+    "홈 화면에 추가한 앱으로 열었는지 확인하세요 (Safari 탭은 알림 불가)",
+    "iOS 설정 > 알림에서 이 앱을 허용으로",
+    "바꾼 뒤 [다시 시도]를 눌러주세요",
+  ],
+  other: ["브라우저 사이트 설정에서 알림을 허용한 뒤 [다시 시도]를 눌러주세요"],
+};
+
 export function NotificationSetupGuide() {
   const [open, setOpen] = useState(false);
   const [platform, setPlatform] = useState<Platform>("other");
@@ -106,6 +130,9 @@ export function NotificationSetupGuide() {
   // 버튼 분기 기준은 권한이 아니라 "구독" — 권한 granted + 구독 해제 상태에서
   // [알림 켜기]가 사라지면 재구독 경로가 없다 (2026-07-31 재검토)
   const [pushState, setPushState] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  // "아무 반응 없음" 방지 — unsupported/disabled/오류도 반드시 눈에 보이는 결과로
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     const detected = detectPlatform();
@@ -159,6 +186,8 @@ export function NotificationSetupGuide() {
   }
 
   async function enable() {
+    setBusy(true);
+    setFeedback(null);
     try {
       const state = await subscribePush();
       setPushState(state);
@@ -167,11 +196,20 @@ export function NotificationSetupGuide() {
         setTimeout(dismiss, 2500);
       } else if (state === "denied") {
         setPhase("denied");
+      } else if (state === "unsupported") {
+        setFeedback(
+          platform === "ios"
+            ? "이 Safari 탭에서는 알림을 켤 수 없어요 — 위 단계대로 홈 화면에 추가한 앱에서 켜주세요."
+            : "이 브라우저는 웹 알림을 지원하지 않아요 — 다른 브라우저(Chrome 등)를 사용해주세요.",
+        );
+      } else if (state === "disabled") {
+        setFeedback("서버 알림 설정이 꺼져 있어요 — 관리자에게 문의해주세요.");
       }
-      // unsupported/disabled(iOS Safari 탭 등) — 단계 안내를 유지한다
     } catch {
-      setPhase(notifPermission() === "denied" ? "denied" : "ask");
+      if (notifPermission() === "denied") setPhase("denied");
+      else setFeedback("알림 켜기에 실패했어요 — 잠시 후 다시 시도해주세요.");
     }
+    setBusy(false);
   }
 
   async function sendTest() {
@@ -211,9 +249,20 @@ export function NotificationSetupGuide() {
               ))}
             </ol>
             {phase === "denied" && (
+              <div className="mt-3 rounded-md bg-brick-red/10 p-2 text-xs text-brick-red">
+                <p className="font-bold">알림이 차단된 상태예요 — 해제 방법:</p>
+                <ol className="mt-1 flex flex-col gap-0.5">
+                  {DENIED_STEPS[platform].map((step, idx) => (
+                    <li key={idx}>
+                      {idx + 1}. {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+            {feedback && (
               <p className="mt-3 rounded-md bg-brick-red/10 p-2 text-xs text-brick-red">
-                브라우저에서 알림이 차단된 상태예요 — 주소창의 자물쇠(사이트
-                설정) &gt; 알림을 [허용]으로 바꾼 뒤 새로고침하면 켤 수 있어요.
+                {feedback}
               </p>
             )}
             {testResult === "sent" && (
@@ -242,24 +291,28 @@ export function NotificationSetupGuide() {
               </button>
             )}
             <div className="mt-3 flex gap-2">
-              {phase !== "denied" &&
-                (subscribed ? (
-                  <button
-                    type="button"
-                    onClick={sendTest}
-                    className="min-h-11 flex-1 rounded-md bg-brick-green font-bold text-brick-label transition hover:opacity-90"
-                  >
-                    테스트 알림 보내기
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={enable}
-                    className="min-h-11 flex-1 rounded-md bg-brick-green font-bold text-brick-label transition hover:opacity-90"
-                  >
-                    알림 켜기
-                  </button>
-                ))}
+              {subscribed && phase !== "denied" ? (
+                <button
+                  type="button"
+                  onClick={sendTest}
+                  className="min-h-11 flex-1 rounded-md bg-brick-green font-bold text-brick-label transition hover:opacity-90"
+                >
+                  테스트 알림 보내기
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={enable}
+                  className="min-h-11 flex-1 rounded-md bg-brick-green font-bold text-brick-label transition hover:opacity-90 disabled:opacity-50"
+                >
+                  {busy
+                    ? "켜는 중..."
+                    : phase === "denied"
+                      ? "다시 시도"
+                      : "알림 켜기"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={dismiss}

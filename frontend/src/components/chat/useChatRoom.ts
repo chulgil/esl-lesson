@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PendingMessage } from "@/components/chat/skins/types";
+import type {
+  PendingMessage,
+  ReplyDraft,
+} from "@/components/chat/skins/types";
 import { fetchMe } from "@/lib/api";
 import {
   prepareImageForUpload,
@@ -47,6 +50,8 @@ export function useChatRoom(otherId: number) {
   const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(
     null,
   );
+  // 답장 대상 (카톡식 인용) — 전송 시 reply_to_id 로 포함 후 해제
+  const [replyDraft, setReplyDraft] = useState<ReplyDraft | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -330,6 +335,8 @@ export function useChatRoom(otherId: number) {
       const item = pendingEntry?.item ?? attachedItem;
       const imageId = pendingEntry?.imageId ?? attachedImage?.imageId ?? null;
       const imageUrl = pendingEntry?.imageUrl ?? attachedImage?.url ?? null;
+      const replyToId = pendingEntry?.replyToId ?? replyDraft?.id ?? null;
+      const replyPreview = pendingEntry?.replyPreview ?? replyDraft?.preview ?? null;
       if (!body && !item && !imageId) return;
       if (!pendingEntry && attachedImage?.uploading) return; // 업로드 완료 대기
       const client_msg_id = pendingEntry?.client_msg_id ?? newClientMsgId();
@@ -338,9 +345,19 @@ export function useChatRoom(otherId: number) {
         setInput("");
         setAttachedItem(null);
         setAttachedImage(null);
+        setReplyDraft(null);
         setPending((prev) => [
           ...prev,
-          { client_msg_id, body, item, imageId, imageUrl, failed: false },
+          {
+            client_msg_id,
+            body,
+            item,
+            imageId,
+            imageUrl,
+            failed: false,
+            replyToId,
+            replyPreview,
+          },
         ]);
         requestAnimationFrame(scrollToBottom);
       } else {
@@ -358,6 +375,7 @@ export function useChatRoom(otherId: number) {
           client_msg_id,
           item_id: item?.id,
           image_id: imageId ?? undefined,
+          reply_to_id: replyToId ?? undefined,
         });
         setPending((prev) =>
           prev.filter((x) => x.client_msg_id !== client_msg_id),
@@ -377,7 +395,7 @@ export function useChatRoom(otherId: number) {
         }
       }
     },
-    [input, attachedItem, attachedImage, otherId, scrollToBottom],
+    [input, attachedItem, attachedImage, replyDraft, otherId, scrollToBottom],
   );
 
   const skinProps = {
@@ -402,6 +420,16 @@ export function useChatRoom(otherId: number) {
     onSend: () => send(),
     onRetry: (entry: PendingMessage) => send(entry),
     onDeleteMessage,
+    replyDraft,
+    onReplyTo: (msg: ChatMessage) =>
+      setReplyDraft({
+        id: msg.id,
+        senderId: msg.sender_id,
+        preview: msg.deleted
+          ? "삭제되었습니다"
+          : msg.body || (msg.image_url ? "[사진]" : "[단어 카드]"),
+      }),
+    onCancelReply: () => setReplyDraft(null),
     onPickKaomoji: (k: string) => setInput((v) => v + k),
     onAttachItem: setAttachedItem,
     onDetachItem: () => setAttachedItem(null),

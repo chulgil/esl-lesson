@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
+import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
 import { useChatRoom } from "@/components/chat/useChatRoom";
@@ -370,6 +371,7 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
           return (
             <div
               key={m.id}
+              data-mid={`m${m.id}`}
               className={`border-b py-1 text-[13px] leading-relaxed ${
                 // 상대 글이 더 잘 읽혀야 한다 (2026-07-28 요청) — 내 글은 흐리게
                 excel
@@ -406,16 +408,37 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
                     }`}
                   />
                 )}
+                {/* 답장 — 전체 페이지와 동일 사양 (2026-07-31) */}
+                {!m.deleted && (
+                  <button
+                    type="button"
+                    onClick={() => p.onReplyTo(m)}
+                    className="ml-auto opacity-30 hover:opacity-80"
+                  >
+                    {excel ? "메모" : "답글"}
+                  </button>
+                )}
                 {/* 내 글 삭제 — 전체 페이지와 동일 사양 (2026-07-31) */}
                 {mine && !m.deleted && (
                   <DeleteMessageButton
                     label={excel ? "행 삭제" : "지우기"}
                     confirmLabel="정말 지우기?"
-                    className="ml-auto opacity-30 hover:opacity-80"
+                    className="opacity-30 hover:opacity-80"
                     onDelete={() => p.onDeleteMessage(m.id)}
                   />
                 )}
               </div>
+              <ReplyQuote
+                msg={m}
+                messages={p.messages}
+                myId={p.myId}
+                peerName={p.peerName}
+                className={`pl-2 text-[11px] ${
+                  excel
+                    ? "border-l-2 border-[#217346]/30 text-[#8a8f98] hover:text-[#217346]"
+                    : "border-l-2 border-ink/20 opacity-50 hover:opacity-80"
+                }`}
+              />
               {m.deleted && (
                 <span
                   className={`text-xs italic ${excel ? "text-[#999]" : "opacity-40"}`}
@@ -455,6 +478,11 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
                 : "border-ink/5 text-brick-blue"
             }`}
           >
+            {entry.replyPreview && (
+              <span className="mb-0.5 block truncate border-l-2 border-ink/15 pl-2 text-[11px] opacity-60">
+                {entry.replyPreview}
+              </span>
+            )}
             {entry.body || (entry.imageUrl ? "[사진]" : "")}
             {entry.failed ? (
               <button
@@ -532,6 +560,31 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
         </div>
       )}
 
+      {p.replyDraft && (
+        <div
+          className={`flex items-center gap-2 border-t px-2 py-1 text-[11px] ${
+            excel
+              ? "border-[#e3e7eb] bg-[#f6f8f9] text-[#8a8f98]"
+              : "border-ink/10 bg-white opacity-80"
+          }`}
+        >
+          <span
+            className={`shrink-0 font-bold ${excel ? "text-[#217346]" : "text-brick-blue"}`}
+          >
+            {p.replyDraft.senderId === p.myId ? "나" : p.peerName}에게{" "}
+            {excel ? "메모" : "답장"}
+          </span>
+          <span className="truncate">{p.replyDraft.preview}</span>
+          <button
+            type="button"
+            onClick={p.onCancelReply}
+            aria-label="답장 취소"
+            className="ml-auto opacity-60 hover:opacity-100"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div
         className={`flex items-end gap-1 border-t p-1.5 ${
           excel ? "border-[#d8dde3]" : "border-ink/10 bg-white"

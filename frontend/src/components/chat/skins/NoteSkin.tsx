@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
+import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { BackLink } from "@/components/nav/BackLink";
 import type { ChatSkinProps } from "./types";
 
@@ -60,6 +61,7 @@ export function NoteSkin(p: ChatSkinProps) {
             return (
               <div
                 key={m.id}
+                data-mid={`m${m.id}`}
                 className={`border-b border-ink/5 py-1.5 text-sm leading-relaxed ${
                   // 상대 글이 더 잘 읽혀야 한다 (2026-07-28 요청) — 내 글은 흐리게
                   mine ? "text-brick-blue/60" : "font-medium text-ink"
@@ -86,16 +88,33 @@ export function NoteSkin(p: ChatSkinProps) {
                       className="inline-block h-1.5 w-1.5 rounded-full bg-brick-yellow align-middle"
                     />
                   )}
+                  {/* 답장 — 원문 인용을 달고 새 글 작성 (2026-07-31) */}
+                  {!m.deleted && (
+                    <button
+                      type="button"
+                      onClick={() => p.onReplyTo(m)}
+                      className="ml-auto opacity-30 hover:opacity-80"
+                    >
+                      답글
+                    </button>
+                  )}
                   {/* 내 글 삭제 — 확인 후 "삭제되었습니다" 로 치환 (2026-07-31) */}
                   {mine && !m.deleted && (
                     <DeleteMessageButton
                       label="지우기"
                       confirmLabel="정말 지우기?"
-                      className="ml-auto opacity-30 hover:opacity-80"
+                      className={`opacity-30 hover:opacity-80 ${m.deleted ? "ml-auto" : ""}`}
                       onDelete={() => p.onDeleteMessage(m.id)}
                     />
                   )}
                 </div>
+                <ReplyQuote
+                  msg={m}
+                  messages={p.messages}
+                  myId={p.myId}
+                  peerName={p.peerName}
+                  className="border-l-2 border-ink/20 pl-2 text-[11px] opacity-50 hover:opacity-80"
+                />
                 {m.deleted && (
                   <span className="text-xs italic opacity-40">
                     삭제되었습니다
@@ -130,6 +149,11 @@ export function NoteSkin(p: ChatSkinProps) {
               key={entry.client_msg_id}
               className="border-b border-ink/5 py-1.5 text-sm text-brick-blue opacity-60"
             >
+              {entry.replyPreview && (
+                <span className="mb-0.5 block truncate border-l-2 border-ink/15 pl-2 text-[11px] opacity-50">
+                  {entry.replyPreview}
+                </span>
+              )}
               {entry.item && (
                 <span className="mr-2 rounded bg-highlight/40 px-1.5 py-0.5 text-xs">
                   <b>{entry.item.en_text}</b>
@@ -200,6 +224,23 @@ export function NoteSkin(p: ChatSkinProps) {
               type="button"
               onClick={p.onDetachItem}
               aria-label="첨부 해제"
+              className="ml-auto opacity-50 hover:opacity-100"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {p.replyDraft && (
+          <div className="mt-2 flex items-center gap-2 rounded-md border-2 border-brick-blue/40 bg-white px-3 py-1 text-xs">
+            <span className="shrink-0 font-bold text-brick-blue">
+              {p.replyDraft.senderId === p.myId ? "나" : p.peerName}에게 답장
+            </span>
+            <span className="truncate opacity-60">{p.replyDraft.preview}</span>
+            <button
+              type="button"
+              onClick={p.onCancelReply}
+              aria-label="답장 취소"
               className="ml-auto opacity-50 hover:opacity-100"
             >
               ×

@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from app.models import ChatMessage, Conversation, Friendship, LearningItem
 from app.services import chat as chat_service
 from app.services.game.invites import invite_hub
+from tests.test_friends import make_user
 from tests.test_my_contents import login_as
 from tests.test_study import seed_items
 
@@ -595,3 +596,36 @@ async def test_deleted_last_message_preview(client, db_session):
     convs = (await client.get("/api/chat/conversations")).json()["items"]
     row = next(c for c in convs if c["user_id"] == b.id)
     assert row["last_message"] == "삭제되었습니다"
+
+
+async def test_reply_to_message(client, db_session):
+    """답장 — 같은 대화 원문만 인용 가능, 미리보기는 읽기 시점(삭제 반영)."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    orig = (
+        await client.post("/api/chat/messages", json=send_body(b.id, "원문입니다", "cid-rep00001"))
+    ).json()
+
+    reply_body = {**send_body(b.id, "답글입니다", "cid-rep00002"), "reply_to_id": orig["id"]}
+    reply = (await client.post("/api/chat/messages", json=reply_body)).json()
+    assert reply["reply_to_id"] == orig["id"]
+    assert reply["reply_to"]["preview"] == "원문입니다"
+    assert reply["reply_to"]["sender_id"] == a.id
+
+    # 목록 조회에도 인용 부착 (캐시 경로)
+    listing = (await client.get(f"/api/chat/with/{b.id}/messages")).json()["items"]
+    row = next(m for m in listing if m["id"] == reply["id"])
+    assert row["reply_to"]["preview"] == "원문입니다"
+
+    # 원문 삭제 → 인용 미리보기도 "삭제되었습니다" (읽기 시점 해석)
+    await client.delete(f"/api/chat/messages/{orig['id']}")
+    listing = (await client.get(f"/api/chat/with/{b.id}/messages")).json()["items"]
+    row = next(m for m in listing if m["id"] == reply["id"])
+    assert row["reply_to"]["deleted"] is True
+    assert row["reply_to"]["preview"] == "삭제되었습니다"
+
+    # 다른 대화의 메시지 인용 시도 = 404 (정보 유출 차단)
+    c = await make_user(db_session, "third@example.com", "제3자")
+    await make_friends(db_session, a, c)
+    bad = {**send_body(c.id, "크로스", "cid-rep00003"), "reply_to_id": orig["id"]}
+    assert (await client.post("/api/chat/messages", json=bad)).status_code == 404

@@ -53,6 +53,11 @@ class ChatMessage(Base, PkMixin):
     image_path: Mapped[str | None] = mapped_column(Text)
     # soft delete — 행·커서는 보존, 내용은 소거 후 "삭제되었습니다" 표기 (2026-07-31)
     deleted_at: Mapped[datetime | None]
+    # 답장 대상 (카톡식 인용, 2026-07-31) — 원문 미리보기는 읽기 시점 조회
+    # (스냅샷이면 원문 삭제 후에도 내용이 남아 물리 소거 원칙과 충돌)
+    reply_to_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True
+    )
     client_msg_id: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

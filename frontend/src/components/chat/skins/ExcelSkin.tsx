@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
+import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { BlankSheet, ExcelChrome, fakeFilename } from "./ExcelChrome";
 import type { ChatSkinProps } from "./types";
 
@@ -73,6 +74,7 @@ export function ExcelSkin(p: ChatSkinProps) {
               return (
                 <div
                   key={m.id}
+                  data-mid={`m${m.id}`}
                   className={`border-b border-[#f0f2f4] py-1.5 text-[13px] leading-relaxed ${
                     // 상대 글이 더 잘 읽혀야 한다 (2026-07-28 요청) — 내 글은 흐리게
                     mine ? "text-[#217346]/60" : "font-medium text-[#24292f]"
@@ -99,6 +101,18 @@ export function ExcelSkin(p: ChatSkinProps) {
                         {m.id > p.otherRead ? "미확인" : "확인"}
                       </span>
                     )}
+                    {/* 답장 — 문서 위장 톤 ("메모 달기") */}
+                    {!m.deleted && (
+                      <button
+                        type="button"
+                        onClick={() => p.onReplyTo(m)}
+                        className={`text-[#217346] opacity-40 hover:opacity-90 ${
+                          mine ? "ml-1.5" : "ml-auto"
+                        }`}
+                      >
+                        메모
+                      </button>
+                    )}
                     {/* 내 행 삭제 — 문서 위장 톤 ("행 삭제") */}
                     {mine && !m.deleted && (
                       <DeleteMessageButton
@@ -109,6 +123,13 @@ export function ExcelSkin(p: ChatSkinProps) {
                       />
                     )}
                   </div>
+                  <ReplyQuote
+                    msg={m}
+                    messages={p.messages}
+                    myId={p.myId}
+                    peerName={p.peerName}
+                    className="border-l-2 border-[#217346]/30 pl-2 text-[11px] text-[#8a8f98] hover:text-[#217346]"
+                  />
                   {m.deleted && (
                     <span className="text-xs italic text-[#999]">
                       삭제되었습니다
@@ -144,6 +165,11 @@ export function ExcelSkin(p: ChatSkinProps) {
                   <b className="text-[#217346]">본인</b>
                   {!entry.failed && <span>저장 중</span>}
                 </div>
+                {entry.replyPreview && (
+                  <span className="mb-0.5 block truncate border-l-2 border-[#217346]/20 pl-2 text-[11px] text-[#8a8f98]">
+                    {entry.replyPreview}
+                  </span>
+                )}
                 {entry.item && (
                   <span className="mr-1.5 rounded-sm bg-[#e2efda] px-1 text-xs">
                     {entry.item.en_text}
@@ -217,6 +243,25 @@ export function ExcelSkin(p: ChatSkinProps) {
             </div>
           )}
 
+          {p.replyDraft && (
+            <div className="flex items-center gap-2 border-t border-[#e3e7eb] bg-[#f6f8f9] px-3 py-1 text-[11px]">
+              <span className="shrink-0 font-bold text-[#217346]">
+                {p.replyDraft.senderId === p.myId ? "본인" : p.peerName} 행에
+                메모
+              </span>
+              <span className="truncate text-[#8a8f98]">
+                {p.replyDraft.preview}
+              </span>
+              <button
+                type="button"
+                onClick={p.onCancelReply}
+                aria-label="메모 취소"
+                className="ml-auto text-[#8a8f98] hover:text-[#333]"
+              >
+                ×
+              </button>
+            </div>
+          )}
           {/* 입력줄 — 리스트 하단 고정. PC Enter 전송·모바일 Enter 줄바꿈 (ChatTextarea) */}
           {/* items-end — 입력창이 여러 줄로 자라도 버튼은 바닥에 붙는다 */}
           <div className="flex items-end gap-1.5 border-t border-[#d8dde3] bg-white px-2 py-1.5">

@@ -29,6 +29,7 @@ chat_messages
   item_ref JSONB nullable      -- 학습 카드 스냅샷 {item_id, item_type, en_text, ko_text}
   image_path Text nullable     -- 서버 발급 uuid.ext (이미지 전송 — e4f5a6b7c8d9)
   client_msg_id Text           -- 멱등키. unique(conversation_id, client_msg_id)
+  reply_to_id BigInt nullable   -- 답장 대상 self-FK (SET NULL, 2026-07-31)
   created_at
 
 chat_reads
@@ -45,7 +46,7 @@ chat_reads
 | GET `/api/chat/conversations` | 대화 목록: 상대(닉네임·`online`)·마지막 메시지 미리보기·`unread` 카운트. `last_message_at DESC`. 마지막 메시지가 삭제됐으면 미리보기 = "삭제되었습니다" (본문 소거 상태를 "[단어 카드]" 로 오표기 금지 — 2026-07-31 재검토) |
 | GET `/api/chat/unread-total` | 안읽음 합계 (네비 배지). 인프로세스 캐시 |
 | GET `/api/chat/with/{user_id}/messages?before={id}&limit=50` | 히스토리 커서 페이지네이션 (id DESC → 클라에서 역순 렌더) |
-| POST `/api/chat/messages` | 전송 `{to_user_id, body, client_msg_id, item_ref?}` → 저장·캐시 갱신·WS 푸시·오프라인이면 웹푸시. 같은 `client_msg_id` 재전송은 기존 행 반환 (멱등) |
+| POST `/api/chat/messages` | 전송 `{to_user_id, body, client_msg_id, item_ref?, reply_to_id?}` → 저장·캐시 갱신·WS 푸시·오프라인이면 웹푸시. 같은 `client_msg_id` 재전송은 기존 행 반환 (멱등). `reply_to_id` 는 **같은 대화의 메시지만** (타 대화 인용 404 — 정보 유출 차단) |
 | POST `/api/chat/with/{user_id}/read` | 읽음 갱신 → 상대에게 WS `chat.read` 푸시 |
 | DELETE `/api/chat/messages/{id}` | 본인 메시지 soft delete (2026-07-31) — 행·커서 보존, 내용(body·item_ref·image_path) 물리 소거 + `deleted_at`. 타인/미존재 404, 재삭제 멱등 204. 양측에 WS `chat.deleted` 푸시, 최근 캐시 동기 갱신. 클라는 "삭제되었습니다" 표기 |
 | GET `/api/chat/shareable-items` | 단어 공유 카드 검색 — 내 학습 항목(가시성 통과분)만 |
@@ -78,6 +79,13 @@ chat_reads
 - 최신 50개 요청(before 없음)은 캐시 히트 시 DB 를 타지 않는다. `before` 커서 요청(과거 스크롤)은 항상 DB.
 - 클라이언트: 대화별 메시지 메모리 캐시(뒤로가기 즉시 복원), 낙관적 렌더(전송 즉시 표시 → 서버 확정 시 치환, 실패 시 재시도 버튼).
 
+## 답장 (카톡식 인용, 2026-07-31)
+
+- 모든 메시지(내 글 포함, 삭제 제외)에 [답글](노트) / [메모](오피스 위장) 액션 → 입력줄 위 인용 배너("OO에게 답장" + 원문 미리보기 + 취소 ×) → 전송 시 `reply_to_id` 포함
+- 표시: 답글 본문 위에 인용 블록 "원문발신자: 미리보기(80자)" — 탭하면 원문 행으로 스크롤(`data-mid` 앵커). 낙관 렌더(pending)도 인용 미리보기 표시
+- **원문 미리보기는 읽기 시점 해석** (`attach_reply_previews`) — 전송 시점 스냅샷이면 원문 삭제 후에도 내용이 남아 물리 소거 원칙과 충돌. 삭제된 원문 = 인용에도 "삭제되었습니다". 클라는 원문이 목록에 로드돼 있으면 실시간 상태 우선(삭제 즉시 반영)
+- 3개 뷰 공통 (전체 페이지 NoteSkin/ExcelSkin + 플로팅 위젯) — 인용 렌더는 `ReplyQuote` 공용 컴포넌트
+
 ## 알림 기획
 
 | 상황 | 동작 |
@@ -88,7 +96,7 @@ chat_reads
 | 접속 중 — **"실제 대화 중"이 아니면 전부** | 채널 (2026-07-31 최종): engaged(그 방 ∧ 전면 ∧ 입력 커서) = 무음 / **백그라운드**(hidden ∥ !hasFocus) = OS 알림 / **전면 자리 비움** = **파비콘 배지만** — 인앱 미니 채팅 토스트는 사용자 요청으로 제거(위장 화면 위 노출 자체가 리스크). 같은 tag 재알림 `renotify`, 오피스 위장 유지 |
 
 - **알림 켜기**: 대화 목록의 `NotifyEnableButton` — 기존 VAPID 푸시 구독(`subscribePush`) 재사용. 백그라운드에선 OS 알림이 유일한 능동 채널이므로 권한 허용 권장
-- **알림 설정 온보딩** (2026-07-31): `NotificationSetupGuide` — 로그인 + 권한 미허용 + 최초 1회 자동 팝업(2.5초 지연, localStorage `notif-guide-seen`). 플랫폼 감지(Mac/Windows/Android/iOS)로 해당 OS 안내만 표시, iOS 는 홈 화면 추가 절차. [알림 켜기] = 권한 요청 + VAPID 푸시 구독 동시 처리, 차단(denied) 상태면 주소창 자물쇠 해제 경로 안내. 설정 화면 "알림 설정 가이드 보기"(`esl-open-notif-guide` 이벤트)로 재오픈 — 모바일 무수신의 주원인 = 권한만 있고 푸시 구독이 없던 상태를 가이드가 구독까지 이끈다. **OS 설정 딥링크** (2026-07-31 2차): Mac `x-apple.systempreferences:com.apple.preference.notifications` / Windows `ms-settings:notifications` 버튼 — 브라우저 확인 후 실제 OS 알림 설정 화면으로 이동 (Android/iOS 는 웹에서 설정 딥링크 불가 — 텍스트 단계 안내). 버튼 분기는 권한이 아닌 **구독 상태** 기준 — 구독 중이면 [테스트 알림 보내기](로컬 표시 성공/실패로 OS 차단 분리 진단), 미구독이면 권한 granted 여도 [알림 켜기](재구독 경로 보장). 구독 변경은 `esl-push-changed` 이벤트로 가이드·설정 카드·대화 목록 버튼이 상호 동기화 (2026-07-31 재검토)
+- **알림 설정 온보딩** (2026-07-31): `NotificationSetupGuide` — 로그인 + 권한 미허용 + 최초 1회 자동 팝업(2.5초 지연, localStorage `notif-guide-seen`). 플랫폼 감지(Mac/Windows/Android/iOS)로 해당 OS 안내만 표시, iOS 는 홈 화면 추가 절차. [알림 켜기] = 권한 요청 + VAPID 푸시 구독 동시 처리, 차단(denied) 상태면 주소창 자물쇠 해제 경로 안내. 설정 화면 "알림 설정 가이드 보기"(`esl-open-notif-guide` 이벤트)로 재오픈 — 모바일 무수신의 주원인 = 권한만 있고 푸시 구독이 없던 상태를 가이드가 구독까지 이끈다. **OS 설정 딥링크** (2026-07-31 2차): Mac `x-apple.systempreferences:com.apple.preference.notifications` / Windows `ms-settings:notifications` 버튼 — 브라우저 확인 후 실제 OS 알림 설정 화면으로 이동 (Android/iOS 는 웹에서 설정 딥링크 불가 — 텍스트 단계 안내). 버튼 분기는 권한이 아닌 **구독 상태** 기준 — 구독 중이면 [테스트 알림 보내기](로컬 표시 성공/실패로 OS 차단 분리 진단), 미구독이면 권한 granted 여도 [알림 켜기](재구독 경로 보장). 구독 변경은 `esl-push-changed` 이벤트로 가이드·설정 카드·대화 목록 버튼이 상호 동기화 (2026-07-31 재검토). **차단(denied) 시 기종별 해제 경로**(Android: 자물쇠>권한>알림 → Chrome 사이트 설정 → OS 앱 알림 / iOS: 홈 화면 앱 + iOS 설정>알림) + [다시 시도] 버튼, [알림 켜기]는 busy 표시와 unsupported/disabled/오류 피드백 문구 필수 (모바일 "아무 반응 없음" 보고 수정)
 - **iOS Safari 가드** (2026-07-31 재검토): iOS Safari 브라우저 탭에는 `Notification` 전역이 없어 bare 참조가 throw — 모든 접근은 `typeof` 가드 또는 `push.ts supported()` 경유. 온보딩 가이드는 API 가 없어도 **iOS 면 자동 노출**한다("홈 화면에 추가" 안내가 필요한 대상이 바로 API 없는 iOS 탭). [알림 켜기]가 unsupported/disabled 를 반환하면 단계 안내 유지(오탐 "차단" 표시 금지)
 - **탭 제목 프리픽스 없음** (2026-07-31 확정): "(N)" 제목 표기는 도입했다가 사용자 요청으로 제거 — 파비콘 배지만 사용. 탭 제목은 위장 테마 제목 불변 원칙 유지. 원본 파비콘 링크는 href 기준 dedupe 보관
 
@@ -141,6 +149,12 @@ excelkospi 우하단 버튼 컨셉 — 설정의 "플로팅" 체크(localStorage
 
 - 메시지 2,000자 초과 422 · 빈 본문(공백만) 422 (item_ref 만 있으면 허용)
 - WS 끊김 중 수신분: **3중 캐치업** (2026-07-31) — (1) WS 재접속 시 클라 합성 신호 `chat.resync`(GameSocket onOpen → 이벤트 버스) (2) 탭 복귀(visibilitychange)·창 포커스 (3) 대화방 재진입. 각각 열린 대화방이 REST 최신 50개를 id 병합(중복 제거, id 오름차순)으로 동기화. **아는 메시지도 서버 값으로 치환** — 끊김 중 놓친 `chat.deleted` 반영 + 삭제 API 실패 시 낙관 치환 복원 (2026-07-31 재검토. 메시지는 삭제 외 불변이므로 deleted 플래그 변화만 재렌더 트리거)
+- **WS 연결 신뢰성** (2026-07-31 근본 수정 — "새로고침해야 수신/알림 복구" 보고):
+  - 재접속 루프: 끊김 → 5초 후 fetchMe 재확인 → 실패(배포 순단 포함)여도 **30초 백오프로 무한 재시도** (이전엔 1회 실패로 영구 중단)
+  - 하트비트: 클라 30초 `ping`(서버 `pong`) — 70초 무수신이면 조용히 죽은 소켓으로 보고 close → 재접속 (절전·네트워크 전환 회수). 탭 복귀·online 이벤트 시 즉시 점검
+  - **서버 좀비 판정**: 허브가 사용자별 마지막 클라 메시지 시각(last_seen) 기록 — `deliver_ws` 는 send 성공 + **최근 90초 내 하트비트**가 있어야 delivered. 프리즈된 모바일 탭(send 는 성공, JS 정지)은 미전달로 간주해 **웹푸시 폴백**
+  - 웹푸시 스로틀: 같은 대화 5분 → **60초** (딜레이 체감 해소. 같은 tag 라 OS 알림은 대체 표시)
+- **IME 잔여 글자** (2026-07-31): 조합 중 Enter 전송 시 IME 확정 커밋이 비운 입력창에 마지막 글자를 되살림 — 전송 300ms 내 compositionend 에서 재소거
 - 위로 무한스크롤: in-flight 가드 필수 — 스크롤 이벤트 연타로 같은 before 커서가 병렬 fetch 되면 수십 개씩 중복 프리펜드된다 (2026-07-31 수정). 프리펜드·재동기화 모두 id Set 중복 제거
 - XSS: React 기본 이스케이프. 링크 자동화는 하지 않는다 (1차 범위 밖)
 - 자기 자신에게 전송 400

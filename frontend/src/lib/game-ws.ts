@@ -399,6 +399,15 @@ export class GameSocket {
     }
   }
 
+  /** 하트비트 — 서버가 pong 응답 + last_seen 갱신 (좀비 판정 근거) */
+  ping(): void {
+    this.send({ t: "ping" });
+  }
+
+  isOpen(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
   joinPve(quiz: string, botLevel: number, contentIds?: number[]): void {
     this.send({
       t: "queue.join",

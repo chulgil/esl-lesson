@@ -16,6 +16,14 @@ export interface ChatMessage {
   deleted: boolean;
   client_msg_id: string;
   created_at: string | null;
+  /** 답장 인용 (2026-07-31) — 미리보기는 서버가 읽기 시점에 해석 (삭제 반영) */
+  reply_to_id?: number | null;
+  reply_to?: {
+    id: number;
+    sender_id: number;
+    deleted: boolean;
+    preview: string;
+  } | null;
 }
 
 export interface ChatConversation {
@@ -68,6 +76,7 @@ export const chatApi = {
     client_msg_id: string;
     item_id?: number;
     image_id?: string;
+    reply_to_id?: number;
   }) =>
     request<ChatMessage & { created: boolean }>("/api/chat/messages", {
       method: "POST",
