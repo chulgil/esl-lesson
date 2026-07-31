@@ -176,6 +176,97 @@ async def test_achievements_expose_reward_theme(client, db_session):
     assert items["first_review"]["reward_theme"] is None
 
 
+async def _seed_exam(db, question_count=20):
+    from app.models import Content, Exam
+
+    content = Content(source="manual", title="업적 시험", status="ready")
+    db.add(content)
+    await db.flush()
+    exam = Exam(content_id=content.id, round=1, question_count=question_count)
+    db.add(exam)
+    await db.flush()
+    return exam
+
+
+async def _submit_exam(db, exam, user_id, score, duration_ms=1000, submitted=True):
+    from app.models import ExamAttempt
+
+    db.add(
+        ExamAttempt(
+            exam_id=exam.id,
+            user_id=user_id,
+            submitted_at=datetime.now(UTC) if submitted else None,
+            score=score if submitted else None,
+            correct_count=(score // 5) if submitted else None,
+            duration_ms=duration_ms if submitted else None,
+            answers=[0] * exam.question_count if submitted else None,
+        )
+    )
+    await db.flush()
+
+
+async def test_exam_family_submit_counts(client, db_session):
+    """AC-5: 제출 수 지표 — first_exam 단발 + exams_10/30/100 티어 (family exam)."""
+    me = await login(client, db_session)
+    exam = await _seed_exam(db_session)
+    for _ in range(3):
+        await _submit_exam(db_session, exam, me.id, score=55)
+    # 미제출(진행 중/이탈) attempt 는 집계 제외
+    await _submit_exam(db_session, exam, me.id, score=0, submitted=False)
+    await db_session.commit()
+
+    res = await client.get("/api/study/achievements")
+    items = {a["key"]: a for a in res.json()["items"]}
+    assert items["first_exam"]["achieved"] is True
+    assert items["first_exam"]["tier"] is None
+    assert items["exams_10"]["current"] == 3 and items["exams_10"]["achieved"] is False
+    assert items["exams_10"]["tier"] == "beginner"
+    assert items["exams_30"]["tier"] == "intermediate"
+    assert items["exams_100"]["tier"] == "advanced"
+    for key in ("first_exam", "exam_perfect", "exam_champion", "exams_10"):
+        assert items[key]["family"] == "exam"
+
+
+async def test_exam_perfect_requires_100(client, db_session):
+    """AC-5: 만점 업적 — 100점 응시가 존재해야 달성 (95점은 미달)."""
+    me = await login(client, db_session)
+    exam = await _seed_exam(db_session)
+    await _submit_exam(db_session, exam, me.id, score=95)
+    await db_session.commit()
+
+    items = {a["key"]: a for a in (await client.get("/api/study/achievements")).json()["items"]}
+    assert items["exam_perfect"]["achieved"] is False
+
+    await _submit_exam(db_session, exam, me.id, score=100)
+    await db_session.commit()
+    items = {a["key"]: a for a in (await client.get("/api/study/achievements")).json()["items"]}
+    assert items["exam_perfect"]["achieved"] is True
+
+
+async def test_exam_champion_tie_on_best_score(client, db_session):
+    """AC-5: 1위 등극 — 공동 1위 = best score 동률 기준 (duration 무관)."""
+    from tests.test_friends import make_user
+
+    me = await login(client, db_session)
+    rival = await make_user(db_session, "rival@example.com", "라이벌")
+
+    # 시험 1: 라이벌이 단독 1위 (95 > 90) — 나는 champion 아님
+    exam1 = await _seed_exam(db_session)
+    await _submit_exam(db_session, exam1, me.id, score=90, duration_ms=1000)
+    await _submit_exam(db_session, exam1, rival.id, score=95, duration_ms=9000)
+    await db_session.commit()
+    items = {a["key"]: a for a in (await client.get("/api/study/achievements")).json()["items"]}
+    assert items["exam_champion"]["achieved"] is False
+
+    # 시험 2: 동점 100 — duration 이 느려도 공동 1위로 인정
+    exam2 = await _seed_exam(db_session)
+    await _submit_exam(db_session, exam2, rival.id, score=100, duration_ms=100)
+    await _submit_exam(db_session, exam2, me.id, score=100, duration_ms=99999)
+    await db_session.commit()
+    items = {a["key"]: a for a in (await client.get("/api/study/achievements")).json()["items"]}
+    assert items["exam_champion"]["achieved"] is True
+
+
 async def test_first_friend_requires_accepted(client, db_session):
     me = await login(client, db_session)
     other = User(google_sub="g-ach", email="ach@example.com", name="친구")
