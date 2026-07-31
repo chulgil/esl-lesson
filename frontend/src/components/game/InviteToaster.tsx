@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMe } from "@/lib/api";
+import { subscribePush } from "@/lib/push";
 import {
   dispatchChatEvent,
   getActiveChatRoom,
@@ -237,23 +238,40 @@ export function InviteToaster() {
       )}
 
       {chatToast && (
-        <button
-          type="button"
-          onClick={() => {
-            const target = `/chat/${chatToast.fromId}`;
-            setChatToast(null);
-            router.push(target);
-          }}
-          className="fixed inset-x-4 top-28 z-50 mx-auto flex max-w-sm cursor-pointer items-center gap-3 rounded-lg border-2 border-brick-blue/60 bg-white p-3 text-left shadow-lg transition hover:-translate-y-0.5"
-        >
-          <ChatBubbleIcon />
-          <span className="flex-1 text-sm">
-            <b>{chatToast.fromName}</b>
-            <span className="mt-0.5 block truncate opacity-70">
-              {chatToast.preview}
+        <div className="fixed inset-x-4 top-28 z-50 mx-auto flex max-w-sm items-center gap-2 rounded-lg border-2 border-brick-blue/60 bg-white p-3 shadow-lg">
+          <button
+            type="button"
+            onClick={() => {
+              const target = `/chat/${chatToast.fromId}`;
+              setChatToast(null);
+              router.push(target);
+            }}
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left transition hover:-translate-y-0.5"
+          >
+            <ChatBubbleIcon />
+            <span className="min-w-0 flex-1 text-sm">
+              <b>{chatToast.fromName}</b>
+              <span className="mt-0.5 block truncate opacity-70">
+                {chatToast.preview}
+              </span>
             </span>
-          </span>
-        </button>
+          </button>
+          {/* 알림 권한 미요청 상태 — 백그라운드에선 OS 알림이 유일한 채널이라 유도
+              (2026-07-31 "다른 탭에 있을 때 알림 안 옴" 보고) */}
+          {typeof Notification !== "undefined" &&
+            Notification.permission === "default" && (
+              <button
+                type="button"
+                onClick={() => {
+                  subscribePush().catch(() => undefined);
+                  setChatToast(null);
+                }}
+                className="min-h-9 shrink-0 rounded-md border-2 border-brick-green/60 px-2 text-xs font-bold text-brick-green hover:border-brick-green"
+              >
+                알림 켜기
+              </button>
+            )}
+        </div>
       )}
     </>
   );

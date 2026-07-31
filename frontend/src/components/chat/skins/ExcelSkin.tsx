@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
@@ -18,6 +19,8 @@ const COLS = ["A", "B", "C", "D"];
 
 export function ExcelSkin(p: ChatSkinProps) {
   const router = useRouter();
+  // 빈 시트 클릭 = 채팅 레일 토글 (위장 강화, 2026-07-31)
+  const [railHidden, setRailHidden] = useState(false);
   const rowBase = p.messages.length + p.pending.length;
 
   return (
@@ -40,13 +43,21 @@ export function ExcelSkin(p: ChatSkinProps) {
       blank={<BlankSheet cols={COLS} />}
     >
       <div className="flex min-h-0 flex-1">
-        {/* 좌측 — 실제 시트처럼 보이는 채움 영역 (위장, 모바일에서는 숨김) */}
-        <div className="hidden flex-1 overflow-y-auto border-r border-[#d8dde3] md:block">
+        {/* 좌측 — 실제 시트처럼 보이는 채움 영역 (위장, 모바일에서는 숨김).
+            클릭 = 채팅 레일 토글 — 빈 시트만 남겨 위장 강화 (2026-07-31) */}
+        <div
+          className="hidden flex-1 cursor-default overflow-y-auto border-r border-[#d8dde3] md:block"
+          onClick={() => setRailHidden((v) => !v)}
+        >
           <BlankSheet cols={COLS} />
         </div>
 
         {/* 우측 — 화면 우측 도킹 채팅 패널 */}
-        <div className="flex w-full flex-col md:w-[380px] md:shrink-0">
+        <div
+          className={`w-full flex-col md:w-[380px] md:shrink-0 ${
+            railHidden ? "hidden md:hidden" : "flex"
+          }`}
+        >
           <div
             ref={p.listRef}
             onScroll={p.onScroll}

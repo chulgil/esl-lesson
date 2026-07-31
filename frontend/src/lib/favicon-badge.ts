@@ -39,7 +39,15 @@ function drawBadge(shown: number): string | null {
   return canvas.toDataURL("image/png");
 }
 
+function setTitleBadge(count: number): void {
+  // 탭 제목 "(N) " 프리픽스 — OS 알림 권한이 없어도 다른 탭에서 인지 가능.
+  // 문서류 제목에도 흔한 표기라 위장 훼손 없음 (2026-07-31 백그라운드 알림 보강)
+  const bare = document.title.replace(/^\(\d+\) /, "");
+  document.title = count > 0 ? `(${count > 99 ? "99+" : count}) ${bare}` : bare;
+}
+
 export function setFaviconBadge(count: number): void {
+  setTitleBadge(count);
   if (typeof document === "undefined") return;
   const shown = Math.min(Math.max(count, 0), 99);
   const badge = document.getElementById(BADGE_ID);

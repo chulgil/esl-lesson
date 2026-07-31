@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
@@ -10,9 +11,23 @@ import type { ChatSkinProps } from "./types";
  *  말풍선 없이 필기 줄 형식: 힐끗 보면 학습 노트로 보인다 (docs/specs/chat.md).
  *  내 글 = 파란 잉크, 상대 글 = 검정 잉크. 창은 화면 우측에 도킹(컴팩트 max-w-md)된다. */
 export function NoteSkin(p: ChatSkinProps) {
+  // 패널 밖(빈 종이) 클릭 = 채팅 패널 토글 — 힐끗 보일 때 빈 노트로 위장 (2026-07-31)
+  const [panelHidden, setPanelHidden] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
   return (
-    <main className="notebook-lines notebook-margin h-dvh-nav-safe flex flex-col">
-      <div className="ml-auto flex h-full w-full max-w-md flex-col border-l-2 border-ink/10 bg-paper/95 px-4 py-4 shadow-[-6px_0_20px_-10px_rgba(0,0,0,0.15)] sm:py-6">
+    <main
+      className="notebook-lines notebook-margin h-dvh-nav-safe flex flex-col"
+      onClick={(e) => {
+        if (panelRef.current?.contains(e.target as Node)) return;
+        setPanelHidden((v) => !v);
+      }}
+    >
+      <div
+        ref={panelRef}
+        className={`ml-auto flex h-full w-full max-w-md flex-col border-l-2 border-ink/10 bg-paper/95 px-4 py-4 shadow-[-6px_0_20px_-10px_rgba(0,0,0,0.15)] sm:py-6 ${
+          panelHidden ? "hidden" : ""
+        }`}
+      >
         <header className="mb-2 flex items-center gap-3">
           <BackLink href="/chat" label="목록" />
           <h1 className="flex items-center gap-2 font-hand text-xl font-bold">
