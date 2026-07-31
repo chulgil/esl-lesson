@@ -328,7 +328,9 @@ export type ChatServerMsg =
       last_read_message_id: number;
     }
   | { t: "chat.typing"; from_user_id: number }
-  | { t: "presence"; user_id: number; online: boolean };
+  | { t: "presence"; user_id: number; online: boolean }
+  // 클라 합성 신호 (서버 발신 아님) — WS 재접속 시 열린 대화방 재동기화 트리거
+  | { t: "chat.resync" };
 
 /** 알림 센터 — payload 는 타입별로 달라 인덱스 시그니처로 수용 (docs/specs/notifications.md) */
 export type NotifServerMsg = {
@@ -371,11 +373,14 @@ export class GameSocket {
   constructor(
     private onMessage: (msg: ServerMsg) => void,
     private onClose: () => void,
+    // 재접속 캐치업용 — 끊김 동안 놓친 메시지를 열린 대화방이 재동기화한다
+    private onOpen?: () => void,
   ) {}
 
   connect(): void {
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     this.ws = new WebSocket(`${proto}://${window.location.host}/ws/game`);
+    this.ws.onopen = () => this.onOpen?.();
     this.ws.onmessage = (event) => {
       try {
         this.onMessage(JSON.parse(event.data) as ServerMsg);

@@ -53,6 +53,9 @@ export function useChatRoom(otherId: number) {
   const listRef = useRef<HTMLDivElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stickBottom = useRef(true);
+  // 위로 스크롤 페이징 in-flight 가드 — 스크롤 이벤트 연타로 같은 페이지가
+  // 병렬 fetch 돼 수십 개씩 중복 프리펜드되던 버그 (2026-07-31 보고)
+  const loadingOlder = useRef(false);
 
   useEffect(() => {
     if (messages.length > 0) roomCache.set(otherId, messages.slice(-100));
@@ -115,6 +118,41 @@ export function useChatRoom(otherId: number) {
       .catch((e) => setError(e.message));
   }, [otherId, scrollToBottom, markReadAndSignal]);
 
+  // 재동기화 — WS 끊김·백그라운드 동안 놓친 메시지를 최신 페이지와 병합.
+  // id 오름차순 유지(서버 PK 단조 증가), 이미 아는 메시지는 그대로 둔다.
+  const resync = useCallback(() => {
+    chatApi
+      .messages(otherId)
+      .then((res) => {
+        setMessages((prev) => {
+          const known = new Set(prev.map((m) => m.id));
+          const fresh = res.items.filter((m) => !known.has(m.id));
+          if (fresh.length === 0) return prev;
+          return [...prev, ...fresh].sort((a, b) => a.id - b.id);
+        });
+        setOnline(res.online);
+        const reads = res.reads[String(otherId)];
+        if (reads) setOtherRead(reads);
+        markReadAndSignal();
+        if (stickBottom.current) requestAnimationFrame(scrollToBottom);
+      })
+      .catch(() => {});
+  }, [otherId, markReadAndSignal, scrollToBottom]);
+
+  // 탭 복귀·창 포커스 시 재동기화 — 백그라운드 스로틀/절전으로 WS 이벤트를
+  // 놓친 경우의 안전망 (2026-07-31 보고: 영역 이탈 후 갱신 안 됨)
+  useEffect(() => {
+    const onBack = () => {
+      if (!document.hidden) resync();
+    };
+    window.addEventListener("focus", onBack);
+    document.addEventListener("visibilitychange", onBack);
+    return () => {
+      window.removeEventListener("focus", onBack);
+      document.removeEventListener("visibilitychange", onBack);
+    };
+  }, [resync]);
+
   // WS 이벤트 구독
   useEffect(() => {
     return onChatEvent((msg) => {
@@ -133,22 +171,34 @@ export function useChatRoom(otherId: number) {
         typingTimer.current = setTimeout(() => setTyping(false), 5000);
       } else if (msg.t === "presence" && msg.user_id === otherId) {
         setOnline(msg.online);
+      } else if (msg.t === "chat.resync") {
+        // WS 재접속 — 끊김 동안 놓친 메시지 캐치업
+        resync();
       }
     });
-  }, [otherId, scrollToBottom, markReadAndSignal]);
+  }, [otherId, scrollToBottom, markReadAndSignal, resync]);
 
-  // 위로 무한스크롤
+  // 위로 무한스크롤 — in-flight 가드 + id 중복 제거 (같은 페이지 이중 프리펜드 방지)
   const loadOlder = useCallback(async () => {
     const oldest = messages[0];
-    if (!oldest || !hasMore) return;
+    if (!oldest || !hasMore || loadingOlder.current) return;
+    loadingOlder.current = true;
     const el = listRef.current;
     const prevHeight = el?.scrollHeight ?? 0;
-    const res = await chatApi.messages(otherId, oldest.id);
-    setMessages((prev) => [...res.items, ...prev]);
-    setHasMore(res.items.length >= 50);
-    requestAnimationFrame(() => {
-      if (el) el.scrollTop = el.scrollHeight - prevHeight;
-    });
+    try {
+      const res = await chatApi.messages(otherId, oldest.id);
+      setMessages((prev) => {
+        const known = new Set(prev.map((m) => m.id));
+        const older = res.items.filter((m) => !known.has(m.id));
+        return older.length ? [...older, ...prev] : prev;
+      });
+      setHasMore(res.items.length >= 50);
+      requestAnimationFrame(() => {
+        if (el) el.scrollTop = el.scrollHeight - prevHeight;
+      });
+    } finally {
+      loadingOlder.current = false;
+    }
   }, [messages, hasMore, otherId]);
 
   const onScroll = useCallback(() => {

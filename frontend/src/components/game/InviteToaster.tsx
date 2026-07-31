@@ -115,15 +115,20 @@ export function InviteToaster() {
     let retry: ReturnType<typeof setTimeout> | null = null;
 
     function connect() {
-      socket = new GameSocket(handleMessage, () => {
-        setChatSocket(null);
-        // 세션 만료 탭이 15초마다 403 을 만드는 것을 차단 — 재확인 후에만 재접속
-        retry = setTimeout(() => {
-          fetchMe().then((me) => {
-            if (me) connect();
-          });
-        }, 15000);
-      });
+      socket = new GameSocket(
+        handleMessage,
+        () => {
+          setChatSocket(null);
+          // 세션 만료 탭이 15초마다 403 을 만드는 것을 차단 — 재확인 후에만 재접속
+          retry = setTimeout(() => {
+            fetchMe().then((me) => {
+              if (me) connect();
+            });
+          }, 15000);
+        },
+        // 재접속 성공 = 끊김 동안 메시지를 놓쳤을 수 있음 — 열린 대화방 재동기화
+        () => dispatchChatEvent({ t: "chat.resync" }),
+      );
       socket.connect();
       setChatSocket(socket); // 대화방의 입력중 신호 전송용 (두 번째 소켓 금지)
     }
