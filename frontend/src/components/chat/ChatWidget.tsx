@@ -518,6 +518,7 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
         <ChatTextarea
           value={p.input}
           onChange={p.onInputChange}
+          onSend={p.onSend}
           onPasteImage={p.onAttachImageFile}
           placeholder={excel ? "내용 입력" : "한 줄 적기..."}
           className={`min-h-11 min-w-0 flex-1 px-2 py-2.5 text-base focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px] ${

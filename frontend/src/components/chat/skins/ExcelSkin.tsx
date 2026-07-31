@@ -191,7 +191,7 @@ export function ExcelSkin(p: ChatSkinProps) {
             </div>
           )}
 
-          {/* 입력줄 — 리스트 하단 고정. Enter = 줄바꿈, 전송은 [입력] 버튼만 */}
+          {/* 입력줄 — 리스트 하단 고정. PC Enter 전송·모바일 Enter 줄바꿈 (ChatTextarea) */}
           {/* items-end — 입력창이 여러 줄로 자라도 버튼은 바닥에 붙는다 */}
           <div className="flex items-end gap-1.5 border-t border-[#d8dde3] bg-white px-2 py-1.5">
             <ChatToolsMenu
@@ -203,6 +203,7 @@ export function ExcelSkin(p: ChatSkinProps) {
             <ChatTextarea
               value={p.input}
               onChange={p.onInputChange}
+              onSend={p.onSend}
               onPasteImage={p.onAttachImageFile}
               placeholder="내용 입력"
               ariaLabel="내용 입력"
