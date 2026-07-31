@@ -1,5 +1,15 @@
 /** 웹 푸시 구독 클라이언트 (docs/specs/push-reminder.md) */
 
+/** 구독 상태 변경 브로드캐스트 — 가이드·설정 카드·대화 목록 버튼이 서로의
+ *  구독/해제를 즉시 반영하도록 (2026-07-31 재검토: 카드 상태 고착 수정) */
+export const PUSH_CHANGED_EVENT = "esl-push-changed";
+
+function broadcastPushChanged(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(PUSH_CHANGED_EVENT));
+  }
+}
+
 export type PushState =
   | "unsupported" // 브라우저 미지원 (iOS 사파리는 홈 화면 추가 후 가능)
   | "disabled" // 서버 VAPID 미설정
@@ -75,6 +85,7 @@ export async function subscribePush(): Promise<PushState> {
     await sub.unsubscribe().catch(() => undefined);
     throw new Error("subscription save failed");
   }
+  broadcastPushChanged();
   return "subscribed";
 }
 
@@ -89,6 +100,7 @@ export async function unsubscribePush(): Promise<void> {
     body: JSON.stringify({ endpoint: sub.endpoint }),
   }).catch(() => undefined);
   await sub.unsubscribe().catch(() => undefined);
+  broadcastPushChanged();
 }
 
 export async function sendTestPush(): Promise<{

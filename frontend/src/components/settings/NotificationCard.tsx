@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   getPushState,
+  PUSH_CHANGED_EVENT,
   type PushState,
   sendTestPush,
   showLocalTestNotification,
@@ -23,9 +24,14 @@ export function NotificationCard() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    getPushState()
-      .then(setState)
-      .catch(() => setState("unsupported"));
+    const refresh = () =>
+      getPushState()
+        .then(setState)
+        .catch(() => setState("unsupported"));
+    refresh();
+    // 온보딩 가이드·대화 목록 버튼에서 구독이 바뀌면 카드도 즉시 갱신
+    window.addEventListener(PUSH_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(PUSH_CHANGED_EVENT, refresh);
   }, []);
 
   async function toggle() {

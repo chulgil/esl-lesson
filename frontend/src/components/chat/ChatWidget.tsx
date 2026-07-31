@@ -58,7 +58,12 @@ export function ChatWidget() {
     load();
     const timer = setInterval(load, 60000);
     const off = onChatEvent((msg) => {
-      if (msg.t === "chat.message" || msg.t === "chat.read") load();
+      if (
+        msg.t === "chat.message" ||
+        msg.t === "chat.read" ||
+        msg.t === "chat.deleted"
+      )
+        load();
     });
     return () => {
       clearInterval(timer);
@@ -240,7 +245,7 @@ export function ChatWidget() {
               className={
                 excel
                   ? "rounded-full bg-white/25 px-1.5 text-[10px]"
-                  : "absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brick-red px-1 text-[10px] font-bold text-white"
+                  : "absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brick-red px-1 text-[10px] font-bold text-brick-label"
               }
             >
               {unread > 99 ? "99+" : unread}
@@ -271,7 +276,13 @@ function WidgetList({
         .catch(() => setItems([]));
     load();
     return onChatEvent((msg) => {
-      if (msg.t === "chat.message" || msg.t === "presence") load();
+      // chat.deleted: 삭제된 마지막 메시지 미리보기("삭제되었습니다") 즉시 반영
+      if (
+        msg.t === "chat.message" ||
+        msg.t === "presence" ||
+        msg.t === "chat.deleted"
+      )
+        load();
     });
   }, []);
 
@@ -321,7 +332,7 @@ function WidgetList({
               className={
                 excel
                   ? "text-xs font-bold text-[#217346]"
-                  : "rounded-full bg-brick-red px-1.5 py-0.5 text-[10px] font-bold text-white"
+                  : "rounded-full bg-brick-red px-1.5 py-0.5 text-[10px] font-bold text-brick-label"
               }
             >
               {excel ? `+${c.unread}` : c.unread}

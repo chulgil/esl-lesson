@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { fetchMe } from "@/lib/api";
-import { showLocalTestNotification, subscribePush } from "@/lib/push";
+import {
+  getPushState,
+  PUSH_CHANGED_EVENT,
+  type PushState,
+  showLocalTestNotification,
+  subscribePush,
+} from "@/lib/push";
 
 /** 알림 설정 온보딩 — 1회 팝업 (2026-07-31 요청, Slack/Notion 프라이머 참고).
  *
@@ -97,13 +103,23 @@ export function NotificationSetupGuide() {
   const [platform, setPlatform] = useState<Platform>("other");
   const [phase, setPhase] = useState<"ask" | "denied" | "done">("ask");
   const [testResult, setTestResult] = useState<"sent" | "blocked" | null>(null);
+  // 버튼 분기 기준은 권한이 아니라 "구독" — 권한 granted + 구독 해제 상태에서
+  // [알림 켜기]가 사라지면 재구독 경로가 없다 (2026-07-31 재검토)
+  const [pushState, setPushState] = useState<PushState | null>(null);
 
   useEffect(() => {
     const detected = detectPlatform();
     setPlatform(detected);
     // 설정 화면의 "가이드 다시 보기" — 언제든 재오픈
+    const refreshPush = () =>
+      getPushState()
+        .then(setPushState)
+        .catch(() => setPushState("unsupported"));
+    refreshPush();
+    window.addEventListener(PUSH_CHANGED_EVENT, refreshPush);
     const reopen = () => {
       setTestResult(null);
+      refreshPush();
       setPhase(notifPermission() === "denied" ? "denied" : "ask");
       setOpen(true);
     };
@@ -132,6 +148,7 @@ export function NotificationSetupGuide() {
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      window.removeEventListener(PUSH_CHANGED_EVENT, refreshPush);
       window.removeEventListener(OPEN_GUIDE_EVENT, reopen);
     };
   }, []);
@@ -144,7 +161,8 @@ export function NotificationSetupGuide() {
   async function enable() {
     try {
       const state = await subscribePush();
-      if (state === "subscribed" || notifPermission() === "granted") {
+      setPushState(state);
+      if (state === "subscribed") {
         setPhase("done");
         setTimeout(dismiss, 2500);
       } else if (state === "denied") {
@@ -166,7 +184,7 @@ export function NotificationSetupGuide() {
   if (!open) return null;
   const guide = OS_STEPS[platform];
   const settingsLink = guide.settings;
-  const granted = notifPermission() === "granted";
+  const subscribed = pushState === "subscribed";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/30 p-4 sm:items-center">
@@ -225,7 +243,7 @@ export function NotificationSetupGuide() {
             )}
             <div className="mt-3 flex gap-2">
               {phase !== "denied" &&
-                (granted ? (
+                (subscribed ? (
                   <button
                     type="button"
                     onClick={sendTest}
@@ -247,7 +265,7 @@ export function NotificationSetupGuide() {
                 onClick={dismiss}
                 className="min-h-11 flex-1 rounded-md border-2 border-ink/20 bg-white font-bold"
               >
-                {granted ? "닫기" : "나중에"}
+                {subscribed ? "닫기" : "나중에"}
               </button>
             </div>
           </>

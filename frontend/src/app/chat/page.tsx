@@ -31,7 +31,13 @@ export default function ChatListPage() {
   useEffect(() => {
     load();
     return onChatEvent((msg) => {
-      if (msg.t === "chat.message" || msg.t === "presence") load();
+      // chat.deleted: 삭제된 마지막 메시지 미리보기("삭제되었습니다") 즉시 반영
+      if (
+        msg.t === "chat.message" ||
+        msg.t === "presence" ||
+        msg.t === "chat.deleted"
+      )
+        load();
     });
   }, [load]);
 
@@ -106,7 +112,7 @@ function NoteList({
                   {c.last_message ?? "첫 줄을 적어보세요"}
                 </span>
                 {c.unread > 0 && (
-                  <span className="ml-auto shrink-0 rounded-full bg-brick-red px-2 py-0.5 text-xs font-bold text-white">
+                  <span className="ml-auto shrink-0 rounded-full bg-brick-red px-2 py-0.5 text-xs font-bold text-brick-label">
                     {c.unread > 99 ? "99+" : c.unread}
                   </span>
                 )}
