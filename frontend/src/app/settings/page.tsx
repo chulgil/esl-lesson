@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ChatModeCard } from "@/components/settings/ChatModeCard";
 import { DailyGoalSetting } from "@/components/settings/DailyGoalSetting";
 import { NicknameCard } from "@/components/settings/NicknameCard";
-import { PushReminderCard } from "@/components/settings/PushReminderCard";
+import { NotificationCard } from "@/components/settings/NotificationCard";
 import { deleteMe } from "@/lib/api";
 import { studyApi } from "@/lib/study-api";
 import { APP_THEMES, setAppTheme, useAppTheme } from "@/lib/theme";
@@ -20,9 +20,9 @@ export default function SettingsPage() {
 
       <NicknameCard />
       <DailyGoalSetting />
-      <ThemeSection />
-      <PushReminderCard />
+      <NotificationCard />
       <ChatModeCard />
+      <ThemeSection />
       <DangerZone />
     </main>
   );
