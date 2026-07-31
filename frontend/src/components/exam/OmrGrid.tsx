@@ -1,5 +1,7 @@
 "use client";
 
+import { useSurfaceSkin } from "@/lib/theme-surfaces";
+
 /** OMR 답안 마킹 그리드 — 1~N 번호, 마킹/현재 문항 표시, 탭하면 해당 문항 이동.
  *  모바일에선 하단 고정으로 쓰인다 (docs/specs/library-exam.md 프론트 화면). */
 export function OmrGrid({
@@ -14,10 +16,12 @@ export function OmrGrid({
   onJump: (index: number) => void;
 }) {
   const answered = answers.filter((a) => a != null).length;
+  // 답안지도 테마 컨셉 — 패널·셀·명칭이 테마별 (theme-surfaces, 2026-07-31)
+  const skin = useSurfaceSkin();
   return (
-    <div className="rounded-lg border-2 border-ink/20 bg-white p-3">
+    <div className={`p-3 ${skin.omrPanel}`}>
       <p className="mb-2 flex items-baseline justify-between text-xs font-bold">
-        답안지
+        {skin.omrLabel}
         <span className="font-normal opacity-60">
           {answered}/{total} 마킹 · 남은 {total - answered}
         </span>
@@ -33,12 +37,12 @@ export function OmrGrid({
                 onClick={() => onJump(idx)}
                 aria-current={active}
                 aria-label={`${idx + 1}번 문항${marked ? " (마킹됨)" : ""}`}
-                className={`flex h-8 w-full items-center justify-center rounded-md border-2 text-xs font-bold transition sm:h-9 ${
+                className={`flex h-8 w-full items-center justify-center text-xs font-bold transition sm:h-9 ${
                   active
-                    ? "border-brick-blue bg-brick-blue/15 text-brick-blue"
+                    ? skin.omrCellActive
                     : marked
-                      ? "border-ink bg-ink text-white"
-                      : "border-dashed border-ink/25 bg-white opacity-70 hover:opacity-100"
+                      ? skin.omrCellMarked
+                      : skin.omrCell
                 }`}
               >
                 {idx + 1}

@@ -57,6 +57,14 @@ export interface SurfaceSkin {
   /** 선지 번호 마크 — 기본/선택 */
   mark: string;
   markSelected: string;
+  /** 테마 기본 모서리 — 힌트 강조·OMR 셀 등 공용 도형에 사용 */
+  radius: string;
+  /** OMR 답안지 — 패널·라벨·셀 3상태 */
+  omrPanel: string;
+  omrLabel: string;
+  omrCell: string;
+  omrCellActive: string;
+  omrCellMarked: string;
   /** 장식 플래그 */
   studs?: boolean;
   paw?: boolean;
@@ -64,6 +72,12 @@ export interface SurfaceSkin {
 
 export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
   note: {
+    radius: "rounded-md",
+    omrPanel: "rounded-lg border-2 border-ink/20 bg-white",
+    omrLabel: "답안지",
+    omrCell: "rounded-md border-2 border-dashed border-ink/25 bg-white opacity-70 hover:opacity-100",
+    omrCellActive: "rounded-md border-2 border-brick-blue bg-brick-blue/15 text-brick-blue",
+    omrCellMarked: "rounded-md border-2 border-ink bg-ink text-white",
     section: "rounded-lg border-2 border-ink/15 bg-white",
     band: "border-4 border-double border-ink/50 px-3 py-2 text-center",
     bandTitle: "font-hand text-lg leading-tight font-bold",
@@ -78,6 +92,12 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     markSelected: "border-brick-blue bg-brick-blue text-white",
   },
   candy: {
+    radius: "rounded-full",
+    omrPanel: "rounded-3xl border-4 border-brick-blue/25 bg-white shadow-inner",
+    omrLabel: "마킹 보드",
+    omrCell: "rounded-full border-2 border-brick-blue/25 bg-white opacity-70 hover:opacity-100",
+    omrCellActive: "rounded-full border-2 border-brick-red bg-brick-red/15 text-brick-red",
+    omrCellMarked: "rounded-full border-2 border-brick-red bg-brick-red text-white",
     section: "rounded-3xl border-4 border-brick-blue/25 bg-white shadow-inner",
     band: "rounded-full bg-highlight/70 px-4 py-2 text-center",
     bandTitle:
@@ -94,6 +114,12 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     markSelected: "border-brick-red bg-brick-red text-white",
   },
   lego: {
+    radius: "rounded-sm",
+    omrPanel: "rounded-md border-4 border-ink bg-white",
+    omrLabel: "조립판",
+    omrCell: "rounded-sm border-2 border-dashed border-ink/40 bg-white opacity-70 hover:opacity-100",
+    omrCellActive: "rounded-sm border-2 border-ink bg-brick-yellow/60 text-ink",
+    omrCellMarked: "rounded-sm border-2 border-ink bg-brick-blue text-white",
     section: "rounded-md border-4 border-ink bg-white",
     band: "relative rounded-sm border-2 border-ink bg-brick-yellow/60 px-3 pt-3 pb-2 text-center",
     bandTitle: "font-hand text-lg leading-tight font-bold",
@@ -109,6 +135,12 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     studs: true,
   },
   cat: {
+    radius: "rounded-lg",
+    omrPanel: "rounded-lg border-4 border-[#6b4a2f] bg-[#2f4640] text-[#f4f1e8]",
+    omrLabel: "출석부",
+    omrCell: "rounded-lg border-2 border-dashed border-[#f4f1e8]/40 bg-white/5 opacity-80 hover:opacity-100",
+    omrCellActive: "rounded-lg border-2 border-brick-yellow bg-white/15 text-brick-yellow",
+    omrCellMarked: "rounded-lg border-2 border-brick-yellow bg-brick-yellow text-ink",
     // 칠판 — 분필 글씨. 어두운 면이라 텍스트·테두리를 밝게 뒤집는다
     section: "rounded-lg border-8 border-[#6b4a2f] bg-[#2f4640] text-[#f4f1e8]",
     band: "relative border-2 border-dashed border-[#f4f1e8]/50 px-3 py-2 text-center",
@@ -125,6 +157,12 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     paw: true,
   },
   excel: {
+    radius: "rounded-sm",
+    omrPanel: "rounded-sm border border-[#c9cfd6] bg-white font-sans",
+    omrLabel: "체크리스트",
+    omrCell: "rounded-sm border border-[#c9cfd6] bg-white opacity-80 hover:bg-[#f6f8f9]",
+    omrCellActive: "rounded-sm border border-[#217346] bg-[#e2efda] text-[#217346]",
+    omrCellMarked: "rounded-sm border border-[#217346] bg-[#217346] text-white",
     // 평가서 시트 위장 — 셀 헤더 스트립 + 격자 느낌
     section: "rounded-sm border border-[#c9cfd6] bg-white font-sans",
     band: "border border-[#c9cfd6] bg-[#e2efda] px-3 py-1.5 text-left",
@@ -140,6 +178,12 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     markSelected: "rounded-sm border-[#217346] bg-[#217346] text-white",
   },
   school: {
+    radius: "rounded-none",
+    omrPanel: "rounded-none border-2 border-ink/40 bg-[#fbf8ee]",
+    omrLabel: "OMR 카드",
+    omrCell: "rounded-none border-2 border-dashed border-ink/30 bg-white opacity-70 hover:opacity-100",
+    omrCellActive: "rounded-none border-2 border-brick-green bg-brick-green/10 text-brick-green",
+    omrCellMarked: "rounded-none border-2 border-ink bg-ink text-white",
     // 갱지 시험지 — 직각 모서리 + 이중 괘선, 교실 중간고사 느낌
     section: "rounded-none border-2 border-ink/40 bg-[#fbf8ee]",
     band: "border-4 border-double border-ink/60 px-3 py-2 text-center",

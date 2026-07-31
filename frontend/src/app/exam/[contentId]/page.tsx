@@ -254,12 +254,12 @@ export default function ExamPage() {
                       <button
                         type="button"
                         onClick={() => mark(idx)}
-                        className={`flex min-h-11 w-full items-center gap-3 rounded-md border-2 px-3 py-2 text-left text-sm transition ${
+                        className={`flex min-h-11 w-full items-center gap-3 border-2 px-3 py-2 text-left text-sm transition ${skin.radius} ${
                           selected ? skin.choiceSelected : skin.choice
                         }`}
                       >
                         <span
-                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center border-2 text-xs font-bold ${skin.radius} ${
                             selected ? skin.markSelected : skin.mark
                           }`}
                         >

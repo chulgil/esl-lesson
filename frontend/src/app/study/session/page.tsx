@@ -452,7 +452,7 @@ function ChoiceQuiz({
             type="button"
             disabled={disabled}
             onClick={() => onSubmit(choice)}
-            className={`min-h-11 rounded-md border-2 px-4 py-2 text-left font-medium transition hover:-translate-y-0.5 disabled:opacity-50 ${
+            className={`min-h-11 border-2 px-4 py-2 text-left font-medium transition hover:-translate-y-0.5 disabled:opacity-50 ${skin.radius} ${
               highlight === choice
                 ? "border-brick-yellow bg-highlight/50 text-ink"
                 : skin.choice
