@@ -144,3 +144,17 @@ def test_pattern_template_mismatch_falls_back_to_full_sentence():
     for word in "Something completely different here.".split():
         assert word in q["chips"]
     assert grade(item, "pattern", "Something completely different here.")
+
+
+def test_split_front_drop_anchors_spoken_omission():
+    """실화행 선두 생략 — "It turns out that ___" vs "Well, turns out that ..."
+    (2026-07-31 보고: 고정부 불일치로 전체 조립 폴백되던 케이스)."""
+    from app.services.quiz import split_pattern_sentence
+
+    result = split_pattern_sentence(
+        "it turns out that ___", "Well, turns out that the encounter happened."
+    )
+    assert result is not None
+    display, blanks = result
+    assert blanks == ["the", "encounter", "happened."]
+    assert display == "Well, turns out that ___ ___ ___"

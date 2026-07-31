@@ -293,12 +293,19 @@ async def _upsert_item(
         )
     )
     if exists.scalar_one_or_none() is None:
+        # 패턴은 LLM 정제 예문(en_example) 우선 — 자막 큐는 문장 경계를 무시한
+        # 조각("happen Well turns out that the")이라 레벨3 조립·표시가 깨진다
+        # (2026-07-31 보고). 단어/이디엄은 실제 자막 문맥 유지
+        if kind == "pattern":
+            context_en = raw.get("en_example") or (segment.en_text if segment else None)
+        else:
+            context_en = segment.en_text if segment else raw.get("en_example")
         db.add(
             ItemOccurrence(
                 item_id=item.id,
                 content_id=content.id,
                 segment_id=segment.id if segment else None,
-                context_en=segment.en_text if segment else raw.get("en_example"),
+                context_en=context_en,
                 context_ko=segment.ko_text if segment else None,
             )
         )

@@ -116,9 +116,12 @@ def pattern_blank_split(item: LearningItem) -> tuple[str, list[str]] | None:
     (프로드 실측: 미처리 시 17건이 사실상 전체 조립으로 퇴화).
     자리표시자가 없거나 고정부가 문장과 안 맞으면 None — 전체 조립 폴백.
     """
-    sentence = _pattern_answer(item)
+    return split_pattern_sentence(item.pattern_template or item.en_text, _pattern_answer(item))
+
+
+def split_pattern_sentence(template: str, sentence: str) -> tuple[str, list[str]] | None:
     words = sentence.split()
-    template_words = (item.pattern_template or item.en_text).split()
+    template_words = template.split()
 
     segments: list[list[str]] = [[]]
     has_placeholder = False
@@ -141,9 +144,16 @@ def pattern_blank_split(item: LearningItem) -> tuple[str, list[str]] | None:
     first_start = last_end = None
     for seg in segments:
         found = -1
-        for start in range(pos, len(norm_words) - len(seg) + 1):
-            if norm_words[start : start + len(seg)] == seg:
-                found = start
+        # 실화행은 템플릿 선두 단어를 흘리기도 한다 ("It turns out" → "turns out")
+        # — 선두를 하나씩 줄여 재시도 (최소 1단어). 2026-07-31 보고 반영
+        for drop in range(len(seg)):
+            sub = seg[drop:]
+            for start in range(pos, len(norm_words) - len(sub) + 1):
+                if norm_words[start : start + len(sub)] == sub:
+                    found = start
+                    break
+            if found >= 0:
+                seg = sub
                 break
         if found < 0:
             return None  # 고정부 불일치 — 안전 폴백
