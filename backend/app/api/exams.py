@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.contents import visible_content_clause
@@ -231,6 +231,15 @@ async def start_attempt(
     if exam.status != "active":
         # 회차 보존 = 새 응시 시작 차단 (진행 중 attempt 제출은 허용 — submit 참조)
         raise HTTPException(status.HTTP_409_CONFLICT, "exam_archived")
+    # 기존 미제출 attempt 정리 — 방치하면 새 시험을 끝낸 뒤에도 요약의
+    # my_open_attempt 가 옛 attempt 를 반환해 "이어서 응시"가 영구 재등장 (재검토)
+    await db.execute(
+        delete(ExamAttempt).where(
+            ExamAttempt.exam_id == exam_id,
+            ExamAttempt.user_id == user.id,
+            ExamAttempt.submitted_at.is_(None),
+        )
+    )
     attempt = ExamAttempt(exam_id=exam_id, user_id=user.id)
     db.add(attempt)
     await db.flush()
@@ -312,13 +321,26 @@ async def abandon_attempt(
 ) -> None:
     """응시 포기(초기화) — 미제출 attempt 삭제, 경과 시간 리셋 (2026-07-31).
 
-    제출된 attempt 는 랭킹 반영분이라 삭제 불가 409."""
-    attempt = await db.get(ExamAttempt, attempt_id)
-    if attempt is None or attempt.exam_id != exam_id or attempt.user_id != user.id:
+    제출된 attempt 는 랭킹 반영분이라 삭제 불가 409.
+    read-then-delete 는 동시 submit(원자 클레임)과 경합해 랭킹 반영분을
+    지울 수 있다 — 미제출 조건을 DELETE 에 포함한 원자 실행 (재검토)."""
+    result = await db.execute(
+        delete(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.exam_id == exam_id,
+            ExamAttempt.user_id == user.id,
+            ExamAttempt.submitted_at.is_(None),
+        )
+    )
+    if result.rowcount == 0:
+        attempt = await db.get(ExamAttempt, attempt_id)
+        if (
+            attempt is not None
+            and attempt.exam_id == exam_id
+            and attempt.user_id == user.id
+        ):
+            raise HTTPException(status.HTTP_409_CONFLICT, "already_submitted")
         raise HTTPException(status.HTTP_404_NOT_FOUND, "attempt not found")
-    if attempt.submitted_at is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "already_submitted")
-    await db.delete(attempt)
     await db.commit()
 
 

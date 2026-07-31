@@ -42,7 +42,7 @@ chat_reads
 
 | 메서드/경로 | 역할 |
 |---|---|
-| GET `/api/chat/conversations` | 대화 목록: 상대(닉네임·`online`)·마지막 메시지 미리보기·`unread` 카운트. `last_message_at DESC` |
+| GET `/api/chat/conversations` | 대화 목록: 상대(닉네임·`online`)·마지막 메시지 미리보기·`unread` 카운트. `last_message_at DESC`. 마지막 메시지가 삭제됐으면 미리보기 = "삭제되었습니다" (본문 소거 상태를 "[단어 카드]" 로 오표기 금지 — 2026-07-31 재검토) |
 | GET `/api/chat/unread-total` | 안읽음 합계 (네비 배지). 인프로세스 캐시 |
 | GET `/api/chat/with/{user_id}/messages?before={id}&limit=50` | 히스토리 커서 페이지네이션 (id DESC → 클라에서 역순 렌더) |
 | POST `/api/chat/messages` | 전송 `{to_user_id, body, client_msg_id, item_ref?}` → 저장·캐시 갱신·WS 푸시·오프라인이면 웹푸시. 같은 `client_msg_id` 재전송은 기존 행 반환 (멱등) |
@@ -89,6 +89,7 @@ chat_reads
 
 - **알림 켜기**: 대화 목록의 `NotifyEnableButton` — 기존 VAPID 푸시 구독(`subscribePush`) 재사용. 백그라운드에선 OS 알림이 유일한 능동 채널이므로 권한 허용 권장
 - **알림 설정 온보딩** (2026-07-31): `NotificationSetupGuide` — 로그인 + 권한 미허용 + 최초 1회 자동 팝업(2.5초 지연, localStorage `notif-guide-seen`). 플랫폼 감지(Mac/Windows/Android/iOS)로 해당 OS 안내만 표시, iOS 는 홈 화면 추가 절차. [알림 켜기] = 권한 요청 + VAPID 푸시 구독 동시 처리, 차단(denied) 상태면 주소창 자물쇠 해제 경로 안내. 설정 화면 "알림 설정 가이드 보기"(`esl-open-notif-guide` 이벤트)로 재오픈 — 모바일 무수신의 주원인 = 권한만 있고 푸시 구독이 없던 상태를 가이드가 구독까지 이끈다
+- **iOS Safari 가드** (2026-07-31 재검토): iOS Safari 브라우저 탭에는 `Notification` 전역이 없어 bare 참조가 throw — 모든 접근은 `typeof` 가드 또는 `push.ts supported()` 경유. 온보딩 가이드는 API 가 없어도 **iOS 면 자동 노출**한다("홈 화면에 추가" 안내가 필요한 대상이 바로 API 없는 iOS 탭). [알림 켜기]가 unsupported/disabled 를 반환하면 단계 안내 유지(오탐 "차단" 표시 금지)
 - **탭 제목 "(N)" 프리픽스 유지** (2026-07-31): 페이지(위장 제목 등)가 `document.title` 을 다시 쓰면 프리픽스가 지워지던 문제 — `<title>` MutationObserver 로 재적용. 원본 파비콘 링크는 href 기준 dedupe 보관
 
 ## 위장 테마 (2026-07-27, 회사 화면 보호)
@@ -139,7 +140,7 @@ excelkospi 우하단 버튼 컨셉 — 설정의 "플로팅" 체크(localStorage
 ## 에러·엣지
 
 - 메시지 2,000자 초과 422 · 빈 본문(공백만) 422 (item_ref 만 있으면 허용)
-- WS 끊김 중 수신분: **3중 캐치업** (2026-07-31) — (1) WS 재접속 시 클라 합성 신호 `chat.resync`(GameSocket onOpen → 이벤트 버스) (2) 탭 복귀(visibilitychange)·창 포커스 (3) 대화방 재진입. 각각 열린 대화방이 REST 최신 50개를 id 병합(중복 제거, id 오름차순)으로 동기화
+- WS 끊김 중 수신분: **3중 캐치업** (2026-07-31) — (1) WS 재접속 시 클라 합성 신호 `chat.resync`(GameSocket onOpen → 이벤트 버스) (2) 탭 복귀(visibilitychange)·창 포커스 (3) 대화방 재진입. 각각 열린 대화방이 REST 최신 50개를 id 병합(중복 제거, id 오름차순)으로 동기화. **아는 메시지도 서버 값으로 치환** — 끊김 중 놓친 `chat.deleted` 반영 + 삭제 API 실패 시 낙관 치환 복원 (2026-07-31 재검토. 메시지는 삭제 외 불변이므로 deleted 플래그 변화만 재렌더 트리거)
 - 위로 무한스크롤: in-flight 가드 필수 — 스크롤 이벤트 연타로 같은 before 커서가 병렬 fetch 되면 수십 개씩 중복 프리펜드된다 (2026-07-31 수정). 프리펜드·재동기화 모두 id Set 중복 제거
 - XSS: React 기본 이스케이프. 링크 자동화는 하지 않는다 (1차 범위 밖)
 - 자기 자신에게 전송 400
@@ -157,7 +158,7 @@ excelkospi 우하단 버튼 컨셉 — 설정의 "플로팅" 체크(localStorage
 
 ## 범위 밖 (후속)
 
-- 그룹 채팅 · 메시지 삭제/수정 · 링크 미리보기 (이미지 전송은 2026-07-27 구현 완료 — 위 "이미지 전송")
+- 그룹 채팅 · 메시지 수정 · 링크 미리보기 (이미지 전송 2026-07-27, 메시지 삭제 2026-07-31 구현 완료 — 위 해당 섹션)
 - 수평 확장 시 인스턴스 간 팬아웃·캐시 무효화 신호는 **Postgres LISTEN/NOTIFY** 사용
   (Redis 도입 금지 — 2026-07-27 사용자 결정. 이미 운영 중인 Postgres 에 pub/sub 이
   내장되어 있고, asyncpg `add_listener` 로 바로 구독 가능. 캐시·허브 인터페이스는 그대로)

@@ -581,3 +581,18 @@ async def test_delete_updates_recent_cache(client, db_session):
     listing = (await client.get(f"/api/chat/with/{b.id}/messages")).json()["items"]
     row = next(m for m in listing if m["id"] == sent["id"])
     assert row["deleted"] is True and row["body"] == ""
+
+
+async def test_deleted_last_message_preview(client, db_session):
+    """대화 목록 미리보기 — 삭제된 마지막 메시지는 "삭제되었습니다".
+    (재검토: body/첨부 소거 상태를 "[단어 카드]" 로 오표기하던 문제)"""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    sent = (
+        await client.post("/api/chat/messages", json=send_body(b.id, "마지막 메시지", "cid-del00004"))
+    ).json()
+    await client.delete(f"/api/chat/messages/{sent['id']}")
+
+    convs = (await client.get("/api/chat/conversations")).json()["items"]
+    row = next(c for c in convs if c["user_id"] == b.id)
+    assert row["last_message"] == "삭제되었습니다"

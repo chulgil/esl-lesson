@@ -25,6 +25,13 @@ function detectPlatform(): Platform {
   return "other";
 }
 
+/** iOS Safari 탭 등 Notification 전역이 없는 환경에서 bare 참조는 throw */
+function notifPermission(): NotificationPermission | "unsupported" {
+  return typeof Notification === "undefined"
+    ? "unsupported"
+    : Notification.permission;
+}
+
 const OS_STEPS: Record<Platform, { title: string; steps: string[] }> = {
   mac: {
     title: "Mac 사용 중이시네요",
@@ -73,35 +80,38 @@ export function NotificationSetupGuide() {
   const [phase, setPhase] = useState<"ask" | "denied" | "done">("ask");
 
   useEffect(() => {
-    setPlatform(detectPlatform());
+    const detected = detectPlatform();
+    setPlatform(detected);
     // 설정 화면의 "가이드 다시 보기" — 언제든 재오픈
     const reopen = () => {
-      setPhase(
-        typeof Notification !== "undefined" &&
-          Notification.permission === "denied"
-          ? "denied"
-          : "ask",
-      );
+      setPhase(notifPermission() === "denied" ? "denied" : "ask");
       setOpen(true);
     };
     window.addEventListener(OPEN_GUIDE_EVENT, reopen);
 
-    // 1회 자동 노출 — 로그인 + 권한 미허용 + 처음
-    if (typeof Notification === "undefined") return; // 미지원(iOS Safari 탭 등)도 안내는 가치有 — 단 API 없으면 자동노출 생략
-    if (Notification.permission === "granted") return;
-    if (localStorage.getItem(SEEN_KEY)) return;
+    // 1회 자동 노출 — 로그인 + 권한 미허용 + 처음.
+    // Notification 전역이 없어도 iOS 는 노출한다 — "홈 화면에 추가" 안내가
+    // 가장 필요한 대상이 바로 API 없는 iOS Safari 탭이다 (2026-07-31 재검토)
+    const permission = notifPermission();
+    const autoShow =
+      permission !== "granted" &&
+      (permission !== "unsupported" || detected === "ios") &&
+      !localStorage.getItem(SEEN_KEY);
     let cancelled = false;
-    const timer = setTimeout(() => {
-      fetchMe().then((me) => {
-        if (me && !cancelled) {
-          setPhase(Notification.permission === "denied" ? "denied" : "ask");
-          setOpen(true);
-        }
-      });
-    }, 2500);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    if (autoShow) {
+      timer = setTimeout(() => {
+        fetchMe().then((me) => {
+          if (me && !cancelled) {
+            setPhase(notifPermission() === "denied" ? "denied" : "ask");
+            setOpen(true);
+          }
+        });
+      }, 2500);
+    }
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       window.removeEventListener(OPEN_GUIDE_EVENT, reopen);
     };
   }, []);
@@ -114,14 +124,15 @@ export function NotificationSetupGuide() {
   async function enable() {
     try {
       const state = await subscribePush();
-      if (state === "subscribed" || Notification.permission === "granted") {
+      if (state === "subscribed" || notifPermission() === "granted") {
         setPhase("done");
         setTimeout(dismiss, 2500);
-      } else {
+      } else if (state === "denied") {
         setPhase("denied");
       }
+      // unsupported/disabled(iOS Safari 탭 등) — 단계 안내를 유지한다
     } catch {
-      setPhase(Notification.permission === "denied" ? "denied" : "ask");
+      setPhase(notifPermission() === "denied" ? "denied" : "ask");
     }
   }
 

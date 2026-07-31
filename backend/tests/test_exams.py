@@ -650,3 +650,31 @@ async def test_attempt_resume_and_abandon(client, admin_client, db_session):
     assert (await client.get(f"/api/exams/{exam_id}/attempts/{attempt2}")).status_code == 404
     assert (await client.delete(f"/api/exams/{exam_id}/attempts/{attempt2}")).status_code == 404
     assert attempt3 is None
+
+
+async def test_restart_clears_stale_open_attempt(client, admin_client, db_session):
+    """새로 시작 = 기존 미제출 attempt 정리 — 방치 시 새 시험을 제출한 뒤에도
+    옛 attempt 가 my_open_attempt 로 남아 "이어서 응시"가 영구 재등장 (재검토)."""
+    content, exam_id = await make_exam(admin_client, db_session, count=5)
+    await login(client, db_session)
+
+    await client.post(f"/api/exams/{exam_id}/attempts")
+    new_attempt = (await client.post(f"/api/exams/{exam_id}/attempts")).json()["attempt_id"]
+    # 옛 attempt 는 새로 시작 시점에 삭제 — 미제출 행은 항상 1개뿐.
+    # (id 비교는 SQLite 의 rowid 재사용 때문에 불가 — 개수로 검증)
+    open_count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(ExamAttempt)
+            .where(ExamAttempt.exam_id == exam_id, ExamAttempt.submitted_at.is_(None))
+        )
+    ).scalar()
+    assert open_count == 1
+
+    key = await answer_key(db_session, exam_id)
+    res = await client.post(
+        f"/api/exams/{exam_id}/attempts/{new_attempt}/submit", json={"answers": key}
+    )
+    assert res.status_code == 200
+    summary = (await client.get(f"/api/contents/{content.id}/exam")).json()
+    assert summary["my_open_attempt"] is None

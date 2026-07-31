@@ -342,7 +342,11 @@ async def list_conversations(db: AsyncSession, user: User) -> list[dict]:
         last = last_by_conv.get(conv.id)
         preview = None
         if last is not None:
-            preview = last.body or ("[사진]" if last.image_path else "[단어 카드]")
+            # 삭제된 메시지는 body/첨부가 소거돼 "[단어 카드]" 로 오표기됨 (재검토)
+            if last.deleted_at is not None:
+                preview = "삭제되었습니다"
+            else:
+                preview = last.body or ("[사진]" if last.image_path else "[단어 카드]")
         out.append(
             {
                 "conversation_id": conv.id,

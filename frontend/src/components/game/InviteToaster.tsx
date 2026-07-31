@@ -72,7 +72,13 @@ export function InviteToaster() {
       // 채널 (2026-07-31 최종): engaged = 무음 / 백그라운드 = OS 알림 /
       // 전면 자리 비움 = 파비콘·탭 제목 배지만 (미니 채팅 토스트는 사용자
       // 요청으로 제거 — 위장 화면 위에 뜨는 것 자체가 노출)
-      if (!engaged && backgrounded && Notification.permission === "granted") {
+      // iOS Safari 탭은 Notification 전역 자체가 없다 — bare 참조는 throw
+      if (
+        !engaged &&
+        backgrounded &&
+        typeof Notification !== "undefined" &&
+        Notification.permission === "granted"
+      ) {
         const excel = getAppTheme() === "excel";
         notifyOs(
           excel ? "공유 문서" : msg.from_name,
@@ -214,7 +220,6 @@ export function InviteToaster() {
           </button>
         </div>
       )}
-
     </>
   );
 }
@@ -240,4 +245,3 @@ function notifyOs(title: string, body: string, url: string) {
     })
     .catch(() => {});
 }
-

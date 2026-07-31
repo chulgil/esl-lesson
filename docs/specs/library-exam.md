@@ -51,9 +51,9 @@ exam_attempts               -- 응시 1회. 인덱스 (exam_id, user_id)
 |---|---|
 | GET /api/exams/open | 열린 시험 목록 (active 만, 최신순) — content_title/응시자 수/my_best/top_name. 학습 허브 도전 카드·라이브러리 시험 칩용 (2026-07-31) |
 | GET /api/contents/{id}/exam | 활성 시험 요약 — exam_id/round/question_count/응시자 수/my_best/TOP3. 없으면 `{exam_id: null}` |
-| POST /api/exams/{id}/attempts | 응시 시작 — attempt 생성 + 정답 없는 문항 + started_at. archived 409 `exam_archived` |
+| POST /api/exams/{id}/attempts | 응시 시작 — attempt 생성 + 정답 없는 문항 + started_at. archived 409 `exam_archived`. **본인 기존 미제출 attempt 는 선삭제** (방치 시 제출 후에도 "이어서 응시" 영구 재등장 — 2026-07-31 재검토) |
 | GET /api/exams/{id}/attempts/{aid} | **진행 중 응시 재개** (2026-07-31) — 서버 저장 started_at·문항 복원. 본인·미제출만, 그 외 404 |
-| DELETE /api/exams/{id}/attempts/{aid} | **응시 포기(초기화)** — 미제출 attempt 삭제(랭킹 무영향), 경과 리셋. 제출분 409 |
+| DELETE /api/exams/{id}/attempts/{aid} | **응시 포기(초기화)** — 미제출 attempt 삭제(랭킹 무영향), 경과 리셋. 제출분 409. 미제출 조건을 DELETE WHERE 에 포함한 **원자 실행** — read-then-delete 는 동시 submit 과 경합해 랭킹 반영분을 지운다 (2026-07-31 재검토) |
 | POST /api/exams/{id}/attempts/{aid}/submit | 서버 채점 — score=정답수x5, duration 서버 시각차. 결과+순위+복기+**xp_gained**. 1위가 바뀌면 이전 1위에게 `exam_dethroned` 알림 (자기 갱신·최초 등극 제외) |
 | GET /api/exams/{id}/rankings | TOP 50 + 내 순위(me) — nickname 없으면 name 폴백, is_me 플래그 |
 | POST /api/admin/contents/{id}/exam | 생성/재생성 (require_admin). 부족 422 `not_enough_items` |
