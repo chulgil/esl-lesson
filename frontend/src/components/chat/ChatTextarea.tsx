@@ -33,21 +33,17 @@ export function ChatTextarea({
   // 한글 마지막 글자 확정이 곧장 전송되는 버그 방지 (2026-07-31 심층 리뷰)
   const lastCompositionEnd = useRef(0);
 
-  // PC 판별 — 화면 폭(sm 640px, ChatWidget isDesktop 동일 기준) + 정밀 포인터.
-  // 폭만 보면 태블릿·폰 가로모드가 Enter=전송이 되는데 가상 키보드엔 Shift 가
-  // 없어 줄바꿈 자체가 불가 (2026-07-31 심층 리뷰)
+  // PC 판별 — 화면 폭 단독(sm 640px, ChatWidget isDesktop 동일 기준).
+  // pointer:fine 병행 판별은 터치스크린 노트북에서 primary=coarse 로 오판해
+  // PC 인데 Enter 전송이 죽는다 (2026-07-31 보고 — 태블릿 가로모드 오적용보다
+  // PC 오동작이 치명적이라 폭 단독으로 회귀)
   const [enterSends, setEnterSends] = useState(false);
   useEffect(() => {
     const wide = window.matchMedia("(min-width: 640px)");
-    const fine = window.matchMedia("(pointer: fine)");
-    const apply = () => setEnterSends(wide.matches && fine.matches);
+    const apply = () => setEnterSends(wide.matches);
     apply();
     wide.addEventListener("change", apply);
-    fine.addEventListener("change", apply);
-    return () => {
-      wide.removeEventListener("change", apply);
-      fine.removeEventListener("change", apply);
-    };
+    return () => wide.removeEventListener("change", apply);
   }, []);
 
   // 값이 바뀔 때마다 내용 높이에 맞춤 — 8줄 상한은 CSS max-height 가 담당
@@ -75,7 +71,8 @@ export function ChatTextarea({
           e.key === "Enter" &&
           !e.shiftKey &&
           !e.nativeEvent.isComposing &&
-          Date.now() - lastCompositionEnd.current > 100
+          // 30ms: Safari 의 조합확정 후행 keydown(<5ms)만 거르고 사람 Enter(>50ms)는 통과
+          Date.now() - lastCompositionEnd.current > 30
         ) {
           e.preventDefault();
           onSend();
