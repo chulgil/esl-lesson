@@ -33,7 +33,7 @@ notifications
 
 | 메서드/경로 | 역할 |
 |---|---|
-| GET `/api/notifications?limit=30` | 내 알림 id DESC (limit 1~100) + `unread` 안읽음 총수 |
+| GET `/api/notifications?limit=30` | 내 알림 id DESC (limit 1~100) + `unread` 안읽음 총수. **읽은 알림은 read_at 24시간 뒤 목록 제외** (안읽음은 기간 무관 — 2026-07-31 "읽어도 계속 떠있음" 보고) |
 | POST `/api/notifications/read` | `{all?: bool, ids?: int[]}` — 내 알림만 `read_at=now`. 타인 id 는 조용히 무시 |
 
 ## WS 이벤트 (기존 `/ws/game` 확장)

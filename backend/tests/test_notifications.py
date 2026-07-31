@@ -62,6 +62,44 @@ async def test_list_scopes_to_me_id_desc_with_unread(client, db_session):
     assert data["unread"] == 2
 
 
+async def test_list_hides_read_older_than_24h(client, db_session):
+    """읽은 알림은 24시간 뒤 목록에서 제외 — 안읽음은 기간 무관 유지.
+
+    2026-07-31 보고: 읽어도 계속 떠 있음 — 읽은 항목이 목록에 영구 잔류."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.models import Notification
+
+    me = await login(client, db_session)
+    await notify(db_session, me.id, "friend_accepted", {"from_name": "fresh-unread"})
+    await notify(db_session, me.id, "friend_accepted", {"from_name": "fresh-read"})
+    await notify(db_session, me.id, "friend_accepted", {"from_name": "stale-read"})
+    await db_session.commit()
+
+    rows = (await db_session.execute(Notification.__table__.select())).mappings().all()
+    by_name = {r["payload"]["from_name"]: r["id"] for r in rows}
+    now = datetime.now(UTC)
+    # 방금 읽음 → 24h 내라 목록 유지 / 이틀 전 읽음 → 제외
+    await db_session.execute(
+        Notification.__table__.update()
+        .where(Notification.id == by_name["fresh-read"])
+        .values(read_at=now)
+    )
+    await db_session.execute(
+        Notification.__table__.update()
+        .where(Notification.id == by_name["stale-read"])
+        .values(read_at=now - timedelta(days=2))
+    )
+    await db_session.commit()
+
+    data = (await client.get("/api/notifications")).json()
+    names = [n["payload"]["from_name"] for n in data["items"]]
+    assert "fresh-unread" in names
+    assert "fresh-read" in names
+    assert "stale-read" not in names
+    assert data["unread"] == 1
+
+
 async def test_read_marks_selected_ids_only(client, db_session):
     me = await login(client, db_session)
     await notify(db_session, me.id, "friend_accepted", {"from_name": "a"})

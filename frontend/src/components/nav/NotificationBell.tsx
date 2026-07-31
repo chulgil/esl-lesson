@@ -8,7 +8,12 @@ import {
   notificationsApi,
   type NotificationItem,
 } from "@/lib/notifications-api";
+import { APP_THEMES } from "@/lib/theme";
 import { timeAgo } from "@/lib/time";
+
+const THEME_LABELS: Record<string, string> = Object.fromEntries(
+  APP_THEMES.map((t) => [t.key, t.label]),
+);
 
 /** 네비 알림 벨 — 친구 요청·수락·게임 초대 알림 센터 (docs/specs/notifications.md).
  *  배지 = 알림 unread + 채팅 unread 합산 (2026-07-28 배지 일원화 —
@@ -150,7 +155,10 @@ export function NotificationBell() {
               key={n.id}
               type="button"
               onClick={() => openItem(n)}
-              className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition hover:bg-highlight/40"
+              className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition hover:bg-highlight/40 ${
+                // 읽은 알림은 확실히 흐리게 — 점 색만으로는 구분이 안 보인다
+                n.read_at !== null ? "opacity-50" : ""
+              }`}
             >
               <span
                 className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
@@ -184,8 +192,15 @@ function notifText(n: NotificationItem): string {
   if (n.type === "friend_accepted")
     return `${from} 님이 친구 요청을 수락했어요`;
   if (n.type === "game_invite") return `${from} 님이 게임에 초대했어요`;
-  if (n.type === "theme_granted")
-    return "새 테마가 열렸어요 — 설정에서 바꿔보세요";
+  if (n.type === "theme_granted") {
+    // 테마 이름·사유 명시 — candy·lego 처럼 동시 지급되면 같은 문구 2건이
+    // "중복 알림"으로 보였다 (2026-07-31 보고)
+    const label =
+      THEME_LABELS[String(n.payload.theme_key ?? "")] ??
+      String(n.payload.theme_key ?? "새");
+    const note = n.payload.note ? ` (${String(n.payload.note)})` : "";
+    return `'${label}' 테마가 열렸어요${note} — 설정에서 바꿔보세요`;
+  }
   // 알 수 없는 타입 (구버전 클라 대비) — 이름만 노출
   return `${from} 님의 새 알림`;
 }

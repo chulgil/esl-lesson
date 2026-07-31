@@ -1,11 +1,11 @@
 """알림 센터 API — 목록·읽음 (docs/specs/notifications.md)."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
@@ -21,11 +21,20 @@ async def list_notifications(
     user: Annotated[User, Depends(get_current_user)],
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
 ) -> dict:
+    # 읽은 알림은 24시간 뒤 목록에서 제외 — 안읽음은 기간 무관 유지.
+    # 읽었는데도 목록에 영구 잔류해 "안 사라진다"로 체감 (2026-07-31 보고)
+    read_keep_after = datetime.now(UTC) - timedelta(hours=24)
     rows = (
         (
             await db.execute(
                 select(Notification)
-                .where(Notification.user_id == user.id)
+                .where(
+                    Notification.user_id == user.id,
+                    or_(
+                        Notification.read_at.is_(None),
+                        Notification.read_at > read_keep_after,
+                    ),
+                )
                 .order_by(Notification.id.desc())
                 .limit(limit)
             )
