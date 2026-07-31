@@ -82,7 +82,11 @@ def test_build_sentence_question_includes_thinking_hint():
     assert q["prompt_ko"] == "저기에 나무가 있다."
 
 
-def test_build_pattern_question_chips_cover_sentence():
+def test_build_pattern_question_blanks_only(monkeypatch):
+    """레벨3: 밑줄(___) 부분만 조립 — 템플릿 고정부는 완성된 채 표시 (2026-07-31 보고).
+
+    template "It takes ___ to ..." x 문장 "It takes time to learn."
+    → 고정부 It takes/to 는 표시, 조립 대상은 time·learn. 뿐."""
     item = make_item(
         item_type="pattern",
         en="It takes time to learn.",
@@ -91,8 +95,52 @@ def test_build_pattern_question_chips_cover_sentence():
     )
     q = build_question(item, [])
     assert q["quiz_mode"] == "pattern"
-    for word in "It takes time to learn.".split():
-        assert word in q["chips"]
-    assert len(q["chips"]) == len("It takes time to learn.".split()) + 2
+    # 조립 칩 = 밑줄 단어 2개 + 오답 칩 2개 — 고정부(It/takes/to)는 칩에 없다
+    assert len(q["chips"]) == 2 + 2
+    assert "time" in q["chips"] and "learn." in q["chips"]
+    for fixed in ("It", "takes", "to"):
+        assert fixed not in q["chips"]
+    # 표시 문장 = 고정부 완성 + 밑줄 자리만 ___ (진행형 힌트도 밑줄 단어 기준)
+    assert q["template"] == "It takes ___ to ___"
+    assert q["hint_answer"] == "time learn."
     # 밑줄(___)의 한글 대응을 명시 — 어느 부분인지 혼동 방지 (2026-07-14)
     assert q["blank_ko"] == "배우는 데 시간이 걸린다"
+
+
+def test_pattern_grade_expects_blank_words_only():
+    item = make_item(
+        item_type="pattern",
+        en="It takes time to learn.",
+        ko="배우는 데 시간이 걸린다",
+        pattern_template="It takes ___ to ...",
+    )
+    assert grade(item, "pattern", "time learn")
+    assert not grade(item, "pattern", "banana apple")
+
+
+def test_pattern_without_placeholder_falls_back_to_full_sentence():
+    """템플릿에 밑줄이 없으면(문장 전체가 패턴) 기존 전체 조립 유지."""
+    item = make_item(
+        item_type="pattern",
+        en="We think it's quite the opposite",
+        ko="우리는 정반대라고 생각해요",
+        pattern_template="We think it's quite the opposite",
+    )
+    q = build_question(item, [])
+    for word in "We think it's quite the opposite".split():
+        assert word in q["chips"]
+    assert grade(item, "pattern", "We think it's quite the opposite")
+
+
+def test_pattern_template_mismatch_falls_back_to_full_sentence():
+    """고정부가 문장과 안 맞으면(추출 불일치) 전체 조립으로 안전 폴백."""
+    item = make_item(
+        item_type="pattern",
+        en="Something completely different here.",
+        ko="전혀 다른 문장",
+        pattern_template="It takes ___ to ...",
+    )
+    q = build_question(item, [])
+    for word in "Something completely different here.".split():
+        assert word in q["chips"]
+    assert grade(item, "pattern", "Something completely different here.")

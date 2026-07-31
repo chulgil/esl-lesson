@@ -72,7 +72,12 @@ def grade(item: LearningItem, quiz_mode: str, answer: str) -> bool:
     if quiz_mode in ("choice_ko2en", "cloze"):
         return normalize_answer(answer) == normalize_answer(item.en_text)
     if quiz_mode in ("pattern", "compose"):
-        expected = _pattern_answer(item) if quiz_mode == "pattern" else item.en_text
+        if quiz_mode == "pattern":
+            # 밑줄 단어들만 기대 — 문항 생성(pattern_blank_split)과 동일 분해
+            split = pattern_blank_split(item)
+            expected = " ".join(split[1]) if split is not None else _pattern_answer(item)
+        else:
+            expected = item.en_text
         correct, _exact = grade_sentence(expected, answer)
         return correct
     raise ValueError(f"unknown quiz_mode: {quiz_mode}")
@@ -84,6 +89,61 @@ def _pattern_answer(item: LearningItem) -> str:
         if occ.context_en:
             return occ.context_en
     return item.en_text
+
+
+# 템플릿 자리표시자 — ___/~/.../단독 X 는 "학습자가 채울 변수부" (데이터 실측 형태)
+_PLACEHOLDER_RE = re.compile(r"^(?:_{2,}|~|\.{3,}|x)$")
+
+
+def _norm_word(word: str) -> str:
+    return re.sub(r"[^a-z0-9']", "", word.lower())
+
+
+def pattern_blank_split(item: LearningItem) -> tuple[str, list[str]] | None:
+    """문장을 템플릿 고정부/밑줄(변수부)로 분해 — (표시 문장, 밑줄 단어들).
+
+    레벨3 은 밑줄 부분만 조립해야 한다 (2026-07-31 보고 — 전체 문장 조립은
+    고정부까지 다시 맞추게 해 템플릿 표시와 어긋남). 템플릿의 고정 세그먼트를
+    문장에서 순서대로 찾아 표시하고, 사이를 채우는 단어들만 조립 대상으로 남긴다.
+    자리표시자가 없거나 고정부가 문장과 안 맞으면 None — 전체 조립 폴백.
+    """
+    sentence = _pattern_answer(item)
+    words = sentence.split()
+    template_words = (item.pattern_template or item.en_text).split()
+
+    segments: list[list[str]] = [[]]
+    has_placeholder = False
+    for token in template_words:
+        if _PLACEHOLDER_RE.match(_norm_word(token) or token):
+            has_placeholder = True
+            if segments[-1]:
+                segments.append([])
+        else:
+            segments[-1].append(_norm_word(token))
+    segments = [seg for seg in segments if seg]
+    if not has_placeholder or not segments:
+        return None
+
+    norm_words = [_norm_word(w) for w in words]
+    fixed = [False] * len(words)
+    pos = 0
+    for seg in segments:
+        found = -1
+        for start in range(pos, len(norm_words) - len(seg) + 1):
+            if norm_words[start : start + len(seg)] == seg:
+                found = start
+                break
+        if found < 0:
+            return None  # 고정부 불일치 — 안전 폴백
+        for i in range(found, found + len(seg)):
+            fixed[i] = True
+        pos = found + len(seg)
+
+    blanks = [w for w, is_fixed in zip(words, fixed, strict=True) if not is_fixed]
+    if not blanks or len(blanks) == len(words):
+        return None
+    display = " ".join(w if is_fixed else "___" for w, is_fixed in zip(words, fixed, strict=True))
+    return display, blanks
 
 
 def build_question(
@@ -205,17 +265,24 @@ def _idiom_question(
 def _pattern_question(item: LearningItem, context: str | None, context_ko: str | None) -> dict:
     sentence = context or item.en_text
     words = sentence.split()
+    # 밑줄 부분만 조립 (2026-07-31) — 분해 실패 시 전체 조립 폴백
+    split = pattern_blank_split(item)
+    if split is not None:
+        display, assemble_words = split
+    else:
+        display, assemble_words = (item.pattern_template or item.en_text), words
     decoys = random.sample([w for w in FALLBACK_EN if w not in words], 2)
-    chips = words + decoys
+    chips = list(assemble_words) + decoys
     random.shuffle(chips)
     return {
         "quiz_mode": "pattern",
         "level": 3,
-        "hint_answer": sentence,
+        "hint_answer": " ".join(assemble_words),
         "prompt_ko": context_ko or item.ko_text,
         # 밑줄(___)이 한글 해석의 어느 부분인지 명시 — 혼동 방지 (2026-07-14 피드백)
         "blank_ko": item.ko_text,
-        "template": item.pattern_template or item.en_text,
+        # 고정부는 완성된 문장으로 표시, 조립 자리만 ___
+        "template": display,
         "chips": chips,
         "context": None,
     }
