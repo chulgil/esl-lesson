@@ -3,7 +3,7 @@
 스펙: .harness/spec/2026-07-30-library-exam.md
 """
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models import (
     Content,
@@ -347,6 +347,12 @@ async def test_submit_validations(client, admin_client, db_session):
         json={"answers": [0, 1, 2, 3, 4]},
     )
     assert bad_range.status_code == 422
+    # 음수 인덱스도 범위 밖 (스펙 §5 "0..3" — test critic 지적 반영)
+    bad_negative = await client.post(
+        f"/api/exams/{exam_id}/attempts/{attempt_id}/submit",
+        json={"answers": [0, 1, 2, 3, -1]},
+    )
+    assert bad_negative.status_code == 422
 
     # 정상 제출 후 중복 → 409
     key = await answer_key(db_session, exam_id)
@@ -443,6 +449,14 @@ async def test_rankings_best_tiebreak_and_fallback(client, admin_client, db_sess
     await attempt_as(fast, wrong_two)
     await attempt_as(fast, key)
     await attempt_as(plain, wrong_two)
+
+    # 시나리오 2 "이력 전부 보존" — fast 의 재응시 후 attempt 2건 존재 (critic 지적 반영)
+    fast_attempts = (
+        await db_session.execute(
+            select(func.count(ExamAttempt.id)).where(ExamAttempt.user_id == fast.id)
+        )
+    ).scalar_one()
+    assert fast_attempts == 2
 
     rankings = (await client.get(f"/api/exams/{exam_id}/rankings")).json()
     rows = rankings["items"]
