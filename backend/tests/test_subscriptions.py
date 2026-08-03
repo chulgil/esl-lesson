@@ -212,7 +212,7 @@ async def test_resubscribe_restores_fsrs_state(client, db_session):
 
 async def test_stats_levels_exclude_unsubscribed_cards(client, db_session):
     """컬렉션(레벨) 분자도 가시성 규칙 — 빼면 카드 수·분모가 함께 빠진다."""
-    from app.models import ItemOccurrence
+    from app.models import ItemOccurrence, ReviewCard
 
     await login_as(client, db_session, "a@example.com")
     items = await seed_items(db_session, count=1)
@@ -222,6 +222,12 @@ async def test_stats_levels_exclude_unsubscribed_cards(client, db_session):
         )
     ).scalar_one()
     assert (await client.post("/api/cards", json={"item_id": items[0].id})).status_code == 200
+    # 컬렉션 분자는 '한 번이라도 푼 카드' — 담기만 한 카드는 안 세므로 학습 이력을 만든다
+    card = (
+        await db_session.execute(select(ReviewCard).where(ReviewCard.item_id == items[0].id))
+    ).scalar_one()
+    card.reps = 1
+    await db_session.commit()
 
     def word_level(stats):
         return next(lv for lv in stats["levels"] if lv["item_type"] == "word")
@@ -399,9 +405,7 @@ async def test_private_promotion_preserves_subscriber_visibility(client, db_sess
     assert (await visible_count()).scalar_one() == 2
     subs = (
         await db_session.execute(
-            select(func.count(ContentSubscription.id)).where(
-                ContentSubscription.user_id == user.id
-            )
+            select(func.count(ContentSubscription.id)).where(ContentSubscription.user_id == user.id)
         )
     ).scalar_one()
     assert subs >= 1

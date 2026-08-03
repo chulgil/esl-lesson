@@ -22,9 +22,9 @@ from app.services.visibility import visible_item_clause
 KST = timezone(timedelta(hours=9))
 MAX_TRIES = 6
 MIN_LEN, MAX_LEN = 4, 8
-# 뜻 힌트는 처음부터 opt-in(버튼) — 능동 회상 학습에 부합 (2026-07-16 기획 확정).
-# 첫 글자 힌트만 시도 횟수로 잠금 — 정답 단어는 종료 전 비공개 유지.
-FIRST_LETTER_AFTER_TRIES = 4
+# 힌트 정책 (2026-08-03 기획 변경): 첫 글자는 **처음부터** 공개, 뜻은 opt-in 버튼.
+# 워들과 달리 후보가 "내가 담은 단어" 전체라 첫 수를 세울 근거가 없었다.
+# 정답 단어 자체는 종료 전 비공개 유지.
 
 
 def today_kst() -> date:

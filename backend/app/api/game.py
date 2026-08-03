@@ -361,13 +361,11 @@ def _puzzle_payload(answer: str, ko: str, guesses: list[str], solved: bool) -> d
         # 정답·뜻은 끝났을 때만 공개 — 끝나면 학습 모먼트로 뜻까지 보여준다
         "answer": answer if finished else None,
         "answer_ko": ko if finished else None,
-        # 뜻 힌트는 처음부터 opt-in(버튼), 첫 글자는 4번 시도부터 (정답 단어는 비공개 유지)
+        # 뜻 힌트는 opt-in(버튼), 첫 글자는 **처음부터** 공개 (2026-08-03 기획 변경 —
+        # 후보가 "내가 담은 단어" 전체라 워들과 달리 첫 수를 세울 근거가 없었다).
+        # 정답 단어 자체는 종료 전까지 비공개 유지.
         "hint_ko": ko,
-        "hint_first": (
-            answer[0]
-            if (finished or len(guesses) >= daily_puzzle.FIRST_LETTER_AFTER_TRIES)
-            else None
-        ),
+        "hint_first": answer[0],
     }
 
 

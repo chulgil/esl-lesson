@@ -100,16 +100,8 @@ function Dashboard({ me }: { me: Me }) {
                     stats.daily_goal - stats.reviews_today,
                   )}개만)`}
         </Brick>
-        <Brick color="blue" href="/library">
-          콘텐츠 라이브러리
-        </Brick>
-        {/* "내 콘텐츠" 제거 (2026-07-28) — 유튜브 등록은 관리자 전용 사양 */}
-        <Brick color="yellow" href="/chat">
-          채팅
-        </Brick>
-        <Brick color="red" href="/game">
-          게임
-        </Brick>
+        {/* 라이브러리·채팅·게임 브릭 제거 (2026-08-03) — 전역 5탭에 이미 있어
+            홈에서 중복 노출됐다. 홈의 1차 행동은 "오늘의 학습" 하나로 좁힌다 */}
       </div>
 
       {/* 오늘의 목표 — 밀린 전체가 아닌 목표 기준 진행 (포기 방지 기획 2026-07-15) */}
@@ -129,8 +121,8 @@ function Dashboard({ me }: { me: Me }) {
         <div>
           <p className="text-sm font-bold">내 카드 컬렉션</p>
           <p className="mb-2 text-xs opacity-60">
-            지금까지 만난 카드 / 만날 수 있는 전체 — 오늘 학습과는 무관하게
-            쌓여요
+            한 번이라도 학습한 카드 / 내가 담은 콘텐츠의 전체 — 오늘 목표와는
+            무관하게 쌓여요
           </p>
           <div className="flex flex-wrap items-end gap-6">
             {stats.levels.map((lv) => {
@@ -153,7 +145,7 @@ function Dashboard({ me }: { me: Me }) {
                 <div
                   key={lv.level}
                   className="flex flex-col items-center gap-1"
-                  title={`${TYPE_LABELS[lv.item_type] ?? lv.item_type} 카드 ${lv.available_items}개 중 ${lv.cards}개를 이미 만났어요`}
+                  title={`${TYPE_LABELS[lv.item_type] ?? lv.item_type} 카드 ${lv.available_items}개 중 ${lv.cards}개를 학습했어요 (한 번이라도 푼 카드)`}
                 >
                   <div className="flex flex-col-reverse gap-0.5" aria-hidden>
                     {Array.from({ length: COLLECTION_SLOTS }, (_, i) => (

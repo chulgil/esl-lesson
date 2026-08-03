@@ -568,7 +568,9 @@ async def get_stats(
         )
     ).scalar_one()
 
-    # 분자 = 학습 중 카드 (suspended 제외 — 사용자가 뺀 항목은 세지 않는다)
+    # 분자 = 한 번이라도 푼 카드 (reps > 0). 큐가 도입만 한 새 카드를 세면 담은
+    # 콘텐츠를 꺼내보는 순간 영구 100% 가 되어 "만난 카드" 지표가 죽는다 (2026-08-03).
+    # suspended 제외 — 사용자가 뺀 항목은 세지 않는다.
     # 구독 해제 항목도 제외 — 분모(visible)와 같은 규칙이라 진행률이 100%를 넘지 않는다
     level_rows = (
         await db.execute(
@@ -577,6 +579,7 @@ async def get_stats(
             .where(
                 ReviewCard.user_id == user.id,
                 ReviewCard.suspended.is_(False),
+                ReviewCard.reps > 0,
                 visible_item_clause(user.id),
             )
             .group_by(LearningItem.item_type)
@@ -594,11 +597,13 @@ async def get_stats(
     ).all()
     available_by_type = dict(available_rows)
 
+    # 잔디는 GitHub 식 1년(53주) 뷰 — 화면이 요구하는 만큼 내려준다 (2026-08-03).
+    # 여유 400일: 53주 그리드가 오늘이 속한 주의 토요일까지 채워지므로 371일 + 마진
     recent = (
         await db.execute(
             select(ReviewLog.reviewed_at).where(
                 ReviewLog.user_id == user.id,
-                ReviewLog.reviewed_at >= now - timedelta(days=60),
+                ReviewLog.reviewed_at >= now - timedelta(days=400),
             )
         )
     ).scalars()

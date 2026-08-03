@@ -54,7 +54,8 @@ async def test_puzzle_api_flow(client, db_session):
     length = state["length"]
     assert state["answer"] is None  # 진행 중엔 정답 비공개
     assert state["hint_ko"].endswith("뜻")  # 뜻 힌트는 처음부터 (열람은 UI 버튼 opt-in)
-    assert state["hint_first"] is None  # 첫 글자 힌트는 4번 시도부터
+    # 첫 글자는 처음부터 공개 — 후보가 "내가 담은 단어" 전체라 첫 수를 세울 근거가 필요
+    assert state["hint_first"] is not None and len(state["hint_first"]) == 1
 
     # 길이 불일치 → 422
     bad = await client.post("/api/game/puzzle/guess", json={"word": "a" * (length + 1)})
@@ -62,15 +63,12 @@ async def test_puzzle_api_flow(client, db_session):
 
     # 오답 5번 + 마지막 오답 → 종료 + 정답 공개
     wrong = "z" * length
-    for n in range(6):
+    for _n in range(6):
         res = await client.post("/api/game/puzzle/guess", json={"word": wrong})
         assert res.status_code == 200
         body = res.json()
         assert body["hint_ko"] is not None
-        # 첫 글자 힌트는 4번 시도부터 열림 (정답 단어는 여전히 비공개)
-        assert (body["hint_first"] is not None) == (
-            body["finished"] or n + 1 >= dp.FIRST_LETTER_AFTER_TRIES
-        )
+        assert body["hint_first"] is not None  # 첫 글자는 내내 공개
         if not body["finished"]:
             assert body["answer"] is None
     final = res.json()

@@ -37,7 +37,6 @@ interface PracticeState {
 
 const HOWTO_KEY = "esl:puzzle:howto-seen";
 const FLIP_MS = 250; // 타일당 뒤집기 스태거
-const FIRST_LETTER_AFTER = 4; // 첫 글자 힌트 해금 시도 수 (서버 게이트와 동일)
 
 const MARK_STYLE: Record<Mark, string> = {
   g: "border-brick-green bg-brick-green text-brick-label",
@@ -56,7 +55,6 @@ export default function DailyPuzzlePage() {
   const [revealIdx, setRevealIdx] = useState<number | null>(null);
   const [shake, setShake] = useState(0);
   const [hintOpen, setHintOpen] = useState(false);
-  const [firstOpen, setFirstOpen] = useState(false);
   const [howtoOpen, setHowtoOpen] = useState(false);
   const [practice, setPractice] = useState<PracticeState | null>(null);
 
@@ -78,13 +76,9 @@ export default function DailyPuzzlePage() {
   const playing = practice
     ? !practice.finished
     : Boolean(state?.available && !state?.finished);
-  // 뜻 힌트는 처음부터 opt-in, 첫 글자 힌트는 4번 시도부터 (기획 확정 2026-07-16)
+  // 첫 글자는 처음부터 공개(첫 수를 세울 근거), 뜻은 opt-in 버튼 (2026-08-03 변경)
   const hintKo = practice ? practice.hintKo : state?.hint_ko;
-  const hintFirst = practice
-    ? practice.guesses.length >= FIRST_LETTER_AFTER
-      ? practice.hintFirst
-      : null
-    : state?.hint_first;
+  const hintFirst = practice ? practice.hintFirst : state?.hint_first;
 
   useEffect(() => {
     fetch("/api/game/puzzle", { credentials: "same-origin" })
@@ -213,7 +207,6 @@ export default function DailyPuzzlePage() {
         setInput("");
         setRevealIdx(null);
         setHintOpen(false);
-        setFirstOpen(false);
       } else {
         setNote("연습 단어를 불러오지 못했어요 — 잠시 후 다시");
       }
@@ -228,7 +221,6 @@ export default function DailyPuzzlePage() {
     setInput("");
     setRevealIdx(null);
     setHintOpen(false);
-    setFirstOpen(false);
     setNote(null);
   }
 
@@ -400,9 +392,14 @@ export default function DailyPuzzlePage() {
 
           {note && <p className="text-sm font-bold text-brick-red">{note}</p>}
 
-          {/* 힌트 사다리 — 뜻은 처음부터 opt-in, 첫 글자는 4번 시도부터 */}
+          {/* 힌트 — 첫 글자는 상시 공개, 뜻은 opt-in 버튼 */}
           {playing && (
             <div className="flex flex-wrap items-center justify-center gap-2">
+              {hintFirst && (
+                <p className="flex min-h-11 items-center rounded-full border-2 border-brick-yellow/60 bg-brick-yellow/20 px-4 text-sm font-bold">
+                  첫 글자: <span className="ml-1 uppercase">{hintFirst}</span>
+                </p>
+              )}
               {hintKo &&
                 (hintOpen ? (
                   <p className="word-pop flex min-h-11 items-center rounded-full border-2 border-brick-blue/40 bg-brick-blue/10 px-4 text-sm font-bold">
@@ -417,25 +414,6 @@ export default function DailyPuzzlePage() {
                     뜻 힌트 열기
                   </button>
                 ))}
-              {hintFirst ? (
-                firstOpen ? (
-                  <p className="word-pop flex min-h-11 items-center rounded-full border-2 border-brick-yellow/60 bg-brick-yellow/20 px-4 text-sm font-bold">
-                    첫 글자: <span className="uppercase">{hintFirst}</span>
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setFirstOpen(true)}
-                    className="min-h-11 rounded-full border-2 border-brick-yellow bg-white px-4 text-sm font-bold transition hover:-translate-y-0.5"
-                  >
-                    첫 글자 힌트 열기
-                  </button>
-                )
-              ) : (
-                <p className="text-xs opacity-50">
-                  {FIRST_LETTER_AFTER}번 시도하면 첫 글자 힌트도 열려요
-                </p>
-              )}
             </div>
           )}
 
@@ -625,9 +603,8 @@ export default function DailyPuzzlePage() {
               피드백으로 후보를 좁혀보세요.
             </p>
             <p className="mt-1 text-xs opacity-60">
-              막히면 <b>뜻 힌트</b>는 언제든, <b>첫 글자 힌트</b>는{" "}
-              {FIRST_LETTER_AFTER}번 시도 후! 새 단어는 매일 자정(한국 시간)에
-              나와요.
+              <b>첫 글자</b>는 보드 위에 처음부터 보여요. 막히면 <b>뜻 힌트</b>도
+              언제든 열 수 있어요. 새 단어는 매일 자정(한국 시간)에 나와요.
             </p>
             <div className="mt-4">
               <Brick color="green" onClick={closeHowto}>

@@ -354,9 +354,14 @@ async def test_stats_levels_use_my_visibility_not_global_approved(client, db_ses
     now = datetime.now(UTC)
     db_session.add_all(
         [
-            ReviewCard(user_id=me.id, item_id=pub[0].id, state="review", due_at=now),
+            ReviewCard(user_id=me.id, item_id=pub[0].id, state="review", due_at=now, reps=1),
             ReviewCard(
-                user_id=me.id, item_id=pub[1].id, state="review", due_at=now, suspended=True
+                user_id=me.id,
+                item_id=pub[1].id,
+                state="review",
+                due_at=now,
+                reps=1,
+                suspended=True,
             ),
             ReviewCard(user_id=me.id, item_id=mine[0].id, state="new", due_at=now),
         ]
@@ -366,7 +371,35 @@ async def test_stats_levels_use_my_visibility_not_global_approved(client, db_ses
     stats = (await client.get("/api/study/stats")).json()
     word = next(lv for lv in stats["levels"] if lv["item_type"] == "word")
     assert word["available_items"] == 3  # 공용 2 + 내 개인 1 (타인 개인 제외)
-    assert word["cards"] == 2  # suspended 제외
+    assert word["cards"] == 1  # suspended 제외 + 아직 안 푼 새 카드(reps=0) 제외
+
+
+async def test_collection_counts_only_answered_cards(client, db_session):
+    """컬렉션 분자 = 한 번이라도 푼 카드. 큐에 도입만 된 새 카드는 세지 않는다.
+
+    (2026-08-03 — 도입만으로 세면 담은 콘텐츠를 큐에 다 꺼내는 순간 영구 100%)
+    """
+
+    def word_level(stats):
+        return next(lv for lv in stats["levels"] if lv["item_type"] == "word")
+
+    await login(client, db_session)
+    await seed_items(db_session, count=2)
+    queue = (await client.get("/api/study/queue")).json()  # 카드 2장 도입
+    before = word_level((await client.get("/api/study/stats")).json())
+    assert before["available_items"] == 2
+    assert before["cards"] == 0  # 아직 아무것도 안 풀었다
+
+    await client.post(
+        "/api/study/answer",
+        json={
+            "card_id": queue["questions"][0]["card_id"],
+            "quiz_mode": "choice_ko2en",
+            "answer": "wrong",
+        },
+    )
+    after = word_level((await client.get("/api/study/stats")).json())
+    assert after["cards"] == 1  # 오답이어도 "만난" 카드
 
 
 async def test_reviews_today_uses_kst_day_boundary(client, db_session):
