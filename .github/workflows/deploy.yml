@@ -39,7 +39,7 @@ jobs:
         with:
           context: backend
           platforms: linux/amd64
-          tags: eng-lesson_api:ci
+          tags: esl-lesson_api:ci
           push: false
           load: true
           cache-from: type=gha,scope=api
@@ -50,7 +50,7 @@ jobs:
         with:
           context: frontend
           platforms: linux/amd64
-          tags: eng-lesson_web:ci
+          tags: esl-lesson_web:ci
           push: false
           load: true
           build-args: |
@@ -59,7 +59,7 @@ jobs:
           cache-to: type=gha,scope=web,mode=max
 
       - name: Package images
-        run: docker save eng-lesson_api:ci eng-lesson_web:ci | gzip -1 > images.tar.gz
+        run: docker save esl-lesson_api:ci esl-lesson_web:ci | gzip -1 > images.tar.gz
 
       - name: Upload images to server
         uses: appleboy/scp-action@v1
@@ -68,7 +68,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           source: images.tar.gz
-          target: ~/apps/eng-lesson/.deploy/
+          target: ~/apps/esl-lesson/.deploy/
 
       - name: SSH deploy (red-green)
         uses: appleboy/ssh-action@v1
@@ -79,7 +79,7 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
-            cd ~/apps/eng-lesson
+            cd ~/apps/esl-lesson
             git fetch origin
             git reset --hard ${{ github.event.workflow_run.head_sha }}
             bash scripts/deploy.sh
@@ -108,7 +108,7 @@ jobs:
           command_timeout: 10m
           script: |
             set -e
-            cd ~/apps/eng-lesson
+            cd ~/apps/esl-lesson
             bash scripts/deploy.sh --rollback
             for i in $(seq 1 12); do
               sleep 10

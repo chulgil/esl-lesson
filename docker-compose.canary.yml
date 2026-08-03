@@ -7,7 +7,7 @@ version: "3.7"
 
 services:
   api-canary:
-    image: eng-lesson_api
+    image: esl-lesson_api
     container_name: englesson-api-canary
     restart: "no"
     env_file: .env.api
@@ -18,7 +18,7 @@ services:
       traefik.enable: "false"
 
   web-canary:
-    image: eng-lesson_web
+    image: esl-lesson_web
     container_name: englesson-web-canary
     restart: "no"
     env_file: .env.web

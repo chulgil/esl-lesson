@@ -19,13 +19,13 @@ export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
 
 rollback() {
   # :prev = 직전 배포에서 실제 서빙하던 이미지 (capture_rollback_point 가 기록)
-  if ! docker image inspect eng-lesson_api:prev >/dev/null 2>&1; then
+  if ! docker image inspect esl-lesson_api:prev >/dev/null 2>&1; then
     echo "[rollback] :prev 태그 없음 — 첫 배포이거나 캡처 전 실패. 수동 복구 필요"
     return 1
   fi
   echo "[rollback] :prev 이미지로 복귀"
-  docker tag eng-lesson_api:prev eng-lesson_api:latest
-  docker tag eng-lesson_web:prev eng-lesson_web:latest
+  docker tag esl-lesson_api:prev esl-lesson_api:latest
+  docker tag esl-lesson_web:prev esl-lesson_web:latest
   $PROD up -d --force-recreate
   echo "[rollback] 완료 — 공개 헬스체크로 확인 필요"
 }
@@ -47,8 +47,8 @@ echo "== 2. 롤백 포인트 캡처 =="
 for svc in api web; do
   img=$(docker inspect "englesson-$svc" --format '{{.Image}}' 2>/dev/null || true)
   if [ -n "$img" ]; then
-    docker tag "$img" "eng-lesson_$svc:prev"
-    echo "  eng-lesson_$svc:prev <- $img"
+    docker tag "$img" "esl-lesson_$svc:prev"
+    echo "  esl-lesson_$svc:prev <- $img"
   else
     echo "  englesson-$svc 미실행 — :prev 캡처 생략 (첫 배포)"
   fi
@@ -58,8 +58,8 @@ IMAGES_TAR=".deploy/images.tar.gz"
 if [ -f "$IMAGES_TAR" ]; then
   echo "== 3. 러너 빌드 이미지 load (서버 무부하 — 2026-07-28 빌드 질식 해소) =="
   gunzip -c "$IMAGES_TAR" | docker load
-  docker tag eng-lesson_api:ci eng-lesson_api:latest
-  docker tag eng-lesson_web:ci eng-lesson_web:latest
+  docker tag esl-lesson_api:ci esl-lesson_api:latest
+  docker tag esl-lesson_web:ci esl-lesson_web:latest
   rm -f "$IMAGES_TAR"
   # 러너가 CI 통과 SHA 로 빌드했고 서버도 같은 SHA 로 리셋됨 — 신선도 게이트 불필요
 else
@@ -75,11 +75,11 @@ else
       $PROD build --no-cache "$svc"
     fi
   }
-  build_fresh api eng-lesson_api
+  build_fresh api esl-lesson_api
   GIT_SHA=$(git rev-parse HEAD)
   export GIT_SHA
   $PROD build web
-  IMG_SHA=$(docker run --rm --entrypoint cat eng-lesson_web /app/BUILD_SHA 2>/dev/null || echo none)
+  IMG_SHA=$(docker run --rm --entrypoint cat esl-lesson_web /app/BUILD_SHA 2>/dev/null || echo none)
   if [ "$IMG_SHA" != "$GIT_SHA" ]; then
     echo "[!] stale web image ($IMG_SHA != $GIT_SHA) - rebuilding --no-cache"
     $PROD build --no-cache web
@@ -115,6 +115,10 @@ echo "== 5. DB 마이그레이션 (하위호환 규칙 — deployment.md) =="
 $PROD run --rm api uv run --no-dev alembic upgrade head
 
 echo "== 6. 승격 — 검증된 이미지로 교체 =="
+# 1회 이행(2026-08-03 eng-lesson → esl-lesson): compose 프로젝트명이 디렉토리에서
+# 오므로 옛 프로젝트(eng-lesson)가 소유한 동명 컨테이너가 남아 있으면 새 프로젝트의
+# up 이 이름 충돌로 실패한다. force-recreate 가 어차피 지우는 대상이라 무해.
+docker rm -f englesson-api englesson-web >/dev/null 2>&1 || true
 # up -d 가 이미지 갱신에도 재생성 안 하는 v1 버그 → 항상 force-recreate
 $PROD up -d --force-recreate
 docker image prune -f

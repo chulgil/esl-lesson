@@ -2,7 +2,7 @@
 
 > 최종 검증: 2026-07-30 (코드 대조 완료)
 
-eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 17을 사용하는 2-컨테이너 웹 서비스다. codenavi 서버의 기존 Traefik 1.7 리버스 프록시 뒤에 배포된다.
+esl-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 17을 사용하는 2-컨테이너 웹 서비스다. codenavi 서버의 기존 Traefik 1.7 리버스 프록시 뒤에 배포된다.
 
 ## 시스템 구성도
 
@@ -100,7 +100,7 @@ eng-lesson은 프론트엔드(Next.js) + 백엔드(FastAPI) + 기존 PostgreSQL 
 ## 모노레포 구조
 
 ```
-eng-lesson/
+esl-lesson/
 ├── frontend/                  # Next.js 15 (TypeScript)
 │   ├── src/app/               # App Router (서비스 페이지)
 │   ├── src/app/admin/         # 백오피스 라우트

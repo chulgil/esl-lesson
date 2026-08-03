@@ -13,7 +13,7 @@ git push(main) → CI → GitHub Actions 러너에서 이미지 빌드 → scp �
 | 컨테이너 런타임 | Docker 20.10 + docker-compose 1.29 |
 | 리버스 프록시 | Traefik 1.7 컨테이너 (80/443), 도커 네트워크 `traefiknet`, 라벨 기반 라우팅 |
 | DB | `postgres` 컨테이너 (pgvector/pg17), 5432 |
-| 배포 위치 | `~/apps/eng-lesson` (git clone) |
+| 배포 위치 | `~/apps/esl-lesson` (git clone) |
 
 기존 참조 사례: `~/apps/lesson-app-backend` → traefik 라벨 `Host:lesson.chulgil.me`로 서비스 중.
 
@@ -121,8 +121,8 @@ backend:  uv sync → ruff check → pytest
 ```
 push(main) → CI 성공 → [deploy.yml]
   A. (러너) checkout @ CI 통과 SHA → docker buildx (linux/amd64)
-     api=eng-lesson_api:ci, web=eng-lesson_web:ci(GIT_SHA 마커), GHA 캐시
-  B. (러너) docker save|gzip → scp 로 서버 ~/apps/eng-lesson/.deploy/images.tar.gz
+     api=esl-lesson_api:ci, web=esl-lesson_web:ci(GIT_SHA 마커), GHA 캐시
+  B. (러너) docker save|gzip → scp 로 서버 ~/apps/esl-lesson/.deploy/images.tar.gz
   C. (서버 SSH) git reset --hard <빌드된 SHA> → bash scripts/deploy.sh
      1. 디스크 정리 (image prune + builder prune --keep-storage 2GB)
      2. 롤백 포인트 캡처 — 서빙 중 컨테이너의 이미지 ID를 :prev 로 태그
@@ -147,7 +147,7 @@ GitHub Secrets 등록 목록: `DEPLOY_HOST`(108.61.162.25), `DEPLOY_USER`(admin)
 ## 배포 순서 (최초 1회 수동 준비)
 
 1. DNS: esl / esladmin A 레코드 → 108.61.162.25
-2. 서버: `git clone git@github.com:chulgil/eng-lesson.git ~/apps/eng-lesson`
+2. 서버: `git clone git@github.com:chulgil/esl-lesson.git ~/apps/esl-lesson`
 3. 서버: postgres에 롤/DB 생성 ([database.md](database.md) 초기화 SQL)
 4. 서버: `.env.api`, `.env.web` 작성
 5. Google Cloud Console: OAuth 클라이언트 생성, redirect URI 등록
@@ -158,7 +158,7 @@ GitHub Secrets 등록 목록: `DEPLOY_HOST`(108.61.162.25), `DEPLOY_USER`(admin)
 
 - `GET /api/health`: DB ping 포함. 카나리(내부)와 배포 워크플로 마지막(공개) 두 번 검증.
 - **자동 롤백**: 공개 헬스체크 실패 시 워크플로가 `scripts/deploy.sh --rollback` 을 호출 — `:prev` 이미지 재태그 + force-recreate + 재검증. `:prev` = 직전 배포에서 실제 서빙하던 이미지 ID (배포마다 빌드 전에 캡처).
-- **수동 롤백**: `ssh codenavi → cd ~/apps/eng-lesson && bash scripts/deploy.sh --rollback`. 재빌드 없이 즉시 복귀라 `git reset && build` 방식보다 빠르고 OOM 리스크 없음.
+- **수동 롤백**: `ssh codenavi → cd ~/apps/esl-lesson && bash scripts/deploy.sh --rollback`. 재빌드 없이 즉시 복귀라 `git reset && build` 방식보다 빠르고 OOM 리스크 없음.
 - **마이그레이션 하위호환 규칙(필수)**: alembic 은 구버전이 아직 서빙 중일 때(승격 전) 적용되고, 롤백 시에도 스키마는 남는다 — **컬럼/테이블 제거·rename 은 "코드에서 참조 제거 배포 → 다음 배포에서 스키마 제거" 2단계**로. 추가(add column nullable/default)는 자유. ([database.md](database.md) 파괴적 변경 금지 정책과 동일 축)
 - 로그: `docker logs -f englesson-api` / `englesson-web`. 카나리 실패 로그는 액션 로그에 tail 50 출력됨.
 

@@ -1,4 +1,4 @@
-# eng-lesson
+# esl-lesson
 
 유튜브 스크립트 기반 영어 학습 웹 서비스. 유튜브 영상의 영어/한글 스크립트에서 단어·숙어·패턴·문장을 AI로 추출하고, 망각곡선(FSRS) 기반 복습 스케줄로 학습한다. 듀오링고처럼 가볍게, 안키처럼 과학적으로.
 
@@ -107,7 +107,7 @@
 ## 저장소 구조 (구현 시)
 
 ```
-eng-lesson/
+esl-lesson/
 ├── frontend/          # Next.js 15 앱 (서비스 + 백오피스)
 ├── backend/           # FastAPI 앱 (REST API + WebSocket + 추출 워커)
 ├── docs/              # 설계/스펙 문서 (본 문서 인덱스 참조)

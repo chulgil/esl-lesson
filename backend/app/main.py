@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
     await stop_workers()
 
 
-app = FastAPI(title="eng-lesson API", docs_url=None, redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="esl-lesson API", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(me_router, prefix="/api")
