@@ -41,6 +41,9 @@ export default function HomePage() {
   );
 }
 
+// 컬렉션 막대 칸 수 — 8칸이 전체(available_items) 100% 를 뜻한다
+const COLLECTION_SLOTS = 8;
+
 const LEVEL_COLORS = [
   "bg-brick-red",
   "bg-brick-yellow",
@@ -130,29 +133,50 @@ function Dashboard({ me }: { me: Me }) {
             쌓여요
           </p>
           <div className="flex flex-wrap items-end gap-6">
-            {stats.levels.map((lv) => (
-              <div
-                key={lv.level}
-                className="flex flex-col items-center gap-1"
-                title={`${TYPE_LABELS[lv.item_type] ?? lv.item_type} 카드 ${lv.available_items}개 중 ${lv.cards}개를 이미 만났어요`}
-              >
-                <div className="flex flex-col-reverse gap-0.5" aria-hidden>
-                  {Array.from({ length: Math.min(8, lv.cards) }, (_, i) => (
-                    <span
-                      key={i}
-                      className={`h-2.5 w-8 rounded-sm ${LEVEL_COLORS[lv.level - 1]}`}
-                    />
-                  ))}
-                  {lv.cards === 0 && (
-                    <span className="h-2.5 w-8 rounded-sm bg-ink/10" />
-                  )}
+            {stats.levels.map((lv) => {
+              // 8칸 = 전체(available_items). 칸 수를 카드 수로 세면 8개 이상은
+              // 전부 꽉 찬 막대가 되어 진행도를 못 읽는다 (2026-08-03 수정)
+              const ratio =
+                lv.available_items > 0 ? lv.cards / lv.available_items : 0;
+              const filled =
+                lv.cards === 0
+                  ? 0
+                  : Math.max(
+                      1,
+                      Math.min(
+                        COLLECTION_SLOTS,
+                        Math.round(ratio * COLLECTION_SLOTS),
+                      ),
+                    );
+              const percent = Math.round(ratio * 100);
+              return (
+                <div
+                  key={lv.level}
+                  className="flex flex-col items-center gap-1"
+                  title={`${TYPE_LABELS[lv.item_type] ?? lv.item_type} 카드 ${lv.available_items}개 중 ${lv.cards}개를 이미 만났어요`}
+                >
+                  <div className="flex flex-col-reverse gap-0.5" aria-hidden>
+                    {Array.from({ length: COLLECTION_SLOTS }, (_, i) => (
+                      <span
+                        key={i}
+                        className={`h-2.5 w-8 rounded-sm ${
+                          i < filled ? LEVEL_COLORS[lv.level - 1] : "bg-ink/10"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs opacity-60">
+                    {TYPE_LABELS[lv.item_type] ?? `레벨 ${lv.level}`} ·{" "}
+                    {lv.cards}/{lv.available_items}
+                    {lv.cards > 0 && (
+                      <span className="ml-1">
+                        ({percent === 0 ? "1% 미만" : `${percent}%`})
+                      </span>
+                    )}
+                  </p>
                 </div>
-                <p className="text-xs opacity-60">
-                  {TYPE_LABELS[lv.item_type] ?? `레벨 ${lv.level}`} · {lv.cards}
-                  /{lv.available_items}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
