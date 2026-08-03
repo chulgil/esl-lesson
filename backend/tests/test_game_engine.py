@@ -250,23 +250,66 @@ def test_ko2en_tap_segment_shows_english_chip():
     assert brick.en in snap["chips"]
 
 
-def test_level5_is_type_mode_with_fuzzy_grading():
-    from app.services.game.engine import input_mode_for_level
+def test_all_levels_are_tap_mode():
+    """타이핑 구간 폐지 (2026-08-03) — 전 레벨이 칩 탭. 고속 구간도 IME 없이 즐긴다."""
+    from app.services.game.engine import MAX_SPEED_LEVEL, input_mode_for_level
 
-    assert input_mode_for_level(4) == "tap"
-    assert input_mode_for_level(5) == "type"
+    assert all(input_mode_for_level(lv) == "tap" for lv in range(MAX_SPEED_LEVEL + 1))
     board = bilingual_board()
-    board.elapsed = 160.0  # 레벨 5 → type 구간
+    board.elapsed = 160.0  # 레벨 5 — 예전 타이핑 구간
     tick_until_spawn(board)
     brick = board.bricks[0]
-    assert brick.mode == "type" and brick.direction == "ko2en"
+    assert brick.mode == "tap"
     snap = board.snapshot()
-    assert snap["input_mode"] == "type"
-    assert snap["bricks"][0]["chip"] is None  # type 은 정답 미노출
-    # 유사 입력도 정답 (1글자 오차)
-    ans = brick.en
-    typo = ans[:-1] + "x" if len(ans) > 3 else ans
-    assert board.submit(typo).ok
+    assert snap["input_mode"] == "tap"
+    assert snap["bricks"][0]["chip"] == brick.answer  # 탭 대상이므로 칩 노출
+
+
+def test_ko2en_chips_offer_multiple_english_options():
+    """한→영 구간에 영어 칩이 1개뿐이면 고를 게 없어 학습 효과가 없다 (2026-08-03 보고).
+
+    구간 전환 직후엔 이전 en2ko 브릭(한글 칩)이 남아 칩 총량이 4를 넘는데,
+    그 탓에 영어 칩 보충이 건너뛰어져 정답 1개만 노출됐다.
+    """
+    from app.services.game.engine import build_chips
+
+    chips = build_chips(["뜻01", "뜻02", "뜻03"], ["apple"])
+    en_chips = [c for c in chips if c.isascii()]
+    ko_chips = [c for c in chips if not c.isascii()]
+    assert len(en_chips) >= 4, f"영어 선택지가 부족: {en_chips}"
+    assert len(ko_chips) >= 4, f"한글 선택지가 부족: {ko_chips}"
+    assert "apple" in chips
+
+
+def test_ko2en_segment_snapshot_has_four_english_chips():
+    board = bilingual_board()
+    board.elapsed = 65.0  # 레벨 2 → ko2en, tap
+    tick_until_spawn(board)
+    snap = board.snapshot()
+    en_chips = [c for c in snap["chips"] if c.isascii()]
+    assert len(en_chips) >= 4
+    assert board.bricks[0].en in en_chips
+
+
+def test_segment_switch_keeps_both_languages_choosable():
+    """구간 전환 직후 — 남은 한글 칩과 무관하게 영어 칩도 4개 이상 (실제 신고 시나리오)."""
+    board = bilingual_board()
+    board.elapsed = 30.0  # 레벨 1 → en2ko
+    for _ in range(3):
+        tick_until_spawn(board)
+        board.bricks[-1].y = 0.0  # 아직 살아있는 en2ko 브릭 유지
+        board.tick(0.1)
+    board.elapsed = 65.0  # 레벨 2 → ko2en 구간 진입 (이전 브릭 잔존)
+    before = len(board.bricks)
+    while len(board.bricks) == before:
+        board.tick(0.1)
+    snap = board.snapshot()
+    assert snap["direction"] == "ko2en"
+    ko_chips = [c for c in snap["chips"] if not c.isascii()]
+    en_chips = [c for c in snap["chips"] if c.isascii()]
+    assert len(ko_chips) >= 4 and len(en_chips) >= 4, snap["chips"]
+    ko2en_brick = next(b for b in board.bricks if b.direction == "ko2en")
+    assert ko2en_brick.en in en_chips
 
 
 def test_en2ko_snapshot_reveals_ko_chips():

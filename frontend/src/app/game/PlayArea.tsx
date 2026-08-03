@@ -40,16 +40,12 @@ export function PlayArea({
   op,
   elapsed,
   opponentName,
-  input,
-  inputRef,
   disabled,
   hint,
   missSignal,
   itemToast,
   garbageTip,
   boardTheme,
-  onInput,
-  onSubmit,
   onTap,
   onUseItem,
 }: {
@@ -57,16 +53,12 @@ export function PlayArea({
   op: BoardState | null;
   elapsed: number;
   opponentName: string;
-  input: string;
-  inputRef: React.RefObject<HTMLInputElement | null>;
   disabled: boolean;
   hint: string | null;
   missSignal: number;
   itemToast: string | null;
   garbageTip: boolean;
   boardTheme: BoardTheme;
-  onInput: (v: string) => void;
-  onSubmit: () => void;
   onTap: (chip: string) => void;
   onUseItem: (item: string) => void;
 }) {
@@ -82,13 +74,9 @@ export function PlayArea({
     return () => clearTimeout(t);
   }, [missSignal]);
 
-  // 입력 방식: 칩 있는 브릭(tap) / 칩 없는 일반 브릭(type). 구간 전환 시 공존 가능.
+  // 입력은 칩 탭 전용 — 타이핑 구간 폐지 (2026-08-03). 칩 없는 브릭은 garbage 뿐.
   const hasTapBricks = (me?.bricks ?? []).some((b) => !b.garbage && b.chip);
-  const hasTypeBricks = (me?.bricks ?? []).some(
-    (b) => !b.garbage && !b.item && !b.chip,
-  );
   const direction = me?.direction ?? "en2ko";
-  const inputMode = me?.input_mode ?? "tap";
 
   const itemBar = (
     <ItemBar
@@ -96,25 +84,6 @@ export function PlayArea({
       disabled={disabled}
       onUse={onUseItem}
       shield={me?.shield ?? 0}
-    />
-  );
-
-  const typeBox = (
-    <input
-      ref={inputRef}
-      value={input}
-      onChange={(e) => onInput(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") onSubmit();
-      }}
-      disabled={disabled}
-      placeholder="영어 단어 입력 후 Enter"
-      autoComplete="off"
-      autoCapitalize="off"
-      autoCorrect="off"
-      spellCheck={false}
-      enterKeyHint="send"
-      className="w-full rounded-lg border-2 border-ink/30 bg-white px-4 py-3 text-center text-xl font-bold shadow-sm focus:border-brick-blue focus:outline-none"
     />
   );
 
@@ -138,7 +107,7 @@ export function PlayArea({
     </div>
   );
 
-  // 입력 영역: 칩(tap) 브릭 있으면 칩, 타이핑(type) 브릭 있으면 입력. 공존 시 둘 다.
+  // 입력 영역: 보드에 남은 브릭들의 정답 칩 (오답 칩 포함) — 탭으로만 클리어
   const interact = (
     <div className={`flex flex-col gap-2 ${missFlash ? "miss-shake" : ""}`}>
       {missFlash && (
@@ -166,8 +135,6 @@ export function PlayArea({
         </p>
       )}
       {hasTapBricks && tapRow}
-      {hasTypeBricks && typeBox}
-      {!hasTapBricks && !hasTypeBricks && inputMode === "type" && typeBox}
     </div>
   );
 
@@ -176,7 +143,7 @@ export function PlayArea({
       <section className="flex items-start justify-center gap-8">
         <div className="flex flex-col items-center gap-3">
           <ScoreHud label="나" board={me} timeLeft={timeLeft} big />
-          <DirectionBadge direction={direction} inputMode={inputMode} />
+          <DirectionBadge direction={direction} />
           <BoardCanvas state={me} width={420} height={600} theme={boardTheme} />
           {itemBar}
           <div className="w-[440px]">{interact}</div>
@@ -227,7 +194,7 @@ export function PlayArea({
       <div className="flex items-center justify-between">
         <ScoreHud label="나" board={me} timeLeft={timeLeft} hideTime />
       </div>
-      <DirectionBadge direction={direction} inputMode={inputMode} />
+      <DirectionBadge direction={direction} />
       <div className="flex justify-center">
         <BoardCanvas state={me} width={340} height={486} theme={boardTheme} />
       </div>
@@ -240,32 +207,18 @@ export function PlayArea({
   );
 }
 
-function DirectionBadge({
-  direction,
-  inputMode,
-}: {
-  direction: "en2ko" | "ko2en";
-  inputMode: "tap" | "type";
-}) {
+function DirectionBadge({ direction }: { direction: "en2ko" | "ko2en" }) {
   const en2ko = direction === "en2ko";
-  const label =
-    inputMode === "type"
-      ? "한글 → 영어 (타이핑, 고급)"
-      : en2ko
-        ? "영어 → 한글 (뜻 탭)"
-        : "한글 → 영어 (단어 탭)";
   return (
     // "지금 뭘 해야 하는가"의 1차 신호 — text-base 로 키워 인지 우선
     <div
       className={`rounded-full px-5 py-1.5 text-base font-bold ${
-        inputMode === "type"
-          ? "bg-brick-red/15 text-brick-red"
-          : en2ko
-            ? "bg-brick-blue/15 text-brick-blue"
-            : "bg-brick-green/15 text-brick-green"
+        en2ko
+          ? "bg-brick-blue/15 text-brick-blue"
+          : "bg-brick-green/15 text-brick-green"
       }`}
     >
-      {label}
+      {en2ko ? "영어 → 한글 (뜻 탭)" : "한글 → 영어 (단어 탭)"}
     </div>
   );
 }

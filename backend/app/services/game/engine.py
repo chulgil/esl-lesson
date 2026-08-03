@@ -38,20 +38,19 @@ FREEZE_SECONDS = 3.0
 TAP_DECOY_CHIPS = 3  # en2ko 탭 오답 칩 수
 
 
-TYPE_LEVEL = 5  # 이 레벨 이상은 타이핑(영어 생산) 구간, 그 아래는 칩 탭
-
-
 def direction_for_level(level: int) -> str:
-    """레벨 구간별 방향 (섞지 않음). 타이핑 구간(5+)은 항상 ko2en(영어 생산, IME 불필요)."""
-    if level >= TYPE_LEVEL:
-        return "ko2en"
+    """레벨 구간별 방향 (섞지 않음) — 2레벨마다 en2ko ↔ ko2en 교대."""
     band = level // 2
     return "en2ko" if band % 2 == 0 else "ko2en"
 
 
 def input_mode_for_level(level: int) -> str:
-    """레벨 5+ 는 타이핑, 그 아래는 칩 탭 (2026-07-11 사용자 기획)."""
-    return "type" if level >= TYPE_LEVEL else "tap"
+    """전 레벨 칩 탭 — 타이핑 구간 폐지 (2026-08-03 사용자 기획).
+
+    낙하 게임에서 타이핑은 속도 압박 + IME 전환 부담이 겹쳐 학습보다 조작에
+    집중하게 만든다. 필드는 프로토콜 호환을 위해 남기되 값은 항상 tap.
+    """
+    return "tap"
 
 
 def _levenshtein(a: str, b: str) -> int:
@@ -409,7 +408,7 @@ class Board:
                 }
                 for b in self.bricks
             ],
-            "chips": build_chips(ko_answers, en_answers),
+            "chips": build_chips(ko_answers, en_answers, self.word_queue),
             "direction": self.direction,
             "input_mode": self.input_mode,
             "combo": self.combo,
@@ -423,24 +422,43 @@ class Board:
         }
 
 
-# 탭 오답 칩 후보 (초기 데이터 적을 때 폴백)
+# 탭 오답 칩 후보 (매치 단어 풀이 바닥났을 때 폴백)
 DECOY_KO = ["회복력 있는", "효율적인", "명백한", "우연한", "지속하다", "모호한", "확장 가능한"]
 DECOY_EN = ["resilient", "efficient", "evident", "accidental", "obscure", "sustain"]
 
+CHIP_MIN_OPTIONS = 4  # 언어군당 최소 칩 수 — 정답 1개만 뜨면 고를 게 없다
 
-def build_chips(ko_answers: list[str], en_answers: list[str]) -> list[str]:
-    """탭 칩: 보드의 정답(한/영) + (부족하면) 오답 칩. 결정적(매 틱 안 흔들림)."""
-    chips = list(dict.fromkeys([*ko_answers, *en_answers]))
+
+def _pad_chips(answers: list[str], pool: list[str], decoys: list[str]) -> list[str]:
+    """정답 칩을 매치 단어 풀 → 고정 오답 순으로 최소 개수까지 채운다 (풀 단어가 더 학습적)."""
+    chips = list(dict.fromkeys(answers))
     if not chips:
         return []
-    decoys = DECOY_KO if ko_answers and not en_answers else DECOY_EN if en_answers else DECOY_KO
-    if len(chips) < 4:
-        for d in decoys:
-            if d not in chips:
-                chips.append(d)
-            if len(chips) >= 4:
-                break
-    return sorted(chips)
+    for cand in (*pool, *decoys):
+        if len(chips) >= CHIP_MIN_OPTIONS:
+            break
+        if cand not in chips:
+            chips.append(cand)
+    return chips
+
+
+def build_chips(
+    ko_answers: list[str],
+    en_answers: list[str],
+    pool: list[tuple[int, str, str]] | None = None,
+) -> list[str]:
+    """탭 칩: 정답 언어군마다 최소 4개 보장. 결정적(매 틱 안 흔들림).
+
+    두 언어를 한 묶음으로 세면 구간 전환 직후 남은 한글 칩이 정족수를 채워
+    영어 칩이 정답 1개만 남는다 — 사실상 선택지가 없다 (2026-08-03 수정).
+    """
+    words = pool or []
+    return sorted(
+        [
+            *_pad_chips(ko_answers, [ko for _, _, ko in words], DECOY_KO),
+            *_pad_chips(en_answers, [en for _, en, _ in words], DECOY_EN),
+        ]
+    )
 
 
 def build_word_queue(

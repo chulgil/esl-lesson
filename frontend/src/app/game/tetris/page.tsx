@@ -55,7 +55,6 @@ function TetrisInner() {
   const [gameState, setGameState] = useState<StateMsg | null>(null);
   const [endResult, setEndResult] = useState<MatchEndMsg | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [input, setInput] = useState("");
   const [hint, setHint] = useState<string | null>(null);
   const [missSignal, setMissSignal] = useState(0);
   const [itemToast, setItemToast] = useState<string | null>(null);
@@ -69,7 +68,6 @@ function TetrisInner() {
   const [profile, setProfile] = useState<GameProfile | null>(null);
   const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
   const socketRef = useRef<GameSocket | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const garbageTipShown = useRef(false);
   const prevGarbageCount = useRef(0);
 
@@ -147,11 +145,7 @@ function TetrisInner() {
     };
   }, [handleMessage, joinCode]);
 
-  useEffect(() => {
-    if (phase === "playing") inputRef.current?.focus();
-  }, [phase]);
-
-  // 대전 중에는 전역 하단 탭바를 숨겨 입력바와 겹치지 않게 (집중 모드)
+  // 대전 중에는 전역 하단 탭바를 숨겨 칩 바와 겹치지 않게 (집중 모드)
   useEffect(() => {
     const active = phase === "playing" || phase === "countdown";
     document.body.classList.toggle("game-focus", active);
@@ -181,12 +175,6 @@ function TetrisInner() {
     }
     prevGarbageCount.current = count;
   }, [gameState]);
-
-  function submitWord() {
-    if (!input.trim()) return;
-    socketRef.current?.submit(input.trim());
-    setInput("");
-  }
 
   function tapChip(chip: string) {
     socketRef.current?.submit(chip);
@@ -304,16 +292,12 @@ function TetrisInner() {
           op={gameState?.op ?? null}
           elapsed={gameState?.elapsed ?? 0}
           opponentName={matchInfo?.opponent ?? "상대"}
-          input={input}
-          inputRef={inputRef}
           disabled={phase !== "playing"}
           hint={hint}
           missSignal={missSignal}
           itemToast={itemToast}
           garbageTip={garbageTip}
           boardTheme={boardTheme}
-          onInput={setInput}
-          onSubmit={submitWord}
           onTap={tapChip}
           onUseItem={useItem}
         />
@@ -370,8 +354,8 @@ function Lobby({
             떨어지면 하단 뜻 칩을 <b>탭</b>해서 제거
           </li>
           <li>
-            <b className="text-brick-green">한글 → 영어</b> 구간: 영어로{" "}
-            <b>타이핑</b> — 철자가 비슷해도 정답!
+            <b className="text-brick-green">한글 → 영어</b> 구간: 한글 뜻이
+            떨어지면 하단 영단어 칩을 <b>탭</b>해서 제거
           </li>
           <li className="opacity-70">
             시간이 지날수록 빨라지고 방향 구간이 번갈아 바뀝니다
