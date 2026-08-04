@@ -53,6 +53,22 @@ export const CHAT_LABEL_OF: Record<AppTheme, string> = {
   school: "쪽지",
 };
 
+// --- 전역 메뉴 라벨 — 테마 세계관을 5탭 전체에 적용 (2026-08-03) ------------------
+// 채팅만 테마어를 쓰고 나머지가 고정 라벨이면 위장 테마가 메뉴에서 깨진다.
+// 채팅 라벨은 CHAT_LABEL_OF 가 정본이라 여기서 중복 정의하지 않는다.
+
+export type NavKey = "home" | "study" | "library" | "game";
+
+export const NAV_LABEL_OF: Record<AppTheme, Record<NavKey, string>> = {
+  note: { home: "홈", study: "학습", library: "라이브러리", game: "게임" },
+  candy: { home: "홈", study: "학습", library: "보물창고", game: "놀이터" },
+  lego: { home: "홈", study: "학습", library: "부품함", game: "놀이터" },
+  cat: { home: "홈", study: "학습", library: "보물창고", game: "놀이터" },
+  // 위장 테마 — 업무 도구처럼 보여야 하므로 학습 냄새가 나는 단어를 쓰지 않는다
+  excel: { home: "대시보드", study: "작업", library: "문서함", game: "도구" },
+  school: { home: "교실", study: "수업", library: "교과서", game: "쉬는시간" },
+};
+
 // --- 표면(문항 카드) 스킨 — 시험지·학습 세션 공용 --------------------------------
 
 export interface SurfaceSkin {
@@ -90,8 +106,10 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     radius: "rounded-md",
     omrPanel: "rounded-lg border-2 border-ink/20 bg-white",
     omrLabel: "답안지",
-    omrCell: "rounded-md border-2 border-dashed border-ink/25 bg-white opacity-70 hover:opacity-100",
-    omrCellActive: "rounded-md border-2 border-brick-blue bg-brick-blue/15 text-brick-blue",
+    omrCell:
+      "rounded-md border-2 border-dashed border-ink/25 bg-white opacity-70 hover:opacity-100",
+    omrCellActive:
+      "rounded-md border-2 border-brick-blue bg-brick-blue/15 text-brick-blue",
     omrCellMarked: "rounded-md border-2 border-ink bg-ink text-white",
     section: "rounded-lg border-2 border-ink/15 bg-white",
     band: "border-4 border-double border-ink/50 px-3 py-2 text-center",
@@ -110,9 +128,12 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     radius: "rounded-full",
     omrPanel: "rounded-3xl border-4 border-brick-blue/25 bg-white shadow-inner",
     omrLabel: "마킹 보드",
-    omrCell: "rounded-full border-2 border-brick-blue/25 bg-white opacity-70 hover:opacity-100",
-    omrCellActive: "rounded-full border-2 border-brick-red bg-brick-red/15 text-brick-red",
-    omrCellMarked: "rounded-full border-2 border-brick-red bg-brick-red text-white",
+    omrCell:
+      "rounded-full border-2 border-brick-blue/25 bg-white opacity-70 hover:opacity-100",
+    omrCellActive:
+      "rounded-full border-2 border-brick-red bg-brick-red/15 text-brick-red",
+    omrCellMarked:
+      "rounded-full border-2 border-brick-red bg-brick-red text-white",
     section: "rounded-3xl border-4 border-brick-blue/25 bg-white shadow-inner",
     band: "rounded-full bg-highlight/70 px-4 py-2 text-center",
     bandTitle:
@@ -132,7 +153,8 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     radius: "rounded-sm",
     omrPanel: "rounded-md border-4 border-ink bg-white",
     omrLabel: "조립판",
-    omrCell: "rounded-sm border-2 border-dashed border-ink/40 bg-white opacity-70 hover:opacity-100",
+    omrCell:
+      "rounded-sm border-2 border-dashed border-ink/40 bg-white opacity-70 hover:opacity-100",
     omrCellActive: "rounded-sm border-2 border-ink bg-brick-yellow/60 text-ink",
     omrCellMarked: "rounded-sm border-2 border-ink bg-brick-blue text-white",
     section: "rounded-md border-4 border-ink bg-white",
@@ -151,11 +173,15 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
   },
   cat: {
     radius: "rounded-lg",
-    omrPanel: "rounded-lg border-4 border-[#6b4a2f] bg-[#2f4640] text-[#f4f1e8]",
+    omrPanel:
+      "rounded-lg border-4 border-[#6b4a2f] bg-[#2f4640] text-[#f4f1e8]",
     omrLabel: "출석부",
-    omrCell: "rounded-lg border-2 border-dashed border-[#f4f1e8]/40 bg-white/5 opacity-80 hover:opacity-100",
-    omrCellActive: "rounded-lg border-2 border-brick-yellow bg-white/15 text-brick-yellow",
-    omrCellMarked: "rounded-lg border-2 border-brick-yellow bg-brick-yellow text-ink",
+    omrCell:
+      "rounded-lg border-2 border-dashed border-[#f4f1e8]/40 bg-white/5 opacity-80 hover:opacity-100",
+    omrCellActive:
+      "rounded-lg border-2 border-brick-yellow bg-white/15 text-brick-yellow",
+    omrCellMarked:
+      "rounded-lg border-2 border-brick-yellow bg-brick-yellow text-ink",
     // 칠판 — 분필 글씨. 어두운 면이라 텍스트·테두리를 밝게 뒤집는다
     section: "rounded-lg border-8 border-[#6b4a2f] bg-[#2f4640] text-[#f4f1e8]",
     band: "relative border-2 border-dashed border-[#f4f1e8]/50 px-3 py-2 text-center",
@@ -175,8 +201,10 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     radius: "rounded-sm",
     omrPanel: "rounded-sm border border-[#c9cfd6] bg-white font-sans",
     omrLabel: "체크리스트",
-    omrCell: "rounded-sm border border-[#c9cfd6] bg-white opacity-80 hover:bg-[#f6f8f9]",
-    omrCellActive: "rounded-sm border border-[#217346] bg-[#e2efda] text-[#217346]",
+    omrCell:
+      "rounded-sm border border-[#c9cfd6] bg-white opacity-80 hover:bg-[#f6f8f9]",
+    omrCellActive:
+      "rounded-sm border border-[#217346] bg-[#e2efda] text-[#217346]",
     omrCellMarked: "rounded-sm border border-[#217346] bg-[#217346] text-white",
     // 평가서 시트 위장 — 셀 헤더 스트립 + 격자 느낌
     section: "rounded-sm border border-[#c9cfd6] bg-white font-sans",
@@ -196,8 +224,10 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     radius: "rounded-none",
     omrPanel: "rounded-none border-2 border-ink/40 bg-[#fbf8ee]",
     omrLabel: "OMR 카드",
-    omrCell: "rounded-none border-2 border-dashed border-ink/30 bg-white opacity-70 hover:opacity-100",
-    omrCellActive: "rounded-none border-2 border-brick-green bg-brick-green/10 text-brick-green",
+    omrCell:
+      "rounded-none border-2 border-dashed border-ink/30 bg-white opacity-70 hover:opacity-100",
+    omrCellActive:
+      "rounded-none border-2 border-brick-green bg-brick-green/10 text-brick-green",
     omrCellMarked: "rounded-none border-2 border-ink bg-ink text-white",
     // 갱지 시험지 — 직각 모서리 + 이중 괘선, 교실 중간고사 느낌
     section: "rounded-none border-2 border-ink/40 bg-[#fbf8ee]",

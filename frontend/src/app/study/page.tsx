@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { AchievementBadges } from "@/components/study/AchievementBadges";
+import { CardCollection } from "@/components/study/CardCollection";
 import { examApi, type OpenExam } from "@/lib/exam-api";
 import { friendsApi } from "@/lib/friends-api";
 import {
@@ -75,43 +76,29 @@ export default function StudyHubPage() {
         </p>
       </header>
 
-      {/* 1순위 CTA — 오늘의 학습 */}
-      <section className="mt-6 max-w-4xl rounded-xl border-2 border-brick-green/40 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="min-w-52 flex-1">
-            <h2 className="font-hand text-2xl font-bold">오늘의 학습</h2>
-            {/* 밀린 전체가 아닌 목표 잔여로 유도 — 홈 카드와 동일 기준 (포기 방지 기획) */}
-            <p className="mt-1 text-sm opacity-70">
-              {!stats
-                ? "복습 큐를 확인하는 중..."
-                : stats.due_count === 0
-                  ? "지금은 밀린 복습이 없어요 — 새 카드를 만나러 가볼까요?"
-                  : stats.reviews_today >= stats.daily_goal
-                    ? `오늘 목표 달성! 더 하고 싶으면 이어서 해요 (남은 ${stats.due_count}개는 나눠서 갚아요)`
-                    : stats.due_count > stats.daily_goal - stats.reviews_today
-                      ? `오늘 목표까지 ${stats.daily_goal - stats.reviews_today}개 — 밀린 ${stats.due_count}개는 나눠서 갚아요`
-                      : `오늘 목표까지 ${Math.min(stats.due_count, stats.daily_goal - stats.reviews_today)}개만 하면 성공이에요`}
-              {stats && stats.streak_days > 0 && (
-                <span className="ml-2 rounded bg-highlight/60 px-1.5 py-0.5 text-xs font-bold">
-                  {stats.streak_days}일 연속
-                </span>
-              )}
-            </p>
-          </div>
-          <Brick color="green" href="/study/session">
-            {!stats
-              ? "학습 시작"
-              : stats.due_count === 0
-                ? "새 카드 만나기"
-                : stats.reviews_today >= stats.daily_goal
-                  ? "이어서 학습"
-                  : `학습 시작 (${Math.min(
-                      stats.due_count,
-                      stats.daily_goal - stats.reviews_today,
-                    )}개만)`}
-          </Brick>
-        </div>
-      </section>
+      {/* 오늘 진행 요약 — 시작 버튼은 홈에만 둔다 (2026-08-03 IA 정리).
+          홈과 학습이 각각 "오늘의 학습" CTA 를 갖고 있어 어디서 시작하는지
+          매번 판단해야 했다. 여기서는 상태만 알려주고 홈으로 되돌린다 */}
+      {stats && (
+        <section className="mt-6 flex max-w-4xl flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border-2 border-ink/10 bg-white px-4 py-3 text-sm">
+          <span className="font-bold">오늘</span>
+          <span>
+            {Math.min(stats.reviews_today, stats.daily_goal)}/{stats.daily_goal}
+            {stats.reviews_today >= stats.daily_goal && " — 목표 달성!"}
+          </span>
+          {stats.streak_days > 0 && (
+            <span className="rounded bg-highlight/60 px-1.5 py-0.5 text-xs font-bold">
+              {stats.streak_days}일 연속
+            </span>
+          )}
+          <Link
+            href="/"
+            className="ml-auto text-xs font-bold text-brick-green underline-offset-2 hover:underline"
+          >
+            홈에서 이어서 학습 →
+          </Link>
+        </section>
+      )}
 
       {/* 내 덱 — 담은 콘텐츠 단위 학습 계획 (Anki 덱, docs/specs/study-decks.md) */}
       {decks !== null && (
@@ -213,6 +200,18 @@ export default function StudyHubPage() {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* 내 카드 컬렉션 — 홈에서 이관 (2026-08-03). 누적 자산은 학습 탭에 모은다 */}
+      {stats && (
+        <section className="mt-5 max-w-4xl rounded-xl border-2 border-ink/15 bg-white p-5 shadow-sm">
+          <h2 className="font-hand text-2xl font-bold">내 카드 컬렉션</h2>
+          <p className="mt-1 mb-3 text-xs opacity-60">
+            한 번이라도 학습한 카드 / 내가 담은 콘텐츠의 전체 — 오늘 목표와는
+            무관하게 쌓여요
+          </p>
+          <CardCollection stats={stats} />
         </section>
       )}
 

@@ -6,8 +6,13 @@ import { useEffect, useRef, useState } from "react";
 import { NotificationBell } from "@/components/nav/NotificationBell";
 import { ProfileMenu } from "@/components/nav/ProfileMenu";
 import { fetchMe, type Me } from "@/lib/api";
-import { getAppTheme, setAppTheme, useAppTheme } from "@/lib/theme";
-import { CHAT_LABEL_OF } from "@/lib/theme-surfaces";
+import {
+  type AppTheme,
+  getAppTheme,
+  setAppTheme,
+  useAppTheme,
+} from "@/lib/theme";
+import { CHAT_LABEL_OF, NAV_LABEL_OF, type NavKey } from "@/lib/theme-surfaces";
 import { themeApi } from "@/lib/theme-api";
 
 /** 전역 내비게이션 (2026-07-28 재설계 — 표준 SaaS 패턴)
@@ -19,36 +24,47 @@ import { themeApi } from "@/lib/theme-api";
 
 const NAV_COLLAPSE_KEY = "app.nav-collapsed";
 
+// 라벨은 테마 세계관을 따른다 (2026-08-03) — NAV_LABEL_OF(4탭) + CHAT_LABEL_OF(채팅).
+// 채팅만 테마어였던 탓에 위장 테마가 메뉴에서 깨졌다.
 const TABS = [
-  { href: "/", label: "홈", match: (p: string) => p === "/", icon: HomeIcon },
+  {
+    href: "/",
+    key: "home" as const,
+    match: (p: string) => p === "/",
+    icon: HomeIcon,
+  },
   {
     href: "/study",
-    label: "학습",
+    key: "study" as const,
     match: (p: string) => p.startsWith("/study") || p.startsWith("/friends"),
     icon: StudyIcon,
   },
   {
     href: "/library",
-    label: "라이브러리",
-    match: (p: string) => p.startsWith("/library"),
+    key: "library" as const,
+    match: (p: string) => p.startsWith("/library") || p.startsWith("/my"),
     icon: LibraryIcon,
   },
   // "내 콘텐츠" 자리에 채팅 (2026-07-28) — 유튜브 URL 등록은 관리자 전용
   // 사양으로 변경돼 탭 슬롯이 비었고, 채팅을 주 메뉴로 승격(우상단 아이콘 제거).
-  // /my 라우트는 딥링크·기존 데이터 열람용으로 남아 있음
+  // /my 라우트는 딥링크·기존 데이터 열람용으로 남아 라이브러리 탭이 받는다
   {
     href: "/chat",
-    label: "채팅", // 실제 표기는 테마별 CHAT_LABEL_OF (교환 노트/교환 일기/냥 쪽지/공유 문서/쪽지)
+    key: "chat" as const,
     match: (p: string) => p.startsWith("/chat"),
     icon: ChatTabIcon,
   },
   {
     href: "/game",
-    label: "게임",
+    key: "game" as const,
     match: (p: string) => p.startsWith("/game"),
     icon: GameIcon,
   },
 ];
+
+function labelOf(key: NavKey | "chat", theme: AppTheme): string {
+  return key === "chat" ? CHAT_LABEL_OF[theme] : NAV_LABEL_OF[theme][key];
+}
 
 export function AppNav() {
   const pathname = usePathname();
@@ -143,7 +159,7 @@ export function AppNav() {
                 }`}
               >
                 <tab.icon />
-                {tab.href === "/chat" ? CHAT_LABEL_OF[theme] : tab.label}
+                {labelOf(tab.key, theme)}
               </Link>
             );
           })}
@@ -220,7 +236,7 @@ export function AppNav() {
               }`}
             >
               <tab.icon />
-              {tab.href === "/chat" ? CHAT_LABEL_OF[theme] : tab.label}
+              {labelOf(tab.key, theme)}
             </Link>
           );
         })}

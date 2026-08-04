@@ -24,10 +24,12 @@
   - 배경 패턴 (모눈/스터드/발도장 등)
 - [ ] `frontend/src/app/layout.tsx` — **부트 스크립트 테마 화이트리스트에 key 추가**
   (누락 시 새로고침에서 테마 풀림 — school 사고 재발 방지)
-- [ ] `frontend/src/lib/theme-surfaces.ts` — 4개 레지스트리 전부:
+- [ ] `frontend/src/lib/theme-surfaces.ts` — 5개 레지스트리 전부:
   - `SURFACE_SKINS` — 시험지·학습 카드·OMR·선지(퀴즈/어순 칩 공용) 스킨 1벌
   - `CLOCK_OF` — 시험 경과 시계 종류
   - `CHAT_LABEL_OF` — 채팅 메뉴 라벨 (교환 노트/공유 문서 등 위장 명칭)
+  - `NAV_LABEL_OF` — 나머지 4탭(홈·학습·라이브러리·게임) 라벨 (2026-08-03 추가).
+    채팅만 테마어면 위장 테마가 메뉴에서 깨진다 — 5탭이 같은 세계관을 쓴다
   - `BoardSkinTheme`/`boardThemeOf` — 게임 보드 전용 스킨 여부 결정
     (위장 테마면 note 폴백 허용 — excel 선례)
 - [ ] `frontend/src/components/game/BoardCanvas.tsx` — 전용 보드 스킨을 주는 경우:

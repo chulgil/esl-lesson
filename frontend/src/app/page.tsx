@@ -41,16 +41,6 @@ export default function HomePage() {
   );
 }
 
-// 컬렉션 막대 칸 수 — 8칸이 전체(available_items) 100% 를 뜻한다
-const COLLECTION_SLOTS = 8;
-
-const LEVEL_COLORS = [
-  "bg-brick-red",
-  "bg-brick-yellow",
-  "bg-brick-blue",
-  "bg-brick-green",
-];
-
 function Dashboard({ me }: { me: Me }) {
   const [stats, setStats] = useState<Stats | null>(null);
 
@@ -60,6 +50,11 @@ function Dashboard({ me }: { me: Me }) {
       .then(setStats)
       .catch(() => undefined);
   }, []);
+
+  // 담은 콘텐츠가 0이면 학습 큐가 만들어질 수 없다 — 신규 사용자 경로 분기
+  const noContent = Boolean(
+    stats && stats.levels.every((lv) => lv.available_items === 0),
+  );
 
   return (
     <section className="flex flex-col gap-7">
@@ -86,23 +81,37 @@ function Dashboard({ me }: { me: Me }) {
         </p>
       </header>
 
+      {/* 라이브러리·채팅·게임 브릭 제거 (2026-08-03) — 전역 5탭에 이미 있어
+          홈에서 중복 노출됐다. 홈의 1차 행동은 하나뿐이다 */}
       <div className="flex flex-wrap gap-4">
-        <Brick color="green" href="/study/session">
-          {/* 낚싯대: 밀린 전체가 아니라 오늘 목표 잔여만 보여준다 (포기 방지) */}
-          {!stats
-            ? "오늘의 학습 시작"
-            : stats.due_count === 0
-              ? "새 카드 만나러 가기"
-              : stats.reviews_today >= stats.daily_goal
-                ? "이어서 더 학습하기"
-                : `오늘의 학습 시작 (${Math.min(
-                    stats.due_count,
-                    stats.daily_goal - stats.reviews_today,
-                  )}개만)`}
-        </Brick>
-        {/* 라이브러리·채팅·게임 브릭 제거 (2026-08-03) — 전역 5탭에 이미 있어
-            홈에서 중복 노출됐다. 홈의 1차 행동은 "오늘의 학습" 하나로 좁힌다 */}
+        {noContent ? (
+          // 담은 콘텐츠가 없으면 학습할 카드 자체가 안 생긴다 — 세션이 아니라
+          // 라이브러리로 보낸다 (기존엔 "새 카드 만나러 가기"가 빈 세션으로 갔다)
+          <Brick color="blue" href="/library">
+            라이브러리에서 콘텐츠 담기
+          </Brick>
+        ) : (
+          <Brick color="green" href="/study/session">
+            {/* 낚싯대: 밀린 전체가 아니라 오늘 목표 잔여만 보여준다 (포기 방지) */}
+            {!stats
+              ? "오늘의 학습 시작"
+              : stats.due_count === 0
+                ? "새 카드 만나러 가기"
+                : stats.reviews_today >= stats.daily_goal
+                  ? "이어서 더 학습하기"
+                  : `오늘의 학습 시작 (${Math.min(
+                      stats.due_count,
+                      stats.daily_goal - stats.reviews_today,
+                    )}개만)`}
+          </Brick>
+        )}
       </div>
+      {noContent && (
+        <p className="-mt-4 text-sm opacity-70">
+          아직 담은 콘텐츠가 없어요 — 라이브러리에서 하나 담으면 오늘 학습할
+          카드가 만들어져요.
+        </p>
+      )}
 
       {/* 오늘의 목표 — 밀린 전체가 아닌 목표 기준 진행 (포기 방지 기획 2026-07-15) */}
       {stats && <DailyGoalCard stats={stats} />}
@@ -116,69 +125,8 @@ function Dashboard({ me }: { me: Me }) {
       {/* 시작 체크리스트 — 오늘 할 일보다 아래 (기존 사용자의 첫 시선은 데일리 루프) */}
       {stats && <OnboardingChecklist stats={stats} />}
 
-      {stats && (
-        // 누적 컬렉션 지표 — "오늘의 목표"(일일)와 명확히 구분 (2026-07-15 소유자 혼동 리포트)
-        <div>
-          <p className="text-sm font-bold">내 카드 컬렉션</p>
-          <p className="mb-2 text-xs opacity-60">
-            한 번이라도 학습한 카드 / 내가 담은 콘텐츠의 전체 — 오늘 목표와는
-            무관하게 쌓여요
-          </p>
-          <div className="flex flex-wrap items-end gap-6">
-            {stats.levels.map((lv) => {
-              // 8칸 = 전체(available_items). 칸 수를 카드 수로 세면 8개 이상은
-              // 전부 꽉 찬 막대가 되어 진행도를 못 읽는다 (2026-08-03 수정)
-              const ratio =
-                lv.available_items > 0 ? lv.cards / lv.available_items : 0;
-              const filled =
-                lv.cards === 0
-                  ? 0
-                  : Math.max(
-                      1,
-                      Math.min(
-                        COLLECTION_SLOTS,
-                        Math.round(ratio * COLLECTION_SLOTS),
-                      ),
-                    );
-              const percent = Math.round(ratio * 100);
-              return (
-                <div
-                  key={lv.level}
-                  className="flex flex-col items-center gap-1"
-                  title={`${TYPE_LABELS[lv.item_type] ?? lv.item_type} 카드 ${lv.available_items}개 중 ${lv.cards}개를 학습했어요 (한 번이라도 푼 카드)`}
-                >
-                  <div className="flex flex-col-reverse gap-0.5" aria-hidden>
-                    {Array.from({ length: COLLECTION_SLOTS }, (_, i) => (
-                      <span
-                        key={i}
-                        className={`h-2.5 w-8 rounded-sm ${
-                          i < filled ? LEVEL_COLORS[lv.level - 1] : "bg-ink/10"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs opacity-60">
-                    {TYPE_LABELS[lv.item_type] ?? `레벨 ${lv.level}`} ·{" "}
-                    {lv.cards}/{lv.available_items}
-                    {lv.cards > 0 && (
-                      <span className="ml-1">
-                        ({percent === 0 ? "1% 미만" : `${percent}%`})
-                      </span>
-                    )}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* 누적 지표(카드 컬렉션·업적)는 학습 탭으로 이관 (2026-08-03 IA 정리) —
+          홈은 "오늘 뭘 하지?" 한 질문만 답한다 */}
     </section>
   );
 }
-
-const TYPE_LABELS: Record<string, string> = {
-  word: "단어",
-  idiom: "숙어",
-  pattern: "패턴",
-  sentence: "문장",
-};
