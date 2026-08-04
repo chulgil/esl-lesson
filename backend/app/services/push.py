@@ -20,7 +20,8 @@ from app.services.visibility import visible_item_clause
 logger = logging.getLogger(__name__)
 
 KST = timezone(timedelta(hours=9))
-REMINDER_HOUR_KST = 20
+REMINDER_HOUR_KST = 20  # reminder_hour 미설정(설정 행 없음) 폴백
+MIN_REMINDER_HOUR = 5  # 새벽 발송 금지 하한 — 설정 검증(api/study.py)과 동일
 
 
 def enabled(settings: Settings) -> bool:
@@ -132,7 +133,9 @@ async def send_review_reminders(db: AsyncSession, now: datetime | None = None) -
         return 0
     now = now or datetime.now(UTC)
     local = now.astimezone(KST)
-    if local.hour < REMINDER_HOUR_KST:
+    # 시각 게이트는 사용자별(reminder_hour) — 전역 게이트는 새벽 하한만
+    # (user-journey-motivation-2026-08.md P1 실행 의도: 사용자가 시간을 정한다)
+    if local.hour < MIN_REMINDER_HOUR:
         return 0
     today = local.date()
 
@@ -156,6 +159,13 @@ async def send_review_reminders(db: AsyncSession, now: datetime | None = None) -
 
     sent = 0
     for user_id, user_subs in by_user.items():
+        hour = (
+            await db.execute(
+                select(UserSettings.reminder_hour).where(UserSettings.user_id == user_id)
+            )
+        ).scalar_one_or_none()
+        if local.hour < (hour if hour is not None else REMINDER_HOUR_KST):
+            continue  # 아직 이 사용자의 시각 전 — 마킹 없이 다음 루프에서 재평가
         due = await due_count(db, user_id, now)
         if due == 0:
             continue  # 마킹하지 않음 — 이후 due 가 생기면 같은 날에도 발송

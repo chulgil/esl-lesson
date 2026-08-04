@@ -167,7 +167,11 @@
  │   (answer 응답 long_term_reached — 마이크로 보상, 모달 금지)
  └─ 세션 완료 (피크엔드 — user-journey-motivation-2026-08.md P0 ②):
      정답률 + 이번 세션 장기 기억 +N + 오늘 목표 진행바(달성 축하)
+     + 내일 예고(`stats.due_tomorrow` — 내일 KST 안에 due 되는 카드 수)
      + 오답 잔여 시 "오답 정리하고 마무리" CTA (오답 정리 세션은 완료 카피로 마무리)
+
+홈 복귀 감사: 책갈피가 스트릭을 지켜준 다음 방문에 1회 배너
+(`streak_saved_days` 최신일 + localStorage 가드, 최근 7일 내 보호만 — 모달 금지).
 ```
 
 ## 라이브러리 구간 반복 재생 (A-B 루프)
@@ -206,7 +210,7 @@
 | GET `/api/study/achievements` / `/quests` / `/leaderboard` | 업적·퀘스트·학습 리더보드 (리텐션 팩 — proposal/retention-plan.md, `services/achievements.py`, `services/retention.py`). 업적은 33종 티어 스티커(2026-07-30, 오늘의 목표 가볍게10/기본20/열심히50 = 하루 최대 복습 수 지표 포함): 패밀리 4그룹(study/streak/game/social) x 난이도 티어(beginner/intermediate/advanced/master = 초급/중급/고급/마스터, 단발은 null). 같은 지표(복습·단어·스트릭·승리·참여·타자·친구)가 티어 여러 개를 먹인다 — 적립 테이블 없이 로그 실시간 집계(소급 반영) 원칙 유지 |
 | POST `/api/cards` | 항목 원탭 카드 추가 (게임 ReviewPanel·어휘망에서 사용, 멱등) |
 | POST `/api/cards/{id}/suspend` | 카드 학습 제외/복귀 |
-| GET/PATCH `/api/settings` | 일일 한도, 목표 기억률, 레벨 토글, 힌트 지연 |
+| GET/PATCH `/api/settings` | 일일 한도, 목표 기억률, 레벨 토글, 힌트 지연, 리마인더 시각(`reminder_hour` — push-reminder.md) |
 
 ## 채점 응답 계약 (POST /api/study/answer)
 

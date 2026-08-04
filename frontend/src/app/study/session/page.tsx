@@ -392,6 +392,13 @@ function StudySessionInner() {
                   }}
                 />
               </div>
+              {/* 내일 예고 — 예측 가능한 분량은 부담이 아니라 약속이 된다 */}
+              {doneStats.due_tomorrow > 0 && (
+                <p className="mt-1.5 text-xs opacity-60">
+                  내일은 {doneStats.due_tomorrow}개가 기다려요 — 오늘처럼이면
+                  충분해요
+                </p>
+              )}
             </div>
           )}
 

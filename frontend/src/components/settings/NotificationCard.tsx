@@ -10,6 +10,15 @@ import {
   subscribePush,
   unsubscribePush,
 } from "@/lib/push";
+import { studyApi } from "@/lib/study-api";
+
+const REMINDER_HOURS = Array.from({ length: 19 }, (_, i) => i + 5); // 5~23시
+
+function fmtHour(h: number): string {
+  if (h < 12) return `오전 ${h}시`;
+  if (h === 12) return `낮 12시`;
+  return `저녁 ${h - 12}시`;
+}
 
 /** 알림 통합 카드 — 기기(브라우저) 단위 마스터 스위치 하나.
  *
@@ -22,6 +31,29 @@ export function NotificationCard() {
   const [state, setState] = useState<PushState | "loading">("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // 복습 리마인더 시각 — 사용자의 생활 리듬에 맞춘다 (실행 의도,
+  // user-journey-motivation-2026-08.md P1). null = 로딩 전
+  const [reminderHour, setReminderHour] = useState<number | null>(null);
+
+  useEffect(() => {
+    studyApi
+      .getSettings()
+      .then((s) => setReminderHour(s.reminder_hour))
+      .catch(() => undefined);
+  }, []);
+
+  async function changeReminderHour(hour: number) {
+    const prev = reminderHour;
+    setReminderHour(hour); // 낙관적 반영
+    try {
+      await studyApi.patchSettings({ reminder_hour: hour });
+    } catch {
+      setReminderHour(prev);
+      setMessage(
+        "리마인더 시각 저장에 실패했어요 — 잠시 후 다시 시도해주세요.",
+      );
+    }
+  }
 
   useEffect(() => {
     const refresh = () =>
@@ -134,11 +166,35 @@ export function NotificationCard() {
             <li className="mb-1 font-bold opacity-70">이 알림으로 받아요</li>
             <li>· 채팅 새 글 — 친구가 보낸 메시지</li>
             <li>· 게임 초대 — 친구의 대전 초대</li>
-            <li>· 복습 리마인더 — 매일 저녁 8시, 밀린 복습이 있을 때만</li>
+            <li>
+              · 복습 리마인더 — 매일 {fmtHour(reminderHour ?? 20)}, 밀린 복습이
+              있을 때만
+            </li>
             <li className="mt-1 opacity-50">
               접속 중 소식(시험 1위 탈환 등)은 상단 벨로 도착해요
             </li>
           </ul>
+
+          {/* 언제 공부하는 사람인지는 사용자가 안다 — 리마인더 시각을 생활
+              리듬에 맞춘다 (기본 저녁 8시) */}
+          {reminderHour != null && (
+            <label className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-bold">복습 리마인더 시각</span>
+              <select
+                value={reminderHour}
+                disabled={busy}
+                onChange={(e) => changeReminderHour(Number(e.target.value))}
+                className="min-h-9 rounded-md border-2 border-ink/20 bg-white px-2 font-bold"
+              >
+                {REMINDER_HOURS.map((h) => (
+                  <option key={h} value={h}>
+                    {fmtHour(h)}
+                  </option>
+                ))}
+              </select>
+              <span className="opacity-50">내 공부 시간에 맞춰 도착해요</span>
+            </label>
+          )}
         </>
       )}
       {message && <p className="mt-2 text-xs opacity-70">{message}</p>}

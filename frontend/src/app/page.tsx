@@ -7,6 +7,7 @@ import { DailyGoalCard } from "@/components/study/DailyGoalCard";
 import { DailyQuestsCard } from "@/components/study/DailyQuestsCard";
 import { OnboardingChecklist } from "@/components/study/OnboardingChecklist";
 import { StreakCelebration } from "@/components/study/StreakCelebration";
+import { StreakSaverThanks } from "@/components/study/StreakSaverThanks";
 import { fetchMe, type Me } from "@/lib/api";
 import { studyApi, type Stats } from "@/lib/study-api";
 
@@ -111,6 +112,14 @@ function Dashboard({ me }: { me: Me }) {
           아직 담은 콘텐츠가 없어요 — 라이브러리에서 하나 담으면 오늘 학습할
           카드가 만들어져요.
         </p>
+      )}
+
+      {/* 복귀 감사 — 책갈피가 지켜준 다음 방문에 1회 (user-journey-motivation P1) */}
+      {stats && (
+        <StreakSaverThanks
+          savedDays={stats.streak_saved_days}
+          streakDays={stats.streak_days}
+        />
       )}
 
       {/* 오늘의 목표 — 밀린 전체가 아닌 목표 기준 진행 (포기 방지 기획 2026-07-15) */}

@@ -121,6 +121,8 @@ export interface Stats {
   weak_count: number;
   long_term: LongTermMemory;
   due_count: number;
+  /** 내일(KST) 안에 새로 due 가 되는 카드 수 — 세션 완료 "내일 예고" */
+  due_tomorrow: number;
   reviews_today: number;
   /** 오늘의 목표 — 밀린 양과 무관한 달성 가능 소량 (포기 방지 기획) */
   daily_goal: number;
@@ -238,17 +240,21 @@ export const studyApi = {
       study_level: number;
       levels_enabled: number[];
       daily_goal: number;
+      /** 복습 리마인더 시각(KST, 5-23) — push-reminder.md */
+      reminder_hour: number;
     }>("/api/settings"),
   patchSettings: (body: {
     hint_delay_seconds?: number;
     study_level?: number;
     daily_goal?: number;
+    reminder_hour?: number;
   }) =>
     request<{
       hint_delay_seconds: number;
       study_level: number;
       levels_enabled: number[];
       daily_goal: number;
+      reminder_hour: number;
     }>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   answer: (body: {
     card_id: number;

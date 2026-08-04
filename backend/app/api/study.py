@@ -671,6 +671,22 @@ async def get_stats(
         )
     ).scalar_one()
 
+    # 내일 예고 — 아직 due 아니지만 내일(KST) 안에 due 가 되는 카드 (예측 가능성,
+    # user-journey-motivation P1: 세션 완료 화면 "내일 M개 예정")
+    due_tomorrow = (
+        await db.execute(
+            select(func.count(ReviewCard.id))
+            .join(LearningItem, LearningItem.id == ReviewCard.item_id)
+            .where(
+                ReviewCard.user_id == user.id,
+                ReviewCard.due_at > now,
+                ReviewCard.due_at <= day_start + timedelta(days=2),
+                ReviewCard.suspended.is_(False),
+                visible_item_clause(user.id),
+            )
+        )
+    ).scalar_one()
+
     # 분자 = 한 번이라도 푼 카드 (reps > 0). 큐가 도입만 한 새 카드를 세면 담은
     # 콘텐츠를 꺼내보는 순간 영구 100% 가 되어 "만난 카드" 지표가 죽는다 (2026-08-03).
     # suspended 제외 — 사용자가 뺀 항목은 세지 않는다.
@@ -827,6 +843,7 @@ async def get_stats(
         "weak_count": weak_count,
         "long_term": long_term,
         "due_count": due_count,
+        "due_tomorrow": due_tomorrow,
         "reviews_today": reviews_today,
         "daily_goal": user_settings.daily_goal,
         "streak_days": streak,
@@ -1090,6 +1107,8 @@ class SettingsPatch(BaseModel):
     daily_goal: int | None = Field(default=None, ge=5, le=200)
     desired_retention: float | None = Field(default=None, ge=0.7, le=0.97)
     hint_delay_seconds: int | None = Field(default=None, ge=0, le=120)
+    # 복습 리마인더 시각(KST) — 새벽(5시 미만) 금지, 실행 의도 (push-reminder.md)
+    reminder_hour: int | None = Field(default=None, ge=5, le=23)
     study_level: int | None = Field(default=None, ge=1, le=4)
     levels_enabled: list[int] | None = None
 
@@ -1126,6 +1145,7 @@ async def update_settings(
         "daily_goal",
         "desired_retention",
         "hint_delay_seconds",
+        "reminder_hour",
     )
     for field in fields:
         value = getattr(body, field)
@@ -1142,6 +1162,7 @@ def _settings_dict(settings: UserSettings) -> dict:
         "daily_goal": settings.daily_goal,
         "desired_retention": settings.desired_retention,
         "hint_delay_seconds": settings.hint_delay_seconds,
+        "reminder_hour": settings.reminder_hour,
         "study_level": settings.study_level,
         "levels_enabled": settings.levels_enabled,
     }
