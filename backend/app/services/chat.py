@@ -78,9 +78,7 @@ async def attach_reply_previews(db: AsyncSession, items: list[dict]) -> list[dic
     ids = {m["reply_to_id"] for m in items if m.get("reply_to_id")}
     if not ids:
         return items
-    rows = (
-        (await db.execute(select(ChatMessage).where(ChatMessage.id.in_(ids)))).scalars().all()
-    )
+    rows = (await db.execute(select(ChatMessage).where(ChatMessage.id.in_(ids)))).scalars().all()
     by_id: dict[int, dict] = {}
     for r in rows:
         if r.deleted_at is not None:
@@ -585,11 +583,20 @@ async def broadcast_presence(db: AsyncSession, user_id: int, online: bool) -> No
             await deliver_ws(friend_id, event)
 
 
-def chat_push_payload(sender_name: str, body: str, sender_id: int, conversation_id: int) -> dict:
-    preview = body if len(body) <= 50 else body[:50] + "…"
+def chat_push_payload(sender_id: int, conversation_id: int) -> dict:
+    """채팅 알림은 도착 사실만 — 발신자·본문을 싣지 않는다 (2026-08-04).
+
+    잠금화면 미리보기가 위장 테마를 무력화한다(회사/공공장소 화면 보호,
+    docs/specs/chat.md 위장 테마와 같은 목적). 숨김은 채팅 한정 — 게임 초대와
+    복습 리마인더는 종전대로 문구를 그대로 싣는다.
+
+    표시 문구는 `kind: "chat"` 표식을 보고 서비스 워커가 수신자 테마 라벨
+    ("교환 노트"/"공유 문서" 등)로 갈아끼운다. 여기 값은 표식을 모르는 구형
+    워커를 위한 폴백이라 그 자체로도 중립이어야 한다."""
     return {
-        "title": sender_name,
-        "body": preview or "[단어 카드]",
+        "kind": "chat",
+        "title": "교환 노트",
+        "body": "새 글이 있어요",
         "url": f"/chat/{sender_id}",
         "tag": f"chat-{conversation_id}",
     }

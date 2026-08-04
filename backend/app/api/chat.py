@@ -171,12 +171,8 @@ async def send(
                 await push_service.send_to_user(
                     db,
                     payload.to_user_id,
-                    chat.chat_push_payload(
-                        user.nickname,
-                        data["body"] or ("[사진]" if data.get("image_url") else ""),
-                        user.id,
-                        data["conversation_id"],
-                    ),
+                    # 내용 없는 알림 — 잠금화면에 발신자·본문을 싣지 않는다
+                    chat.chat_push_payload(user.id, data["conversation_id"]),
                 )
             except Exception:  # noqa: BLE001
                 logger.warning("chat push failed to=%s", payload.to_user_id)

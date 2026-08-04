@@ -1,5 +1,7 @@
 """친구 1:1 채팅 — 대화 정규화·멱등 전송·커서·읽음·권한·캐시·푸시 (docs/specs/chat.md)."""
 
+import json
+
 import pytest
 from sqlalchemy import func, select
 
@@ -287,7 +289,10 @@ async def test_push_only_when_offline_with_throttle(client, db_session, monkeypa
     await client.post("/api/chat/messages", json=send_body(b.id, "off2", "cid-off20001"))
     assert len(pushed) == 1
     assert pushed[0][0] == b.id
-    assert "off1" in pushed[0][1]["body"]
+    # 잠금화면 보호 — 발신자·본문은 어느 필드에도 실리지 않는다 (2026-08-04)
+    text = json.dumps(pushed[0][1], ensure_ascii=False)
+    assert "off1" not in text
+    assert a.nickname not in text
 
     # 온라인이면 푸시 안 감
     async def noop(message):
@@ -327,6 +332,34 @@ async def test_push_falls_back_when_all_sockets_dead(client, db_session, monkeyp
         invite_hub.detach(b.id, dead_send)
 
     assert pushed == [b.id]
+
+
+def test_chat_push_payload_is_content_free():
+    """채팅 알림은 도착 사실만 — 발신자·본문 없이 이동 경로만 싣는다.
+
+    실제 표시 문구는 서비스 워커가 수신자 테마 라벨로 갈아끼우고(위장 유지),
+    여기 값은 구형 워커를 위한 안전 폴백이다."""
+    payload = chat_service.chat_push_payload(sender_id=7, conversation_id=42)
+
+    assert payload["kind"] == "chat"  # 워커가 "내용 없는 알림"으로 분기하는 표식
+    assert payload["url"] == "/chat/7"
+    assert payload["tag"] == "chat-42"
+    # 폴백 문구도 중립 — 구형 워커에서도 내용이 새지 않는다
+    assert payload["title"] and payload["body"]
+
+
+def test_other_notifications_keep_their_text():
+    """숨김은 채팅만 — 게임 초대·복습 리마인더는 문구를 그대로 보여준다."""
+    from app.services.game.invites import invite_push_payload
+    from app.services.push import reminder_payload
+
+    invite = invite_push_payload("민수", "tetris", "ABCD")
+    assert "민수" in invite["body"]
+    assert "kind" not in invite  # 채팅 표식이 없으니 워커가 문구를 그대로 표시
+
+    reminder = reminder_payload(3)
+    assert "3" in reminder["body"]
+    assert "kind" not in reminder
 
 
 # --- 프레즌스·입력중 -------------------------------------------------------------

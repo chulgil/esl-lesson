@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMe } from "@/lib/api";
+import { syncChatNotice } from "@/lib/chat-notice";
 import {
   dispatchChatEvent,
   getActiveChatRoom,
@@ -14,7 +15,9 @@ import {
   type AppTheme,
   getAppTheme,
   setAppTheme,
+  useAppTheme,
 } from "@/lib/theme";
+import { chatNotice } from "@/lib/theme-surfaces";
 import { GameSocket, type ServerMsg } from "@/lib/game-ws";
 
 const GAME_LABELS: Record<string, string> = {
@@ -32,6 +35,13 @@ export function InviteToaster() {
   const pathname = usePathname();
   const pathRef = useRef(pathname);
   pathRef.current = pathname;
+  const theme = useAppTheme();
+
+  // 웹푸시는 앱이 꺼진 뒤 워커만으로 뜬다 — 그때 쓸 문구를 미리 심어둔다.
+  // 테마를 바꾸면 알림 위장 문구도 따라가야 하므로 theme 변경마다 갱신.
+  useEffect(() => {
+    void syncChatNotice();
+  }, [theme]);
 
   const [invite, setInvite] = useState<{
     from: string;
@@ -61,12 +71,10 @@ export function InviteToaster() {
       const viewing =
         pathRef.current === `/chat/${msg.sender_id}` ||
         getActiveChatRoom() === msg.sender_id;
-      const body = msg.body || (msg.image_url ? "[사진]" : "[단어 카드]");
       // "실제로 대화 중"일 때만 알림 생략 = 그 방을 보는 중 + 탭 전면 + 창 포커스
       // + 입력창에 커서. 대화방을 켜두고 커서가 입력창 밖이면 자리 비움으로 보고
       // 알림을 보낸다 (2026-07-29 보고: 방만 켜둔 채 다른 일 하는 동안 유실).
       // hidden 만 보면 "브라우저는 보이는데 다른 앱 사용 중"도 놓친다 (07-28).
-      // 오피스 테마는 문서 알림으로 위장
       const backgrounded = document.hidden || !document.hasFocus();
       const engaged = viewing && !backgrounded && isChatInputFocused();
       // 채널 (2026-07-31 최종): engaged = 무음 / 백그라운드 = OS 알림 /
@@ -79,12 +87,10 @@ export function InviteToaster() {
         typeof Notification !== "undefined" &&
         Notification.permission === "granted"
       ) {
-        const excel = getAppTheme() === "excel";
-        notifyOs(
-          excel ? "공유 문서" : msg.from_name,
-          excel ? "변경 사항 1건" : body.slice(0, 40),
-          `/chat/${msg.sender_id}`,
-        );
+        // 내용 없는 알림 — 발신자·본문 대신 테마 라벨만 (2026-08-04).
+        // 잠금화면·알림센터 미리보기가 위장을 무력화한다. 웹푸시 경로(sw.js)와
+        // 같은 문구를 쓴다 — 두 경로가 다르면 어느 쪽이 뜨느냐에 따라 노출된다.
+        notifyOs(chatNotice(getAppTheme()), `/chat/${msg.sender_id}`);
       }
       return;
     }
@@ -283,7 +289,8 @@ export function InviteToaster() {
 
 /** 백그라운드 탭 OS 알림 — SW 우선, 미등록이면 페이지 Notification 폴백.
  *  renotify: 같은 tag 의 후속 알림이 소리 없이 대체되지 않고 다시 알리게 */
-function notifyOs(title: string, body: string, url: string) {
+function notifyOs(notice: { title: string; body: string }, url: string) {
+  const { title, body } = notice;
   const options: NotificationOptions & { renotify?: boolean } = {
     body,
     tag: "esl-chat",

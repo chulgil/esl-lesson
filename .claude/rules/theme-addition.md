@@ -27,7 +27,9 @@
 - [ ] `frontend/src/lib/theme-surfaces.ts` — 5개 레지스트리 전부:
   - `SURFACE_SKINS` — 시험지·학습 카드·OMR·선지(퀴즈/어순 칩 공용) 스킨 1벌
   - `CLOCK_OF` — 시험 경과 시계 종류
-  - `CHAT_LABEL_OF` — 채팅 메뉴 라벨 (교환 노트/공유 문서 등 위장 명칭)
+  - `CHAT_LABEL_OF` — 채팅 메뉴 라벨 (교환 노트/공유 문서 등 위장 명칭).
+    채팅 알림 문구(`chatNotice`)가 이 라벨을 그대로 쓴다 — **업무 위장 테마를
+    추가하면 `chatNotice` 본문 어투도 함께 분기** (2026-08-04, 내용 없는 알림)
   - `NAV_LABEL_OF` — 나머지 4탭(홈·학습·라이브러리·게임) 라벨 (2026-08-03 추가).
     채팅만 테마어면 위장 테마가 메뉴에서 깨진다 — 5탭이 같은 세계관을 쓴다
   - `BoardSkinTheme`/`boardThemeOf` — 게임 보드 전용 스킨 여부 결정

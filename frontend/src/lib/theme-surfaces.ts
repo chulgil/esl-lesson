@@ -53,6 +53,19 @@ export const CHAT_LABEL_OF: Record<AppTheme, string> = {
   school: "쪽지",
 };
 
+/** 채팅 알림에 띄울 내용 없는 문구 (2026-08-04) — 발신자·본문을 싣지 않는다.
+ *
+ *  잠금화면 미리보기가 위장을 무력화하므로 채팅만 "도착했다"까지만 알린다.
+ *  숨김은 채팅 한정 — 게임 초대·복습 리마인더는 문구를 그대로 보여준다.
+ *  라벨은 CHAT_LABEL_OF 가 정본이라 여기서 다시 정의하지 않는다. */
+export function chatNotice(theme: AppTheme): { title: string; body: string } {
+  return {
+    title: CHAT_LABEL_OF[theme],
+    // 위장 테마는 업무 문서 어투로 — "글"은 사적인 냄새가 난다
+    body: theme === "excel" ? "변경 사항이 있어요" : "새 글이 있어요",
+  };
+}
+
 // --- 전역 메뉴 라벨 — 테마 세계관을 5탭 전체에 적용 (2026-08-03) ------------------
 // 채팅만 테마어를 쓰고 나머지가 고정 라벨이면 위장 테마가 메뉴에서 깨진다.
 // 채팅 라벨은 CHAT_LABEL_OF 가 정본이라 여기서 중복 정의하지 않는다.
