@@ -6,7 +6,8 @@ import type { BoardState } from "@/lib/game-ws";
 const ROWS = 12;
 
 /** 보드 배경 테마 — 전역 앱 테마(설정 > 테마)를 따른다 */
-export type BoardTheme = "candy" | "note" | "lego" | "cat" | "school";
+export type BoardTheme =
+  "candy" | "note" | "lego" | "cat" | "school" | "academy";
 
 const THEME_BORDER: Record<BoardTheme, string> = {
   candy: "border-[#F0C4E0]",
@@ -14,6 +15,7 @@ const THEME_BORDER: Record<BoardTheme, string> = {
   lego: "border-[#BFD4F2]",
   cat: "border-[#EFD4AF]",
   school: "border-[#8A6A48]", // 칠판 나무 프레임
+  academy: "border-[#C7B892]", // 갱지 문제지 가장자리
 };
 
 /** 테마별 낙하물 팔레트 — 몸통 색 순환 + 텍스트/가비지/아이템 (2026-07-31
@@ -59,6 +61,13 @@ const PALETTES: Record<BoardTheme, BoardPalette> = {
     text: "#FFFFFF",
     garbage: "#3A3F4A",
     garbageText: "#C9CDD6",
+  },
+  // 학원: 갱지 답안 칩 — 종이 흰빛 + 채점펜 빨강 표기 (2026-08-04)
+  academy: {
+    colors: ["#FBF6E6", "#F3ECD6", "#FDFBF0", "#F7F0DC", "#F1E8CE"],
+    text: "#B23A2B",
+    garbage: "#CFC6AC",
+    garbageText: "#6B6353",
   },
 };
 
@@ -342,6 +351,31 @@ function drawBackground(
     }
     ctx.fillStyle = "rgba(255,255,255,0.10)";
     ctx.fillRect(0, height - 5, width, 5);
+    return;
+  }
+  if (theme === "academy") {
+    // 갱지 문제지 — 원고지 모눈 + 좌측 채점펜 마진선 (학원)
+    ctx.fillStyle = "#F5EFDC";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "rgba(90,76,48,0.10)";
+    ctx.lineWidth = 1;
+    const cell = 26;
+    ctx.beginPath();
+    for (let gx = cell; gx < width; gx += cell) {
+      ctx.moveTo(gx + 0.5, 0);
+      ctx.lineTo(gx + 0.5, height);
+    }
+    for (let gy = cell; gy < height; gy += cell) {
+      ctx.moveTo(0, gy + 0.5);
+      ctx.lineTo(width, gy + 0.5);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(192,57,43,0.28)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cell * 1.5, 0);
+    ctx.lineTo(cell * 1.5, height);
+    ctx.stroke();
     return;
   }
   // candy: 파스텔 그라데이션 + 은은한 버블
@@ -675,6 +709,27 @@ function drawBrickBody(
     ctx.fillStyle = "rgba(255,255,255,0.10)";
     ctx.fillRect(x + w * 0.12, y + h * 0.55, w * 0.3, 3);
     ctx.fillRect(x + w * 0.55, y + h * 0.72, w * 0.25, 3);
+    return;
+  }
+  if (theme === "academy") {
+    // 답안 칩 — 갱지 조각 + 좌측 채점펜 세로선 + 우상단 마킹 동그라미 (학원)
+    ctx.fillStyle = "rgba(90,76,48,0.22)";
+    ctx.fillRect(x + 1, y + 2, w, h);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "rgba(90,76,48,0.30)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.strokeStyle = "rgba(192,57,43,0.55)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 4.5, y + 2);
+    ctx.lineTo(x + 4.5, y + h - 2);
+    ctx.stroke();
+    const r = Math.min(5, h * 0.22);
+    ctx.beginPath();
+    ctx.arc(x + w - r - 4, y + r + 3, r, 0, Math.PI * 2);
+    ctx.stroke();
     return;
   }
   // candy: 젤리 몸통 + 아랫면 그림자 + 글로시 하이라이트

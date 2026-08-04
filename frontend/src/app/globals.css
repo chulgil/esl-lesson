@@ -115,6 +115,13 @@ html[data-theme="school"] {
   --radius-lg: 2px;
   --radius-xl: 2px;
 }
+/* 학원 — 인쇄물이라 완전 직각 */
+html[data-theme="academy"] {
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+}
 
 /* 그림자 시그니처 — 레고 = 브릭 하드 오프셋, 캔디 = 몽글 소프트, 학교 = 평면 인쇄물 */
 html[data-theme="lego"] :is(.shadow-sm, .shadow-md, .shadow-lg) {
@@ -126,29 +133,69 @@ html[data-theme="candy"] :is(.shadow-sm, .shadow-md) {
 html[data-theme="school"] :is(.shadow-sm, .shadow-md) {
   box-shadow: none;
 }
-
-/* 전역 테마: 학교수업 — 칠판 그린 + 갱지(모눈) 교실 톤 */
-html[data-theme="school"] {
-  --color-paper: #f7f4e9;
-  --color-paper-line: #d9d2ba;
-  --color-margin-red: #d98c7a;
-  --color-ink: #2f3e35;
-  --color-brick-red: #c96a4f;
-  --color-brick-red-shadow: #a75440;
-  --color-brick-yellow: #e5b64e;
-  --color-brick-yellow-shadow: #c2963a;
-  --color-brick-blue: #4f7d9e;
-  --color-brick-blue-shadow: #3d6480;
-  --color-brick-green: #3f7d5a;
-  --color-brick-green-shadow: #2f6246;
-  --color-highlight: #e9e0b8;
+html[data-theme="academy"] :is(.shadow-sm, .shadow-md, .shadow-lg) {
+  box-shadow: none;
 }
 
-/* 학교수업: 줄노트 대신 원고지풍 모눈 */
+/* 전역 테마: 학교수업 — 칠판 컨셉 (2026-08-04 분리, 갱지는 학원 테마로 이관).
+   배경은 교실 벽(연민트 페인트) — 화면 전체를 칠판으로 덮으면 본문이 어두워져
+   장시간 학습에 부담이라, 칠판은 표면(문제 카드·답안지·보드)이 담당한다. */
+html[data-theme="school"] {
+  --color-paper: #eaf1ec;
+  --color-paper-line: #cddcd2;
+  --color-margin-red: #c98a7a;
+  --color-ink: #22332b;
+  --color-brick-red: #c05a45;
+  --color-brick-red-shadow: #9e4536;
+  --color-brick-yellow: #d9a441;
+  --color-brick-yellow-shadow: #b78730;
+  --color-brick-blue: #47738f;
+  --color-brick-blue-shadow: #365a72;
+  --color-brick-green: #2e5b46;
+  --color-brick-green-shadow: #234636;
+  --color-highlight: #cfe3d5;
+}
+
+/* 학교수업: 칠판 지운 자국 — 가로로 문지른 흔적이 옅게 반복 */
 html[data-theme="school"] .notebook-lines {
   background-image:
-    linear-gradient(rgba(63, 125, 90, 0.09) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63, 125, 90, 0.09) 1px, transparent 1px);
+    repeating-linear-gradient(
+      -8deg,
+      rgba(46, 91, 70, 0.05) 0 60px,
+      transparent 60px 150px
+    ),
+    repeating-linear-gradient(
+      6deg,
+      rgba(46, 91, 70, 0.04) 0 40px,
+      transparent 40px 170px
+    );
+  background-size:
+    420px 190px,
+    380px 210px;
+}
+
+/* 전역 테마: 학원 — 갱지 모의고사 + 빨간 채점펜 (2026-08-04 신설) */
+html[data-theme="academy"] {
+  --color-paper: #f5efdc;
+  --color-paper-line: #ddd2b4;
+  --color-margin-red: #c0392b;
+  --color-ink: #3a3226;
+  --color-brick-red: #c0392b;
+  --color-brick-red-shadow: #9c2c20;
+  --color-brick-yellow: #d8a72f;
+  --color-brick-yellow-shadow: #b58a22;
+  --color-brick-blue: #4a6785;
+  --color-brick-blue-shadow: #38506a;
+  --color-brick-green: #4d7548;
+  --color-brick-green-shadow: #3a5c37;
+  --color-highlight: #ecdfae;
+}
+
+/* 학원: 원고지풍 모눈 (학교수업에서 이관 — 갱지 문제지의 시그니처) */
+html[data-theme="academy"] .notebook-lines {
+  background-image:
+    linear-gradient(rgba(90, 76, 48, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 76, 48, 0.09) 1px, transparent 1px);
   background-size: 26px 26px;
 }
 

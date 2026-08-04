@@ -7,22 +7,26 @@ import { type AppTheme, useAppTheme } from "@/lib/theme";
  *  theme.ts 카탈로그 + 백엔드 THEME_ACCESS + layout.tsx 부트 스크립트 5곳 (화면별 하드코딩 금지).
  *
  *  컨셉 매핑: 노트=종이 시험지 / 캔디=파스텔 사탕판 / 레고=블록판 /
- *  헤냥이=크림 고양이 카드(발도장) / 오피스=문서 위장 / 학교수업=칠판+갱지 시험지.
+ *  헤냥이=크림 고양이 카드(발도장) / 오피스=문서 위장 /
+ *  학교수업=칠판(분필·나무 프레임) / 학원=갱지 모의고사(빨간 채점펜).
  *
- *  컨셉은 테마마다 배타적이다 — 칠판은 학교수업만 쓴다 (2026-08-04: 헤냥이가
- *  학습·시험 표면에서 칠판을 쓰고 있어 두 테마가 같은 은유를 공유했다). */
+ *  컨셉은 테마마다 배타적이다 — 한 물체는 한 테마만 쓴다. 헤냥이가 칠판을 쓰던
+ *  것을 학교수업으로 돌려주고(2026-08-04), 학교수업이 겸하던 갱지는 학원 테마로
+ *  분리했다(2026-08-04). 두 은유를 한 테마가 겸하면 그 테마의 정체가 흐려진다. */
 
 // --- 게임 보드 -----------------------------------------------------------------
 
 /** BoardCanvas 가 전용 스킨을 가진 테마 — excel 만 노트 보드로 폴백
  *  (오피스 위장 중 화려한 게임 보드 금지 결정 유지, docs/specs/chat.md) */
-export type BoardSkinTheme = "note" | "candy" | "lego" | "cat" | "school";
+export type BoardSkinTheme =
+  "note" | "candy" | "lego" | "cat" | "school" | "academy";
 
 export function boardThemeOf(theme: AppTheme): BoardSkinTheme {
   return theme === "candy" ||
     theme === "lego" ||
     theme === "cat" ||
-    theme === "school"
+    theme === "school" ||
+    theme === "academy"
     ? theme
     : "note";
 }
@@ -30,7 +34,7 @@ export function boardThemeOf(theme: AppTheme): BoardSkinTheme {
 // --- 시계 (ExamTimer 등) -------------------------------------------------------
 
 export type ClockKind =
-  | "analog" // 교실 벽시계 (노트·학교수업)
+  | "analog" // 벽시계 (노트·학교수업·학원 — 교실도 시험장도 벽시계를 쓴다)
   | "analog-candy" // 막대사탕
   | "analog-cat" // 고양이 귀·수염
   | "digital" // 레고 디지털 브릭
@@ -39,6 +43,7 @@ export type ClockKind =
 export const CLOCK_OF: Record<AppTheme, ClockKind> = {
   note: "analog",
   school: "analog",
+  academy: "analog",
   candy: "analog-candy",
   cat: "analog-cat",
   lego: "digital",
@@ -54,6 +59,7 @@ export const CHAT_LABEL_OF: Record<AppTheme, string> = {
   cat: "냥 쪽지",
   excel: "공유 문서",
   school: "쪽지",
+  academy: "질문지",
 };
 
 /** 채팅 알림에 띄울 내용 없는 문구 (2026-08-04) — 발신자·본문을 싣지 않는다.
@@ -83,6 +89,13 @@ export const NAV_LABEL_OF: Record<AppTheme, Record<NavKey, string>> = {
   // 위장 테마 — 업무 도구처럼 보여야 하므로 학습 냄새가 나는 단어를 쓰지 않는다
   excel: { home: "대시보드", study: "작업", library: "문서함", game: "도구" },
   school: { home: "교실", study: "수업", library: "교과서", game: "쉬는시간" },
+  // 학원 — 교실(학교)과 겹치지 않게 자습·문제풀이 어휘로
+  academy: {
+    home: "자습실",
+    study: "문제풀이",
+    library: "문제집",
+    game: "쉬는시간",
+  },
 };
 
 // --- 표면(문항 카드) 스킨 — 시험지·학습 세션 공용 --------------------------------
@@ -238,32 +251,60 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     mark: "rounded-sm border-[#c9cfd6]",
     markSelected: "rounded-sm border-[#217346] bg-[#217346] text-white",
   },
+  // 학교수업 — 칠판 그 자체 (2026-08-04 분리). 나무 프레임 + 딥그린 판 +
+  // 분필 글씨. 색은 게임 보드(BoardCanvas school)와 같은 값이라 앱 전체가
+  // 같은 칠판을 쓴다. 갱지 시험지는 학원(academy) 테마로 넘겼다.
   school: {
     radius: "rounded-none",
-    omrPanel: "rounded-none border-2 border-ink/40 bg-[#fbf8ee]",
+    omrPanel: "rounded-none border-4 border-[#8a6a48] bg-[#2e5b46]",
+    omrLabel: "출석부",
+    omrCell:
+      "rounded-none border-2 border-dashed border-[#f4f1e8]/40 bg-white/5 text-[#f4f1e8] opacity-80 hover:opacity-100",
+    omrCellActive:
+      "rounded-none border-2 border-brick-yellow bg-white/15 text-brick-yellow",
+    omrCellMarked:
+      "rounded-none border-2 border-[#f4f1e8] bg-[#f4f1e8] text-[#22332b]",
+    section:
+      "rounded-none border-8 border-[#8a6a48] bg-[#2e5b46] text-[#f4f1e8]",
+    // 분필로 밑줄 그은 제목 — 판 위라 테두리 대신 이중 밑줄로 구획
+    band: "relative border-b-4 border-double border-[#f4f1e8]/60 px-3 pb-2 text-center",
+    bandTitle: "font-hand text-lg leading-tight font-bold tracking-wide",
+    bandMeta: "mt-0.5 text-[10px] tracking-[0.3em] opacity-70",
+    divider: "mb-3 border-b border-dashed border-[#f4f1e8]/30",
+    number: "text-xs font-bold opacity-75",
+    prompt: "font-hand text-lg font-medium",
+    promptSub: "mt-1 text-sm opacity-75",
+    choice:
+      "rounded-none border-[#f4f1e8]/40 bg-white/5 hover:border-brick-yellow/70",
+    choiceSelected: "rounded-none border-brick-yellow bg-white/15 font-bold",
+    mark: "rounded-none border-[#f4f1e8]/50",
+    markSelected:
+      "rounded-none border-brick-yellow bg-brick-yellow text-[#22332b]",
+  },
+  // 학원 — 갱지 모의고사지 (2026-08-04 신설, 학교수업에서 갱지를 이관).
+  // 직각 인쇄물 + 이중 괘선 표제 + 빨간 채점펜 포인트.
+  academy: {
+    radius: "rounded-none",
+    omrPanel: "rounded-none border-2 border-ink/40 bg-[#fbf6e6]",
     omrLabel: "OMR 카드",
     omrCell:
       "rounded-none border-2 border-dashed border-ink/30 bg-white opacity-70 hover:opacity-100",
     omrCellActive:
-      "rounded-none border-2 border-brick-green bg-brick-green/10 text-brick-green",
+      "rounded-none border-2 border-brick-red bg-brick-red/10 text-brick-red",
     omrCellMarked: "rounded-none border-2 border-ink bg-ink text-white",
-    // 갱지 시험지 — 직각 모서리 + 이중 괘선, 교실 중간고사 느낌
-    section: "rounded-none border-2 border-ink/40 bg-[#fbf8ee]",
-    // 표제는 칠판 — 나무 프레임 + 딥그린 판 + 분필 글씨 (2026-08-04).
-    // 색은 게임 보드(BoardCanvas school)와 같은 값이라 한 테마가 한 칠판을 쓴다.
-    // 본문까지 어둡게 하면 긴 영문 가독성이 떨어져 표제 상자에만 건다.
-    band: "border-4 border-[#8a6a48] bg-[#2e5b46] px-3 py-2 text-center text-[#f4f1e8] shadow-none",
+    section: "rounded-none border-2 border-ink/40 bg-[#fbf6e6]",
+    band: "border-4 border-double border-ink/60 px-3 py-2 text-center",
     bandTitle: "font-hand text-lg leading-tight font-bold tracking-wide",
-    bandMeta: "mt-0.5 text-[10px] tracking-[0.3em] opacity-75",
+    bandMeta: "mt-0.5 text-[10px] tracking-[0.3em] opacity-60",
     divider: "mb-3 border-b-2 border-ink/30",
-    number: "text-xs font-bold opacity-60",
+    // 문항 번호는 채점펜 빨강 — 갱지 위 빨간 표기가 학원 시그니처
+    number: "text-xs font-bold text-brick-red/80",
     prompt: "text-lg font-medium",
     promptSub: "mt-1 text-sm opacity-60",
-    choice: "rounded-none border-ink/30 bg-white hover:border-brick-green",
-    choiceSelected:
-      "rounded-none border-brick-green bg-brick-green/10 font-bold",
+    choice: "rounded-none border-ink/30 bg-white hover:border-brick-red",
+    choiceSelected: "rounded-none border-brick-red bg-brick-red/10 font-bold",
     mark: "rounded-none border-ink/40",
-    markSelected: "rounded-none border-brick-green bg-brick-green text-white",
+    markSelected: "rounded-none border-brick-red bg-brick-red text-white",
   },
 };
 

@@ -17,6 +17,7 @@ THEME_ACCESS: dict[str, str] = {
     "excel": "restricted",
     "cat": "restricted",
     "school": "restricted",
+    "academy": "restricted",
 }
 
 # 잠금 해제 복귀(fallback) 테마 — 제한 전환 금지 (클라 가드가 여기로 복귀시킨다)

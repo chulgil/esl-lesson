@@ -3,7 +3,8 @@
 import { useSyncExternalStore } from "react";
 
 /** 전역 앱 테마 — 디자인 토큰(data-theme)과 게임 보드가 함께 따른다 */
-export type AppTheme = "note" | "candy" | "lego" | "cat" | "excel" | "school";
+export type AppTheme =
+  "note" | "candy" | "lego" | "cat" | "excel" | "school" | "academy";
 
 export const APP_THEMES: {
   key: AppTheme;
@@ -38,8 +39,14 @@ export const APP_THEMES: {
   {
     key: "school",
     label: "학교수업",
-    swatch: "#3F7D5A",
-    desc: "칠판과 갱지 시험지 — 교실에서 수업 듣는 기분",
+    swatch: "#2E5B46",
+    desc: "칠판에 분필로 — 교실에서 수업 듣는 기분",
+  },
+  {
+    key: "academy",
+    label: "학원",
+    swatch: "#E8DCB8",
+    desc: "갱지 모의고사 + 빨간 채점펜 — 문제 푸는 기분",
   },
   {
     key: "excel",
@@ -59,7 +66,8 @@ function isTheme(v: unknown): v is AppTheme {
     v === "lego" ||
     v === "cat" ||
     v === "excel" ||
-    v === "school"
+    v === "school" ||
+    v === "academy"
   );
 }
 

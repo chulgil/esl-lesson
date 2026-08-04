@@ -17,9 +17,18 @@ async def test_only_note_free_by_default(client, db_session):
     """기본 무료는 note 하나 — 나머지는 미션 달성/지급으로만 열린다 (2026-07-30 전환)."""
     await login(client, db_session)
     by_key = await themes_by_key(client)
-    assert set(by_key) == {"note", "candy", "lego", "excel", "cat", "school"}
+    # academy(학원) = school 이 겸하던 갱지 컨셉을 분리한 테마 (2026-08-04)
+    assert set(by_key) == {
+        "note",
+        "candy",
+        "lego",
+        "excel",
+        "cat",
+        "school",
+        "academy",
+    }
     assert by_key["note"]["access"] == "free" and by_key["note"]["allowed"] is True
-    for key in ("candy", "lego", "excel", "cat", "school"):
+    for key in ("candy", "lego", "excel", "cat", "school", "academy"):
         assert by_key[key]["access"] == "restricted"
         assert by_key[key]["allowed"] is False
 
