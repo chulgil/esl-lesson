@@ -291,6 +291,24 @@ html[data-theme="lego"] .notebook-lines {
   background: linear-gradient(transparent 55%, var(--color-highlight) 55%, var(--color-highlight) 92%, transparent 92%);
 }
 
+/* 어두운 표면(칠판) 보정 — 2026-08-04 가독성 보고.
+   화면 컴포넌트들은 표면이 밝다는 전제로 bg-white·형광펜(.hl)을 하드코딩한다.
+   학교수업 테마는 표면 자체가 칠판이라 그 전제가 깨져 흰 바탕 위 흰 글씨,
+   밝은 형광펜 위 분필 글씨가 됐다. 컴포넌트를 하나씩 고치면 새로 만드는
+   컴포넌트가 또 깨지므로, 칠판 컨테이너(.chalk-surface) 안에서 일괄 보정한다. */
+
+/* :where() 로 특이도 0 — 상속만 이기고, 명시된 text-* 유틸에는 양보한다
+   (text-brick-green 같은 의미색을 덮어쓰면 안 됨) */
+:where(html[data-theme="school"] .chalk-surface .bg-white) {
+  color: var(--color-ink);
+}
+
+/* 형광펜은 칠판에서 분필 밑줄로 — 밝은 밑칠 위 분필 글씨는 대비가 안 나온다 */
+html[data-theme="school"] .chalk-surface .hl {
+  background: none;
+  border-bottom: 2px dashed rgba(244, 241, 232, 0.65);
+}
+
 /* 레고 브릭 스터드 (윗면 도트) — 레고 테마의 기본 형태 */
 .brick-studs::before {
   content: "";

@@ -256,7 +256,11 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
   // 같은 칠판을 쓴다. 갱지 시험지는 학원(academy) 테마로 넘겼다.
   school: {
     radius: "rounded-none",
-    omrPanel: "rounded-none border-4 border-[#8a6a48] bg-[#2e5b46]",
+    // chalk-surface: 어두운 면 위에 놓인 흰 배경 요소의 글자색을 되돌리는 마커.
+    // 컴포넌트들이 bg-white·형광펜(.hl)을 하드코딩해도 흰 바탕+흰 글씨가 되지
+    // 않게 globals.css 가 이 컨테이너 안에서만 보정한다 (2026-08-04 가독성 보고)
+    omrPanel:
+      "chalk-surface rounded-none border-4 border-[#8a6a48] bg-[#2e5b46]",
     omrLabel: "출석부",
     omrCell:
       "rounded-none border-2 border-dashed border-[#f4f1e8]/40 bg-white/5 text-[#f4f1e8] opacity-80 hover:opacity-100",
@@ -265,9 +269,10 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     omrCellMarked:
       "rounded-none border-2 border-[#f4f1e8] bg-[#f4f1e8] text-[#22332b]",
     section:
-      "rounded-none border-8 border-[#8a6a48] bg-[#2e5b46] text-[#f4f1e8]",
-    // 분필로 밑줄 그은 제목 — 판 위라 테두리 대신 이중 밑줄로 구획
-    band: "relative border-b-4 border-double border-[#f4f1e8]/60 px-3 pb-2 text-center",
+      "chalk-surface rounded-none border-8 border-[#8a6a48] bg-[#2e5b46] text-[#f4f1e8]",
+    // 분필로 그은 얇은 밑줄 — 굵은 이중선은 바로 위 글자를 눌러 읽기 어려웠다
+    // (2026-08-04 보고). 선은 옅게, 글자와의 간격은 넉넉히.
+    band: "relative border-b border-[#f4f1e8]/25 px-3 pb-3 text-center",
     bandTitle: "font-hand text-lg leading-tight font-bold tracking-wide",
     bandMeta: "mt-0.5 text-[10px] tracking-[0.3em] opacity-70",
     divider: "mb-3 border-b border-dashed border-[#f4f1e8]/30",
