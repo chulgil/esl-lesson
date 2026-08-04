@@ -6,8 +6,11 @@ import { type AppTheme, useAppTheme } from "@/lib/theme";
  *  전부 여기서 컨셉을 읽는다. 새 테마 추가 = 이 파일 + globals.css 토큰 +
  *  theme.ts 카탈로그 + 백엔드 THEME_ACCESS + layout.tsx 부트 스크립트 5곳 (화면별 하드코딩 금지).
  *
- *  컨셉 매핑: 노트=종이 시험지 / 캔디=화이트보드 / 레고=블록판 /
- *  헤냥이=칠판(분필) / 오피스=문서 위장 / 학교수업=갱지 시험지+교실. */
+ *  컨셉 매핑: 노트=종이 시험지 / 캔디=파스텔 사탕판 / 레고=블록판 /
+ *  헤냥이=크림 고양이 카드(발도장) / 오피스=문서 위장 / 학교수업=칠판+갱지 시험지.
+ *
+ *  컨셉은 테마마다 배타적이다 — 칠판은 학교수업만 쓴다 (2026-08-04: 헤냥이가
+ *  학습·시험 표면에서 칠판을 쓰고 있어 두 테마가 같은 은유를 공유했다). */
 
 // --- 게임 보드 -----------------------------------------------------------------
 
@@ -185,29 +188,31 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     studs: true,
   },
   cat: {
-    radius: "rounded-lg",
-    omrPanel:
-      "rounded-lg border-4 border-[#6b4a2f] bg-[#2f4640] text-[#f4f1e8]",
-    omrLabel: "출석부",
+    // 크림 고양이 카드 — 몰랑한 모서리 + 살구 젤리 포인트 + 발도장 (2026-08-04).
+    // 이전엔 초록 칠판(분필)이라 학습·시험 화면에서만 고양이 세계관이 끊기고
+    // 학교수업 테마와 컨셉이 겹쳤다 — 칠판은 학교수업이 가져간다.
+    radius: "rounded-xl",
+    omrPanel: "rounded-xl border-2 border-[#f0d6b4] bg-[#fffaf2]",
+    omrLabel: "발도장 답안지",
     omrCell:
-      "rounded-lg border-2 border-dashed border-[#f4f1e8]/40 bg-white/5 opacity-80 hover:opacity-100",
+      "rounded-xl border-2 border-dashed border-[#e8c9a3] bg-white opacity-75 hover:opacity-100",
     omrCellActive:
-      "rounded-lg border-2 border-brick-yellow bg-white/15 text-brick-yellow",
+      "rounded-xl border-2 border-brick-red bg-brick-red/15 text-brick-red",
     omrCellMarked:
-      "rounded-lg border-2 border-brick-yellow bg-brick-yellow text-ink",
-    // 칠판 — 분필 글씨. 어두운 면이라 텍스트·테두리를 밝게 뒤집는다
-    section: "rounded-lg border-8 border-[#6b4a2f] bg-[#2f4640] text-[#f4f1e8]",
-    band: "relative border-2 border-dashed border-[#f4f1e8]/50 px-3 py-2 text-center",
+      "rounded-xl border-2 border-brick-red bg-brick-red text-brick-label",
+    section: "rounded-xl border-2 border-[#f0d6b4] bg-[#fffaf2]",
+    // 젤리 자국처럼 둥근 점선 밴드 — 캔디의 물결 밑줄과 겹치지 않게
+    band: "relative rounded-xl border-2 border-dashed border-brick-red/35 bg-highlight/50 px-4 py-2 text-center",
     bandTitle: "font-hand text-lg leading-tight font-bold",
-    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-70",
-    divider: "mb-3 border-b border-dashed border-[#f4f1e8]/30",
-    number: "text-xs font-bold opacity-70",
+    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-60",
+    divider: "mb-3 border-b-2 border-dotted border-[#e8c9a3]",
+    number: "text-xs font-bold text-brick-red/80",
     prompt: "font-hand text-lg font-medium",
-    promptSub: "mt-1 text-sm opacity-70",
-    choice: "border-[#f4f1e8]/40 bg-white/5 hover:border-brick-yellow/70",
-    choiceSelected: "border-brick-yellow bg-white/15 font-bold",
-    mark: "border-[#f4f1e8]/50",
-    markSelected: "border-brick-yellow bg-brick-yellow text-ink",
+    promptSub: "mt-1 text-sm opacity-60",
+    choice: "rounded-xl border-[#e8c9a3] bg-white hover:border-brick-red/60",
+    choiceSelected: "rounded-xl border-brick-red bg-brick-red/15 font-bold",
+    mark: "rounded-xl border-[#e8c9a3]",
+    markSelected: "rounded-xl border-brick-red bg-brick-red text-brick-label",
     paw: true,
   },
   excel: {
