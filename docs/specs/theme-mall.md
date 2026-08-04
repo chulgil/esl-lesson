@@ -1,6 +1,7 @@
 # 스펙: 테마 몰 (테마 엔타이틀먼트)
 
 > 최종 검증: 2026-07-30 (코드 대조 완료) · 설계 승인: 2026-07-30 (사용자)
+> 2026-08-04 부분 갱신(코드 대조): 테마 레지스트리·은유 배타성
 
 앱 테마 6종(note/candy/lego/cat/excel/school — `frontend/src/lib/theme.ts` APP_THEMES. school=학교수업(칠판 그린+갱지 모눈), 2026-07-31 신설·restricted)을 전원 무료에서 **엔타이틀먼트(보유권) 기반** 자산으로 전환한다. 이번 범위는 엔타이틀먼트 기반 + 백오피스 수동 지급/회수 + 헤냥이(cat) 제한이며, 결제(PG) 연동은 후속이다.
 
@@ -47,7 +48,7 @@ theme_reward_rules (d1e2f3a4b5c6, 2026-07-30)
   created_at
 ```
 
-- 접근 정책: `backend/app/services/themes.py` — 기본값 `THEME_ACCESS`(**note 만 free, candy/lego/excel/cat = restricted** — 2026-07-30 전환: 기본 테마는 노트 하나, 나머지는 업적 보상·이벤트 지급으로만) 에 `theme_settings` 오버라이드를 병합한 `effective_theme_access(db)` 가 판정의 단일 진입점. 행 없음 = 기본값. 유효 키 목록·기본값은 코드가 정본(프론트 APP_THEMES 와 드리프트 방지).
+- 접근 정책: `backend/app/services/themes.py` — 기본값 `THEME_ACCESS`(**note 만 free, candy/lego/excel/cat/school = restricted** — 2026-07-30 전환: 기본 테마는 노트 하나, 나머지는 업적 보상·이벤트 지급으로만) 에 `theme_settings` 오버라이드를 병합한 `effective_theme_access(db)` 가 판정의 단일 진입점. 행 없음 = 기본값. 유효 키 목록·기본값은 코드가 정본(프론트 APP_THEMES 와 드리프트 방지).
 - **업적 보상 지급 엔진** (`services/theme_rewards.py sync_theme_rewards`): GET /api/themes(AppNav 가드·설정)와 GET /api/study/achievements(학습 홈)에서 allowed 판정 **전에** 실행 — 규칙의 업적을 달성했고 미보유면 theme_grants INSERT(note="업적 달성: {제목}" 이력) + theme_granted 알림. 업적이 로그 소급 집계라 과거 달성자도 자동 지급(백필 불필요). 비용 가드: 미지급 규칙 테마가 없으면 업적 집계 생략(정착 상태 2쿼리).
 - **영속 보장**: 규칙 삭제/변경은 이후 지급에만 영향 — 이미 지급된 grants 는 유지, note 가 지급 사유 이력. 초기 시드 규칙: 첫 친구→candy, 첫 게임(first_game 신설)→lego.
 - 백오피스에서 테마별 무료<->제한 전환 가능. **note 는 잠금 복귀(fallback) 목적지라 제한 전환 금지** (`FALLBACK_THEME`).
@@ -85,9 +86,15 @@ theme_reward_rules (d1e2f3a4b5c6, 2026-07-30)
 
 `frontend/src/lib/theme-surfaces.ts` 가 화면별 테마 분기의 단일 정의처:
 `SURFACE_SKINS`(시험지·학습 세션 문항 카드 공용 표면), `CLOCK_OF`(경과 시계 컨셉),
+`CHAT_LABEL_OF`(채팅 라벨) + `chatNotice`(채팅 알림 문구 — 파생, [chat.md](chat.md) 내용 없는 알림),
+`NAV_LABEL_OF`(나머지 4탭 라벨, 2026-08-03),
 `boardThemeOf`(게임 보드 폴백 — 전용 스킨은 note/candy/lego/cat/school, excel 은 위장 유지로 노트 폴백. 보드 자체 렌더는 `BoardCanvas` 의 PALETTES·drawBrickBody·drawBackground). 퀴즈 선지·어순 칩은 `SURFACE_SKINS.choice` 재사용 (2026-07-31 게임 테마화). **새 테마 추가 =
 theme.ts 카탈로그 + globals.css 토큰 + theme-surfaces + 백엔드 THEME_ACCESS + layout.tsx 부트 스크립트 화이트리스트 5곳** —
-화면 컴포넌트에 테마 하드코딩 금지.
+화면 컴포넌트에 테마 하드코딩 금지. 절차 전체는 `.claude/rules/theme-addition.md`.
+
+**은유 배타성** (2026-08-04): 다른 테마가 이미 쓰는 물체(칠판·스프레드시트·블록판)를
+새 테마가 재사용하지 않는다. 헤냥이가 학습·시험 표면에서 칠판을 써서 학교수업과
+구분이 사라졌던 사고 — 칠판은 학교수업만, 헤냥이는 크림 고양이 카드(발도장·살구 젤리).
 
 ## 멘탈모델 접점 4종 (2026-07-30 — "테마 = 업적 보상" 각인)
 

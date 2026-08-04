@@ -249,9 +249,12 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     omrCellMarked: "rounded-none border-2 border-ink bg-ink text-white",
     // 갱지 시험지 — 직각 모서리 + 이중 괘선, 교실 중간고사 느낌
     section: "rounded-none border-2 border-ink/40 bg-[#fbf8ee]",
-    band: "border-4 border-double border-ink/60 px-3 py-2 text-center",
+    // 표제는 칠판 — 나무 프레임 + 딥그린 판 + 분필 글씨 (2026-08-04).
+    // 색은 게임 보드(BoardCanvas school)와 같은 값이라 한 테마가 한 칠판을 쓴다.
+    // 본문까지 어둡게 하면 긴 영문 가독성이 떨어져 표제 상자에만 건다.
+    band: "border-4 border-[#8a6a48] bg-[#2e5b46] px-3 py-2 text-center text-[#f4f1e8] shadow-none",
     bandTitle: "font-hand text-lg leading-tight font-bold tracking-wide",
-    bandMeta: "mt-0.5 text-[10px] tracking-[0.3em] opacity-60",
+    bandMeta: "mt-0.5 text-[10px] tracking-[0.3em] opacity-75",
     divider: "mb-3 border-b-2 border-ink/30",
     number: "text-xs font-bold opacity-60",
     prompt: "text-lg font-medium",

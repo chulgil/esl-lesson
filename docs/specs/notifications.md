@@ -1,6 +1,7 @@
 # 스펙: 알림 센터
 
 > 최종 검증: 2026-07-30 (코드 대조 완료)
+> 2026-08-04 부분 갱신(코드 대조): OS 알림 문구 경계
 
 Jira/Confluence 스타일 개인 알림함. 친구 요청·수락·게임 초대를 행으로 적재하고 네비 벨에서 확인한다. 토스트(휘발)와 달리 놓친 알림을 나중에 볼 수 있다. [chat.md](chat.md) 의 WS 인프라(`/ws/game` 단일 소켓 + `deliver_ws`)를 재사용한다.
 
@@ -14,6 +15,7 @@ Jira/Confluence 스타일 개인 알림함. 친구 요청·수락·게임 초대
 | 클릭 이동 | friend_request/friend_accepted → `/friends`, game_invite → `/game/{game}?join={code}`, theme_granted → `/settings`, exam_dethroned → `/exam/{content_id}` |
 | payload | 발생 시점 스냅샷(닉네임 등) — 원본이 바뀌어도 알림 문구 불변 (`chat_messages.item_ref` 패턴) |
 | 채팅 | 벨 배지 = 알림 unread + 채팅 unread **합산** (2026-07-28 배지 일원화 — 기존 `ChatNavButton` 개별 배지는 제거). 채팅은 행으로 적재하지 않고 드롭다운 첫 행 "새 메시지 N개" 요약만 |
+| OS 알림 문구 | 이 문서는 **인앱 벨**만 다룬다. 잠금화면에 뜨는 OS 알림은 채팅만 발신자·본문을 숨긴다 ([chat.md](chat.md) 내용 없는 채팅 알림) — 게임 초대·복습 리마인더는 문구 그대로 |
 
 ## 데이터 모델
 
