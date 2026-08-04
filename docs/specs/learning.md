@@ -94,6 +94,11 @@
 진입점은 학습 탭 "오답 정리" 카드(`weak_count` > 0 일 때만) → `/study/session?mode=weak`.
 홈에는 두지 않는다 (홈 = 오늘 할 일 하나 — ux-redesign-2026-08.md IA 원칙).
 
+스코프 주의: 게임 오답에서 원탭으로 담긴 카드(`POST /api/cards`, ReviewPanel)는
+아직 복습 오답 이력(ReviewLog)이 없어 오답 정리 대상이 아니다 — 신규 카드로
+`due_at=now` 라 일반 큐에 즉시 등장하므로 학습 누락은 없다. 게임 오답을 weak
+대상에 포함할지는 benchmark P2 에서 재검토.
+
 ## 장기 기억 지표 (2026-08-04 — 실력 성장 증명)
 
 "안정적으로 오래 기억하는 항목 수" — FSRS stability 기반의 정직한 실력 지표.
