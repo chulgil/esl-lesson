@@ -105,10 +105,19 @@ export interface StudyRank {
   me: boolean;
 }
 
+/** 장기 기억 — stability 7일+ 카드 수와 주별 도달 누적 (learning.md 장기 기억 지표) */
+export interface LongTermMemory {
+  count: number;
+  weekly: { week_start: string; count: number }[];
+}
+
 export interface Stats {
   xp: number;
   level: number;
   level_progress: number;
+  /** 오답 정리 대상 — 최근 7일 내 틀린 카드 수 (learning.md 오답 정리 모드) */
+  weak_count: number;
+  long_term: LongTermMemory;
   due_count: number;
   reviews_today: number;
   /** 오늘의 목표 — 밀린 양과 무관한 달성 가능 소량 (포기 방지 기획) */
@@ -205,18 +214,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const studyApi = {
   // contentId 지정 시 해당 덱(콘텐츠)만 학습 (docs/specs/study-decks.md)
-  queue: (contentId?: number) =>
-    request<{
+  // mode="weak" 는 오답 정리 — 최근 오답 카드만 (docs/specs/learning.md)
+  queue: (contentId?: number, mode?: "weak") => {
+    const params = new URLSearchParams();
+    if (contentId != null) params.set("content_id", String(contentId));
+    if (mode) params.set("mode", mode);
+    const qs = params.toString();
+    return request<{
       total_due: number;
       introduced_today: number;
       hint_delay_seconds: number;
       deck: { content_id: number; title: string } | null;
+      mode?: string;
       questions: Question[];
-    }>(
-      contentId != null
-        ? `/api/study/queue?content_id=${contentId}`
-        : "/api/study/queue",
-    ),
+    }>(qs ? `/api/study/queue?${qs}` : "/api/study/queue");
+  },
   decks: () => request<{ items: StudyDeck[] }>("/api/study/decks"),
   getSettings: () =>
     request<{

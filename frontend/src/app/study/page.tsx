@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { AchievementBadges } from "@/components/study/AchievementBadges";
 import { CardCollection } from "@/components/study/CardCollection";
+import { LongTermMemoryCard } from "@/components/study/LongTermMemoryCard";
 import { examApi, type OpenExam } from "@/lib/exam-api";
 import { friendsApi } from "@/lib/friends-api";
 import {
@@ -96,6 +97,27 @@ export default function StudyHubPage() {
             className="ml-auto text-xs font-bold text-brick-green underline-offset-2 hover:underline"
           >
             홈에서 이어서 학습 →
+          </Link>
+        </section>
+      )}
+
+      {/* 오답 정리 — 최근 7일 틀린 카드 보충 학습 (docs/specs/learning.md,
+          기획: duolingo-benchmark-2026-08.md). 없으면 숨김 — 잘하고 있는 사람에게
+          빈 오답 노트를 보여줄 이유가 없다 */}
+      {stats && stats.weak_count > 0 && (
+        <section className="mt-5 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-brick-red/40 bg-white px-5 py-4 shadow-sm">
+          <div className="min-w-40 flex-1">
+            <h2 className="font-hand text-2xl font-bold">오답 정리</h2>
+            <p className="mt-0.5 text-xs opacity-60">
+              최근 7일간 틀린 카드 {stats.weak_count}개 — 흔들리는 기억부터 다시
+              붙잡아요
+            </p>
+          </div>
+          <Link
+            href="/study/session?mode=weak"
+            className="inline-flex min-h-10 items-center rounded-md border-2 border-brick-red/60 bg-white px-3 text-sm font-bold text-brick-red transition hover:-translate-y-0.5 hover:border-brick-red"
+          >
+            오답만 다시 풀기
           </Link>
         </section>
       )}
@@ -212,6 +234,8 @@ export default function StudyHubPage() {
             무관하게 쌓여요
           </p>
           <CardCollection stats={stats} />
+          {/* 장기 기억 — FSRS stability 기반 "진짜 실력" 증명 (learning.md) */}
+          {stats.long_term && <LongTermMemoryCard data={stats.long_term} />}
         </section>
       )}
 

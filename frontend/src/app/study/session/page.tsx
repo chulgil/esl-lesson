@@ -30,9 +30,11 @@ export default function StudyPage() {
 
 function StudySessionInner() {
   // ?content=ID — 덱(콘텐츠) 한정 학습, 없으면 전체 (docs/specs/study-decks.md)
+  // ?mode=weak — 오답 정리: 최근 틀린 카드만 보충 학습 (docs/specs/learning.md)
   const params = useSearchParams();
   const contentParam = params.get("content");
   const contentId = contentParam ? Number(contentParam) : undefined;
+  const weakMode = params.get("mode") === "weak";
 
   const [queue, setQueue] = useState<Question[]>([]);
   const [idx, setIdx] = useState(0);
@@ -49,7 +51,7 @@ function StudySessionInner() {
 
   useEffect(() => {
     studyApi
-      .queue(contentId)
+      .queue(contentId, weakMode ? "weak" : undefined)
       .then((res) => {
         setQueue(res.questions);
         setHintDelay(res.hint_delay_seconds ?? 0);
@@ -62,7 +64,7 @@ function StudySessionInner() {
       .getSettings()
       .then((s) => setStudyLevel(s.study_level))
       .catch(() => undefined);
-  }, [contentId]);
+  }, [contentId, weakMode]);
 
   const question = queue[idx];
 
@@ -167,7 +169,9 @@ function StudySessionInner() {
             deckTitle ? "max-w-[38vw] truncate sm:max-w-sm" : ""
           }`}
         >
-          <span className="hl">{deckTitle ?? "오늘의 학습"}</span>
+          <span className="hl">
+            {weakMode ? "오답 정리" : (deckTitle ?? "오늘의 학습")}
+          </span>
         </h1>
         {(phase === "question" || phase === "feedback") && (
           <span className="ml-auto rounded-full bg-white px-3 py-1 text-sm font-bold whitespace-nowrap shadow-sm">
@@ -267,7 +271,19 @@ function StudySessionInner() {
         <p className="text-sm opacity-60">큐를 불러오는 중...</p>
       )}
 
-      {phase === "empty" && (
+      {phase === "empty" && weakMode && (
+        <div className="flex max-w-md flex-col items-start gap-3">
+          <p className="font-bold">정리할 오답이 없어요</p>
+          <p className="text-sm opacity-70">
+            최근 7일 동안 틀린 카드가 없다는 뜻이에요 — 아주 잘하고 있어요!
+          </p>
+          <Brick color="green" href="/study">
+            학습 홈으로
+          </Brick>
+        </div>
+      )}
+
+      {phase === "empty" && !weakMode && (
         <div className="flex max-w-md flex-col items-start gap-3">
           <p className="font-bold">오늘 만날 카드가 없어요</p>
           {/* 왜 비었는지 안내 — 담기빼기 후 "없다"만 뜨면 버그로 보인다 (2026-07-30) */}

@@ -78,6 +78,32 @@
 
 `?content_id=N` 으로 특정 콘텐츠(덱) 한정 학습 가능 (2026-07-28 — [study-decks.md](study-decks.md)).
 
+### 오답 정리 모드 (?mode=weak — 2026-08-04, 개인화 학습과학 팩)
+
+세션이 끝나도 사라지지 않는 오답 노트 — 최근 틀린 카드만 골라 보충 학습한다
+(기획: [duolingo-benchmark-2026-08.md](../proposal/duolingo-benchmark-2026-08.md)).
+
+```
+1. 선정: 최근 7일 내 오답(ReviewLog.correct=false) 이력이 있는 카드
+   — suspended 제외, 가시성 통과, 활성 레벨 타입만
+2. 정렬: stability 낮은 순 (NULL 최우선 = 가장 흔들리는 기억부터)
+3. 신규 도입 없음, 1페이지(20개) 한정, due 여부 무관 출제
+4. 채점: 정상 FSRS 리뷰 — 조기 복습은 FSRS 가 elapsed 반영 (별도 연습 모드 기각)
+```
+
+진입점은 학습 탭 "오답 정리" 카드(`weak_count` > 0 일 때만) → `/study/session?mode=weak`.
+홈에는 두지 않는다 (홈 = 오늘 할 일 하나 — ux-redesign-2026-08.md IA 원칙).
+
+## 장기 기억 지표 (2026-08-04 — 실력 성장 증명)
+
+"안정적으로 오래 기억하는 항목 수" — FSRS stability 기반의 정직한 실력 지표.
+
+| 항목 | 정의 |
+|------|------|
+| 장기 기억 카운트 | stability >= 7일 AND state='review', suspended 제외, 가시성 통과 |
+| 주간 추이 (8주) | 카드별 "scheduled_days >= 7 첫 도달" 리뷰 로그 시각 기준 누적 — 스냅샷 테이블 없이 로그 재생, 소급 가능 |
+| 노출 | stats 응답 `long_term: {count, weekly}` — 학습 탭 카드 컬렉션 옆에 카운트 + 주간 브릭 바 + "이번 주 +M" |
+
 ## 레벨별 퀴즈 스펙
 
 ### 레벨 1 — 단어 맞추기 (word)
@@ -161,10 +187,10 @@
 
 | 메서드/경로 | 설명 |
 |-------------|------|
-| GET `/api/study/queue` | 오늘의 큐 + 문항 (`?content_id=` 덱 한정 — study-decks.md) |
+| GET `/api/study/queue` | 오늘의 큐 + 문항 (`?content_id=` 덱 한정 — study-decks.md, `?mode=weak` 오답 정리) |
 | POST `/api/study/answer` | `{card_id, quiz_mode, answer, duration_ms}` → 채점 결과 + FSRS 갱신 + 다음 due |
 | POST `/api/study/rate` | 자기평가 보정 `{card_id, rating}` |
-| GET `/api/study/stats` | 대시보드: due/신규 수, 레벨별 현황, 일별 히트맵, 연속 학습일 |
+| GET `/api/study/stats` | 대시보드: due/신규 수, 레벨별 현황, 일별 히트맵, 연속 학습일, 오답 정리 수(`weak_count`), 장기 기억(`long_term`) |
 | GET `/api/study/decks` | 덱(담은 콘텐츠)별 due/new 카운트 — study-decks.md |
 | GET `/api/study/network` | 어휘망 그래프 (임베딩 유사도) — word-insight.md |
 | GET `/api/study/items/{id}/insight` | 단어 인사이트 카드 (가시성 게이트) — word-insight.md |

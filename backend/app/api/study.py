@@ -47,6 +47,11 @@ KST = timezone(timedelta(hours=9))
 LEVEL_TYPES = {level: t for t, level in ITEM_TYPE_LEVEL.items()}
 QUEUE_PAGE_SIZE = 20
 DISTRACTOR_POOL_SIZE = 200
+# 오답 정리 — 최근 오답 창 / 장기 기억 — stability 임계 (docs/specs/learning.md,
+# 기획: docs/proposal/duolingo-benchmark-2026-08.md)
+WEAK_WINDOW_DAYS = 7
+LONG_TERM_STABILITY_DAYS = 7.0
+LONG_TERM_WEEKS = 8
 
 
 def kst_day_start(now: datetime) -> datetime:
@@ -79,11 +84,26 @@ async def get_queue(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
     content_id: int | None = None,
+    mode: str | None = None,
 ) -> dict:
     now = datetime.now(UTC)
     day_start = kst_day_start(now)
     settings = await get_user_settings(db, user)
     types = enabled_types(settings)
+
+    # 오답 정리 모드 — 최근 오답 카드만, 신규 도입 없음 (docs/specs/learning.md)
+    if mode == "weak":
+        weak_cards = await _weak_cards(db, user.id, types, now, limit=QUEUE_PAGE_SIZE)
+        questions = await _build_questions(db, weak_cards, user.id)
+        await db.commit()
+        return {
+            "total_due": len(weak_cards),
+            "introduced_today": 0,
+            "hint_delay_seconds": settings.hint_delay_seconds,
+            "deck": None,
+            "mode": "weak",
+            "questions": questions,
+        }
 
     # 덱 한정 학습 — 구독한 콘텐츠만, 비구독은 존재 여부도 흘리지 않는 404 (my_contents 와 동일)
     deck = None
@@ -271,6 +291,85 @@ async def get_decks(
     ]
     items.sort(key=lambda d: (-d["due"], d["title"]))
     return {"items": items}
+
+
+def _weak_filter(user_id: int, types: list[str], now: datetime):
+    """오답 정리 대상 — 최근 창 내 오답 이력 + 가시성 + 활성 타입 (suspended 제외)."""
+    wrong_recent = select(ReviewLog.card_id).where(
+        ReviewLog.user_id == user_id,
+        ReviewLog.correct.is_(False),
+        ReviewLog.reviewed_at >= now - timedelta(days=WEAK_WINDOW_DAYS),
+    )
+    return (
+        ReviewCard.user_id == user_id,
+        ReviewCard.suspended.is_(False),
+        ReviewCard.id.in_(wrong_recent),
+        visible_item_clause(user_id),
+        LearningItem.item_type.in_(types),
+    )
+
+
+async def _weak_cards(
+    db: AsyncSession, user_id: int, types: list[str], now: datetime, limit: int
+) -> list[ReviewCard]:
+    if not types:
+        return []
+    return list(
+        (
+            await db.execute(
+                select(ReviewCard)
+                .join(LearningItem, LearningItem.id == ReviewCard.item_id)
+                .where(*_weak_filter(user_id, types, now))
+                # stability 낮은 순, NULL(추정 전 = 가장 흔들림) 최우선
+                .order_by(ReviewCard.stability.asc().nulls_first(), ReviewCard.id)
+                .limit(limit)
+            )
+        ).scalars()
+    )
+
+
+async def _long_term_stats(db: AsyncSession, user_id: int, now: datetime) -> dict:
+    """장기 기억 — stability 임계 이상 카드 수 + 주별 도달 누적 (로그 재생, 소급 가능)."""
+    count = (
+        await db.execute(
+            select(func.count(ReviewCard.id))
+            .join(LearningItem, LearningItem.id == ReviewCard.item_id)
+            .where(
+                ReviewCard.user_id == user_id,
+                ReviewCard.suspended.is_(False),
+                ReviewCard.state == "review",
+                ReviewCard.stability >= LONG_TERM_STABILITY_DAYS,
+                visible_item_clause(user_id),
+            )
+        )
+    ).scalar_one()
+
+    # 카드별 "간격 7일+ 첫 도달" 시각 — 현재 가시성과 무관한 역사적 도달 기록
+    reach_rows = (
+        await db.execute(
+            select(func.min(ReviewLog.reviewed_at))
+            .where(
+                ReviewLog.user_id == user_id,
+                ReviewLog.scheduled_days >= LONG_TERM_STABILITY_DAYS,
+            )
+            .group_by(ReviewLog.card_id)
+        )
+    ).scalars()
+    reach_dates = [r.astimezone(KST).date() for r in reach_rows]
+
+    today = now.astimezone(KST).date()
+    this_monday = today - timedelta(days=today.weekday())
+    weekly = []
+    for i in range(LONG_TERM_WEEKS - 1, -1, -1):
+        week_start = this_monday - timedelta(weeks=i)
+        week_end = week_start + timedelta(days=6)
+        weekly.append(
+            {
+                "week_start": week_start.isoformat(),
+                "count": sum(1 for d in reach_dates if d <= week_end),
+            }
+        )
+    return {"count": count, "weekly": weekly}
 
 
 async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: int) -> list[dict]:
@@ -704,10 +803,25 @@ async def get_stats(
         + await retention.quest_bonus_xp(db, user.id)
     )
 
+    # 오답 정리 수 + 장기 기억 — 개인화 학습과학 팩 (duolingo-benchmark-2026-08.md)
+    types = enabled_types(user_settings)
+    weak_count = 0
+    if types:
+        weak_count = (
+            await db.execute(
+                select(func.count(func.distinct(ReviewCard.id)))
+                .join(LearningItem, LearningItem.id == ReviewCard.item_id)
+                .where(*_weak_filter(user.id, types, now))
+            )
+        ).scalar_one()
+    long_term = await _long_term_stats(db, user.id, now)
+
     return {
         "xp": xp,
         "level": xp // 500 + 1,
         "level_progress": (xp % 500) / 500,
+        "weak_count": weak_count,
+        "long_term": long_term,
         "due_count": due_count,
         "reviews_today": reviews_today,
         "daily_goal": user_settings.daily_goal,
