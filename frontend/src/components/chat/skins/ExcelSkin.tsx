@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
+import { openImage } from "@/components/chat/ImageLightbox";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { BlankSheet, ExcelChrome, fakeFilename } from "./ExcelChrome";
 import type { ChatSkinProps } from "./types";
@@ -71,6 +72,7 @@ export function ExcelSkin(p: ChatSkinProps) {
             )}
             {p.messages.map((m) => {
               const mine = m.sender_id === p.myId;
+              const imageUrl = m.image_url;
               return (
                 <div
                   key={m.id}
@@ -140,15 +142,20 @@ export function ExcelSkin(p: ChatSkinProps) {
                       {m.item_ref.en_text} ({m.item_ref.ko_text})
                     </span>
                   )}
-                  {m.image_url && (
-                    <a href={m.image_url} target="_blank" rel="noreferrer">
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => openImage(imageUrl)}
+                      aria-label="사진 크게 보기"
+                      className="block cursor-zoom-in"
+                    >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={m.image_url}
+                        src={imageUrl}
                         alt="첨부"
                         className="my-0.5 block h-16 rounded-sm border border-[#d8dde3] object-cover"
                       />
-                    </a>
+                    </button>
                   )}
                   <span className="break-words whitespace-pre-wrap">
                     {m.body}

@@ -148,6 +148,10 @@ excelkospi 우하단 버튼 컨셉 — 설정의 "플로팅" 체크(localStorage
 - GET `/api/chat/uploads/{name}` — **대화 참여자만** 열람 (메시지 귀속 대화 소속 검사, 아니면 404)
 - 저장: 컴포즈 볼륨 `./data/chat-uploads:/data/chat-uploads` (`CHAT_UPLOAD_DIR`)
 - 클라: 선택 즉시 업로드 + 로컬 미리보기, 전송은 업로드 완료 후. 목록·푸시 미리보기 "[사진]"
+- **사진 확대 = 앱 안 라이트박스** (2026-08-04, `components/chat/ImageLightbox.tsx`): 썸네일 탭 → 같은 화면 위에 전체화면 팝업, **아무 데나 탭하면 닫힘**(확대된 사진 자체 포함) + Esc + 우상단 × (44px 터치 타겟). 새 탭(`target="_blank"`)은 주소창에 업로드 URL 이 뜨고 브라우저 UI 로 화면이 바뀌어 위장이 깨지며, 모바일에선 앱 복귀 동선이 끊긴다
+  - 전역 1개만 마운트(`layout.tsx`) + `openImage(url)` 커스텀 이벤트로 연다 — 위젯은 360x480 팝업이라 그 안에서 렌더하면 잘리고, 표시면이 3벌(NoteSkin·ExcelSkin·ChatWidget)이라 각자 상태를 들면 같은 코드가 3번 생긴다
+  - 모바일: `h-[100dvh]` 로 툴바 접힘/펼침과 무관하게 화면을 채우고, 여는 동안 `body` 스크롤 잠금(사진이 따라 밀리지 않게). 여백은 `p-2 sm:p-4`
+  - z 레이어: 라이트박스 `z-[70]` > 알림 가이드 `z-[60]` > 채팅 위젯 `z-50`
 - **클립보드 붙여넣기**: 입력창에 이미지 붙여넣기(Ctrl/Cmd+V) → 파일 선택과 같은 업로드 파이프라인 (2026-07-28)
 - **입력줄 도구 통합**: 단어카드·사진·이모티콘 3버튼 → `ChatToolsMenu` "+" 1개 (입력창 폭 확보, 누르면 입력줄 위 플로팅 메뉴, 2026-07-28). 패널 내용은 `KaomojiPanel`/`WordSharePanel` 로 분리
 - **여러 줄 입력** (2026-07-30, 2026-07-31 최종): 공용 `ChatTextarea` — **Enter = 전송, Shift+Enter = 줄바꿈, 전 기기·전 화면 공통**. **한글 조합 중 Enter 도 전송** — 조합 글자가 이미 value 에 반영돼 전체가 나간다 (isComposing 스킵 시 '확정 Enter + 전송 Enter' 2회 필요 → 간헐 미전송으로 보고, 카카오 PC 와 동일 동작으로 확정). 중복 가드 150ms (Safari 가 확정 Enter 를 keydown 으로 재발화). 내용에 맞춰 자동 확장 후 **최대 8줄**에서 내부 스크롤, 전송 시 1줄 복귀. 세 입력면(NoteSkin/ExcelSkin/위젯) 공용, 입력줄은 items-end 로 버튼 바닥 고정. 말풍선은 `whitespace-pre-wrap` 으로 줄바꿈 보존

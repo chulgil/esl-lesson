@@ -6,6 +6,7 @@ import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
+import { openImage } from "@/components/chat/ImageLightbox";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
 import { useChatRoom } from "@/components/chat/useChatRoom";
 import { fetchMe } from "@/lib/api";
@@ -368,6 +369,7 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
       >
         {p.messages.map((m) => {
           const mine = m.sender_id === p.myId;
+          const imageUrl = m.image_url;
           return (
             <div
               key={m.id}
@@ -455,15 +457,20 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
                   <b>{m.item_ref.en_text}</b> {m.item_ref.ko_text}
                 </span>
               )}
-              {m.image_url && (
-                <a href={m.image_url} target="_blank" rel="noreferrer">
+              {imageUrl && (
+                <button
+                  type="button"
+                  onClick={() => openImage(imageUrl)}
+                  aria-label="사진 크게 보기"
+                  className="block cursor-zoom-in"
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={m.image_url}
+                    src={imageUrl}
                     alt="첨부"
                     className="my-1 block max-h-28 rounded border border-ink/10"
                   />
-                </a>
+                </button>
               )}
               <span className="break-words whitespace-pre-wrap">{m.body}</span>
             </div>

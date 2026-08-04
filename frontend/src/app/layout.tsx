@@ -3,6 +3,7 @@ import { Gaegu, IBM_Plex_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { AppNav } from "@/components/nav/AppNav";
 import { ChatWidget } from "@/components/chat/ChatWidget";
+import { ImageLightbox } from "@/components/chat/ImageLightbox";
 import { BuildRefreshWatcher } from "@/components/nav/BuildRefreshWatcher";
 import { NotificationSetupGuide } from "@/components/chat/NotificationSetupGuide";
 import { InviteToaster } from "@/components/game/InviteToaster";
@@ -74,6 +75,8 @@ export default function RootLayout({
         <AppNav />
         <InviteToaster />
         <ChatWidget />
+        {/* 채팅 사진 확대 — 위젯(360x480) 안에서 렌더하면 잘려 전역에 둔다 */}
+        <ImageLightbox />
         <BuildRefreshWatcher />
         <NotificationSetupGuide />
         <HenyangPeek />

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
+import { openImage } from "@/components/chat/ImageLightbox";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { BackLink } from "@/components/nav/BackLink";
 import type { ChatSkinProps } from "./types";
@@ -58,6 +59,7 @@ export function NoteSkin(p: ChatSkinProps) {
           )}
           {p.messages.map((m) => {
             const mine = m.sender_id === p.myId;
+            const imageUrl = m.image_url;
             return (
               <div
                 key={m.id}
@@ -128,15 +130,20 @@ export function NoteSkin(p: ChatSkinProps) {
                     </span>
                   </span>
                 )}
-                {m.image_url && (
-                  <a href={m.image_url} target="_blank" rel="noreferrer">
+                {imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => openImage(imageUrl)}
+                    aria-label="사진 크게 보기"
+                    className="block cursor-zoom-in"
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={m.image_url}
+                      src={imageUrl}
                       alt="첨부 이미지"
                       className="my-1 block max-h-40 rounded-md border-2 border-ink/10"
                     />
-                  </a>
+                  </button>
                 )}
                 <span className="break-words whitespace-pre-wrap">
                   {m.body}
