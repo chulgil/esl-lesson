@@ -24,6 +24,22 @@ TYPED_FAST_MS = 15_000
 
 TYPED_MODES = ("compose",)
 
+# 장기 기억 임계(일) — 이 안정도부터 "일주일 안 봐도 기억" (learning.md 장기 기억 지표)
+LONG_TERM_STABILITY_DAYS = 7.0
+
+
+def crossed_long_term(before: float | None, after: float | None, correct: bool) -> bool:
+    """정답 리뷰로 기억 안정도가 장기 기억 임계를 처음/다시 넘었는가.
+
+    피드백 마이크로 보상용 (user-journey-motivation-2026-08.md P0 ①).
+    재붕괴 후 재도달도 true — 다시 굳힌 것도 성취다.
+    """
+    return (
+        correct
+        and (after or 0.0) >= LONG_TERM_STABILITY_DAYS
+        and (before or 0.0) < LONG_TERM_STABILITY_DAYS
+    )
+
 
 def compute_rating(
     correct: bool, duration_ms: int | None, quiz_mode: str, fast_streak: int

@@ -7,7 +7,12 @@ import { Brick } from "@/components/brick/Brick";
 import { InsightSheet } from "@/components/study/InsightSheet";
 import { SegmentPlayer } from "@/components/media/SegmentPlayer";
 import { SpectateHost } from "@/components/study/SpectateHost";
-import { studyApi, type AnswerResult, type Question } from "@/lib/study-api";
+import {
+  studyApi,
+  type AnswerResult,
+  type Question,
+  type Stats,
+} from "@/lib/study-api";
 import { useSurfaceSkin } from "@/lib/theme-surfaces";
 
 type Phase = "loading" | "empty" | "question" | "feedback" | "done";
@@ -42,6 +47,10 @@ function StudySessionInner() {
   const [result, setResult] = useState<AnswerResult | null>(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
+  // 이번 세션에서 장기 기억으로 굳은 카드 수 — 완료 화면 요약 (피크엔드)
+  const [longTermCount, setLongTermCount] = useState(0);
+  // 완료 화면용 최신 통계 — 목표 진행·오답 잔여 (user-journey-motivation P0 ②)
+  const [doneStats, setDoneStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hintDelay, setHintDelay] = useState(0);
   const [studyLevel, setStudyLevel] = useState(2);
@@ -56,6 +65,14 @@ function StudySessionInner() {
         setQueue(res.questions);
         setHintDelay(res.hint_delay_seconds ?? 0);
         setDeckTitle(res.deck?.title ?? null);
+        // 세션 카운터 리셋 — 완료 화면에서 오답 정리로 넘어올 때 이전 세션
+        // 수치가 남지 않도록 (done -> ?mode=weak 전환이 정식 흐름이 됨)
+        setIdx(0);
+        setResult(null);
+        setCorrectCount(0);
+        setAnsweredCount(0);
+        setLongTermCount(0);
+        setDoneStats(null);
         setPhase(res.questions.length ? "question" : "empty");
         startedAt.current = Date.now();
       })
@@ -67,6 +84,15 @@ function StudySessionInner() {
   }, [contentId, weakMode]);
 
   const question = queue[idx];
+
+  // 완료 순간의 최신 목표 진행·오답 잔여 — 피크엔드 요약 재료
+  useEffect(() => {
+    if (phase !== "done") return;
+    studyApi
+      .stats()
+      .then(setDoneStats)
+      .catch(() => undefined);
+  }, [phase]);
 
   // 문제 풀이 중에는 모바일 하단 탭바·마스코트 숨김 — 게임과 동일한 집중 모드 (이탈은 X 버튼으로)
   useEffect(() => {
@@ -116,6 +142,9 @@ function StudySessionInner() {
       });
       setResult(res);
       setAnsweredCount((n) => n + 1);
+      if (res.long_term_reached) {
+        setLongTermCount((n) => n + 1);
+      }
       if (res.correct) {
         setCorrectCount((n) => n + 1);
       } else {
@@ -315,8 +344,12 @@ function StudySessionInner() {
       )}
 
       {phase === "done" && (
-        <section className="flex flex-col items-start gap-4">
-          <h2 className="font-hand text-2xl">세션 완료!</h2>
+        // 세션 완료 = 피크엔드 — 오늘의 의미(목표·실력 전환·다음 행동)를 요약한다
+        // (user-journey-motivation-2026-08.md P0 ②)
+        <section className="flex max-w-xl flex-col items-start gap-4">
+          <h2 className="font-hand text-2xl">
+            {weakMode ? "오답을 정리했어요!" : "세션 완료!"}
+          </h2>
           <p>
             {answeredCount}문항 중{" "}
             <b className="text-brick-green">{correctCount}개</b> 정답 (
@@ -325,7 +358,50 @@ function StudySessionInner() {
               : 0}
             %)
           </p>
-          <div className="flex gap-3">
+
+          {longTermCount > 0 && (
+            <p className="rounded-md border-2 border-brick-green/40 bg-brick-green/10 px-3 py-2 text-sm">
+              이번 세션에서{" "}
+              <b className="text-brick-green">{longTermCount}개</b>가 장기
+              기억으로 굳었어요 — 일주일 넘게 안 봐도 기억할 카드예요
+            </p>
+          )}
+
+          {doneStats && (
+            <div className="w-full rounded-md border-2 border-ink/10 bg-white px-3 py-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold">오늘 목표</span>
+                <span>
+                  {Math.min(doneStats.reviews_today, doneStats.daily_goal)}/
+                  {doneStats.daily_goal}
+                </span>
+                {doneStats.reviews_today >= doneStats.daily_goal && (
+                  <span className="rounded bg-highlight/60 px-1.5 py-0.5 text-xs font-bold">
+                    목표 달성! 오늘 몫은 끝났어요
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 h-2 w-full overflow-hidden rounded bg-ink/10">
+                <div
+                  className="h-full rounded bg-brick-green transition-all"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      (doneStats.reviews_today / doneStats.daily_goal) * 100,
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            {/* 오답이 남았으면 정리로 마무리 — 미완성 잔여를 다음 행동으로 (자이가르닉) */}
+            {!weakMode && doneStats && doneStats.weak_count > 0 && (
+              <Brick color="red" href="/study/session?mode=weak">
+                오답 {doneStats.weak_count}개 정리하고 마무리
+              </Brick>
+            )}
             <Brick color="green" onClick={() => window.location.reload()}>
               이어서 학습
             </Brick>
@@ -728,6 +804,13 @@ function Feedback({
       <p className="font-bold">
         {result.correct ? "[O] 정답!" : "[X] 오답 — 곧 다시 나와요"}
       </p>
+      {result.long_term_reached && (
+        // 장기 기억 도달 마이크로 축하 — 노력이 실력이 된 순간을 그 자리에서
+        // 알린다. 모달 금지 — 흐름을 끊지 않는다 (user-journey-motivation P0 ①)
+        <p className="mt-1 inline-block rounded bg-brick-green/15 px-2 py-0.5 text-xs font-bold text-brick-green">
+          장기 기억으로 굳었어요! 일주일 넘게 안 봐도 기억할 카드예요
+        </p>
+      )}
       <div className="mt-2 flex items-center gap-3">
         <p className="text-lg">{result.correct_answer}</p>
         {question.level <= 2 && (

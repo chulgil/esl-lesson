@@ -22,6 +22,8 @@ export interface Question {
 export interface AnswerResult {
   correct: boolean;
   rating_applied: number;
+  /** 이번 정답으로 기억 안정도가 장기 기억 임계(7일)를 넘었는가 — 마이크로 보상 */
+  long_term_reached: boolean;
   interval_previews: Record<string, number>;
   correct_answer: string;
   /** 오답이 유사단어였을 때 — "아깝다" 비교 카드 (P2) */

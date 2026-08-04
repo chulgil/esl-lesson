@@ -50,7 +50,7 @@ DISTRACTOR_POOL_SIZE = 200
 # 오답 정리 — 최근 오답 창 / 장기 기억 — stability 임계 (docs/specs/learning.md,
 # 기획: docs/proposal/duolingo-benchmark-2026-08.md)
 WEAK_WINDOW_DAYS = 7
-LONG_TERM_STABILITY_DAYS = 7.0
+LONG_TERM_STABILITY_DAYS = fsrs_service.LONG_TERM_STABILITY_DAYS
 LONG_TERM_WEEKS = 8
 
 
@@ -529,8 +529,11 @@ async def submit_answer(
     )
     now = datetime.now(UTC)
     previews = fsrs_service.preview_intervals(card, settings.desired_retention, now)
+    stability_before = card.stability
     meta = fsrs_service.apply_review(card, rating, settings.desired_retention, now)
     fsrs_service.set_fast_streak(card, new_streak)
+    # 장기 기억 임계 교차 — 피드백 마이크로 보상 (user-journey-motivation P0 ①)
+    long_term_reached = fsrs_service.crossed_long_term(stability_before, card.stability, correct)
 
     db.add(
         ReviewLog(
@@ -573,6 +576,7 @@ async def submit_answer(
     return {
         "correct": correct,
         "rating_applied": rating,
+        "long_term_reached": long_term_reached,
         "interval_previews": {str(k): round(v, 1) for k, v in previews.items()},
         "correct_answer": _correct_answer(item, body.quiz_mode),
         "close_match": close_match,

@@ -163,7 +163,11 @@
 학습 세션
  ├─ 진행바(브릭) + 문항 카드 (레벨별 형식 — 카드·선지는 테마 표면 스킨 `theme-surfaces SURFACE_SKINS` 적용, 2026-07-31)
  ├─ 정답: 브릭 스냅 효과 / 오답: 흔들림 + 정답 노출 → 큐 끝 재삽입
- └─ 세션 완료: 통계 (정답률, 소요시간, 내일 예정 수)
+ ├─ 정답 피드백: 장기 기억 임계(7일) 첫/재교차 시 "장기 기억으로 굳었어요" 배지
+ │   (answer 응답 long_term_reached — 마이크로 보상, 모달 금지)
+ └─ 세션 완료 (피크엔드 — user-journey-motivation-2026-08.md P0 ②):
+     정답률 + 이번 세션 장기 기억 +N + 오늘 목표 진행바(달성 축하)
+     + 오답 잔여 시 "오답 정리하고 마무리" CTA (오답 정리 세션은 완료 카피로 마무리)
 ```
 
 ## 라이브러리 구간 반복 재생 (A-B 루프)
@@ -210,6 +214,7 @@
 {
   "correct": true,
   "rating_applied": 3,
+  "long_term_reached": false,
   "correct_answer": "It takes some time to get used to it",
   "diff": null,
   "explanation": {"ko": "...", "context_en": "...", "thinking_ko": "..."},
