@@ -185,8 +185,34 @@ async def get_queue(
             .scalars()
             .all()
         )
+        # 같은 레벨 안에서는 음성 연계(원어민 발화 구간) 항목 우선 — 첫 세션에
+        # "듣는 카드"가 반드시 섞이게, 차별점을 운이 아니라 설계로
+        # (effectiveness-audit-2026-08.md P0-1 아하 모먼트)
+        playable_ids: set[int] = set()
+        if fresh_items:
+            playable_ids = set(
+                (
+                    await db.execute(
+                        select(ItemOccurrence.item_id)
+                        .join(Content, Content.id == ItemOccurrence.content_id)
+                        .join(
+                            TranscriptSegment,
+                            TranscriptSegment.id == ItemOccurrence.segment_id,
+                        )
+                        .where(
+                            ItemOccurrence.item_id.in_([i.id for i in fresh_items]),
+                            Content.youtube_video_id.is_not(None),
+                            TranscriptSegment.start_ms.is_not(None),
+                        )
+                    )
+                ).scalars()
+            )
+
         # 레벨 낮은 타입 우선 도입 (docs/specs/learning.md)
-        for item in sorted(fresh_items, key=lambda i: (ITEM_TYPE_LEVEL[i.item_type], -i.id)):
+        for item in sorted(
+            fresh_items,
+            key=lambda i: (ITEM_TYPE_LEVEL[i.item_type], i.id not in playable_ids, -i.id),
+        ):
             card = ReviewCard(user_id=user.id, item_id=item.id, state="new", due_at=now)
             db.add(card)
             new_cards.append(card)
