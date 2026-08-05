@@ -17,6 +17,7 @@ const REMINDER_HOURS = Array.from({ length: 19 }, (_, i) => i + 5); // 5~23시
 function fmtHour(h: number): string {
   if (h < 12) return `오전 ${h}시`;
   if (h === 12) return `낮 12시`;
+  if (h < 18) return `오후 ${h - 12}시`;
   return `저녁 ${h - 12}시`;
 }
 

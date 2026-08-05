@@ -119,6 +119,14 @@ export interface SurfaceSkin {
   markSelected: string;
   /** 테마 기본 모서리 — 힌트 강조·OMR 셀 등 공용 도형에 사용 */
   radius: string;
+  /** 채점 피드백 카드 — 정답/오답 컨테이너 + 상태 라벨 색 (2026-08-05).
+   *  문항 카드와 같은 표면 컨셉으로 채점한다 — 칠판=분필 채점(노랑 O·빨강 X),
+   *  오피스=엑셀 조건부 서식(초록/빨강 셀), 학원=채점펜. 세션 완료 요약은
+   *  section 을 그대로 쓴다. */
+  feedbackOk: string;
+  feedbackBad: string;
+  feedbackOkText: string;
+  feedbackBadText: string;
   /** OMR 답안지 — 패널·라벨·셀 3상태 */
   omrPanel: string;
   omrLabel: string;
@@ -152,6 +160,10 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     choiceSelected: "border-brick-blue bg-brick-blue/10 font-bold",
     mark: "border-ink/30",
     markSelected: "border-brick-blue bg-brick-blue text-white",
+    feedbackOk: "rounded-lg border-2 border-brick-green bg-brick-green/10",
+    feedbackBad: "rounded-lg border-2 border-brick-red bg-brick-red/10",
+    feedbackOkText: "text-brick-green",
+    feedbackBadText: "text-brick-red",
   },
   candy: {
     radius: "rounded-full",
@@ -177,6 +189,10 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     choiceSelected: "rounded-full border-brick-red bg-brick-red/10 font-bold",
     mark: "border-brick-blue/40",
     markSelected: "border-brick-red bg-brick-red text-white",
+    feedbackOk: "rounded-3xl border-4 border-brick-green/50 bg-brick-green/10",
+    feedbackBad: "rounded-3xl border-4 border-brick-red/50 bg-brick-red/10",
+    feedbackOkText: "text-brick-green",
+    feedbackBadText: "text-brick-red",
   },
   lego: {
     radius: "rounded-sm",
@@ -198,6 +214,10 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     choiceSelected: "rounded-sm border-ink bg-brick-blue/15 font-bold",
     mark: "rounded-sm border-ink/50",
     markSelected: "rounded-sm border-ink bg-brick-blue text-white",
+    feedbackOk: "rounded-md border-4 border-ink bg-brick-green/15",
+    feedbackBad: "rounded-md border-4 border-ink bg-brick-red/15",
+    feedbackOkText: "text-brick-green",
+    feedbackBadText: "text-brick-red",
     studs: true,
   },
   cat: {
@@ -226,6 +246,10 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     choiceSelected: "rounded-xl border-brick-red bg-brick-red/15 font-bold",
     mark: "rounded-xl border-[#e8c9a3]",
     markSelected: "rounded-xl border-brick-red bg-brick-red text-brick-label",
+    feedbackOk: "rounded-xl border-2 border-brick-green/50 bg-[#fffaf2]",
+    feedbackBad: "rounded-xl border-2 border-brick-red/60 bg-[#fffaf2]",
+    feedbackOkText: "text-brick-green",
+    feedbackBadText: "text-brick-red",
     paw: true,
   },
   excel: {
@@ -250,6 +274,11 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     choiceSelected: "rounded-sm border-[#217346] bg-[#e2efda] font-bold",
     mark: "rounded-sm border-[#c9cfd6]",
     markSelected: "rounded-sm border-[#217346] bg-[#217346] text-white",
+    // 엑셀 조건부 서식 — 초록 채움/빨강 채움 셀 (위장 세계관 유지)
+    feedbackOk: "rounded-sm border border-[#217346] bg-[#e2efda] font-sans",
+    feedbackBad: "rounded-sm border border-[#9c0006] bg-[#ffc7ce]/60 font-sans",
+    feedbackOkText: "text-[#217346]",
+    feedbackBadText: "text-[#9c0006]",
   },
   // 학교수업 — 칠판 그 자체 (2026-08-04 분리). 나무 프레임 + 딥그린 판 +
   // 분필 글씨. 색은 게임 보드(BoardCanvas school)와 같은 값이라 앱 전체가
@@ -285,6 +314,13 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     mark: "rounded-none border-[#f4f1e8]/50",
     markSelected:
       "rounded-none border-brick-yellow bg-brick-yellow text-[#22332b]",
+    // 분필 채점 — 칠판 그대로에 좌측 분필선(정답=노랑, 오답=빨강 분필)
+    feedbackOk:
+      "chalk-surface rounded-none border-2 border-l-8 border-[#f4f1e8]/30 border-l-brick-yellow bg-[#2e5b46] text-[#f4f1e8]",
+    feedbackBad:
+      "chalk-surface rounded-none border-2 border-l-8 border-[#f4f1e8]/30 border-l-brick-red bg-[#2e5b46] text-[#f4f1e8]",
+    feedbackOkText: "text-brick-yellow",
+    feedbackBadText: "text-[#f0b5a6]",
   },
   // 학원 — 갱지 모의고사지 (2026-08-04 신설, 학교수업에서 갱지를 이관).
   // 직각 인쇄물 + 이중 괘선 표제 + 빨간 채점펜 포인트.
@@ -310,6 +346,11 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     choiceSelected: "rounded-none border-brick-red bg-brick-red/10 font-bold",
     mark: "rounded-none border-ink/40",
     markSelected: "rounded-none border-brick-red bg-brick-red text-white",
+    // 채점펜 — 갱지 위 초록/빨강 괘선 (오답은 빨간펜이 학원 시그니처)
+    feedbackOk: "rounded-none border-2 border-brick-green/60 bg-[#fbf6e6]",
+    feedbackBad: "rounded-none border-2 border-brick-red bg-[#fbf6e6]",
+    feedbackOkText: "text-brick-green",
+    feedbackBadText: "text-brick-red",
   },
 };
 

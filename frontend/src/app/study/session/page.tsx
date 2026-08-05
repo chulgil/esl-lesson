@@ -4,15 +4,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
-import { InsightSheet } from "@/components/study/InsightSheet";
 import { SegmentPlayer } from "@/components/media/SegmentPlayer";
+import { SessionDone } from "@/components/study/SessionDone";
+import { SessionFeedback } from "@/components/study/SessionFeedback";
 import { SpectateHost } from "@/components/study/SpectateHost";
-import {
-  studyApi,
-  type AnswerResult,
-  type Question,
-  type Stats,
-} from "@/lib/study-api";
+import { studyApi, type AnswerResult, type Question } from "@/lib/study-api";
 import { useSurfaceSkin } from "@/lib/theme-surfaces";
 
 type Phase = "loading" | "empty" | "question" | "feedback" | "done";
@@ -49,8 +45,6 @@ function StudySessionInner() {
   const [answeredCount, setAnsweredCount] = useState(0);
   // 이번 세션에서 장기 기억으로 굳은 카드 수 — 완료 화면 요약 (피크엔드)
   const [longTermCount, setLongTermCount] = useState(0);
-  // 완료 화면용 최신 통계 — 목표 진행·오답 잔여 (user-journey-motivation P0 ②)
-  const [doneStats, setDoneStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hintDelay, setHintDelay] = useState(0);
   const [studyLevel, setStudyLevel] = useState(2);
@@ -72,7 +66,6 @@ function StudySessionInner() {
         setCorrectCount(0);
         setAnsweredCount(0);
         setLongTermCount(0);
-        setDoneStats(null);
         setPhase(res.questions.length ? "question" : "empty");
         startedAt.current = Date.now();
       })
@@ -84,15 +77,6 @@ function StudySessionInner() {
   }, [contentId, weakMode]);
 
   const question = queue[idx];
-
-  // 완료 순간의 최신 목표 진행·오답 잔여 — 피크엔드 요약 재료
-  useEffect(() => {
-    if (phase !== "done") return;
-    studyApi
-      .stats()
-      .then(setDoneStats)
-      .catch(() => undefined);
-  }, [phase]);
 
   // 문제 풀이 중에는 모바일 하단 탭바·마스코트 숨김 — 게임과 동일한 집중 모드 (이탈은 X 버튼으로)
   useEffect(() => {
@@ -338,88 +322,23 @@ function StudySessionInner() {
             onSubmit={submit}
           />
           {phase === "feedback" && result && (
-            <Feedback question={question} result={result} onNext={next} />
+            <SessionFeedback
+              question={question}
+              result={result}
+              onNext={next}
+            />
           )}
         </>
       )}
 
       {phase === "done" && (
-        // 세션 완료 = 피크엔드 — 오늘의 의미(목표·실력 전환·다음 행동)를 요약한다
-        // (user-journey-motivation-2026-08.md P0 ②)
-        <section className="flex max-w-xl flex-col items-start gap-4">
-          <h2 className="font-hand text-2xl">
-            {weakMode ? "오답을 정리했어요!" : "세션 완료!"}
-          </h2>
-          <p>
-            {answeredCount}문항 중{" "}
-            <b className="text-brick-green">{correctCount}개</b> 정답 (
-            {answeredCount
-              ? Math.round((correctCount / answeredCount) * 100)
-              : 0}
-            %)
-          </p>
-
-          {longTermCount > 0 && (
-            <p className="rounded-md border-2 border-brick-green/40 bg-brick-green/10 px-3 py-2 text-sm">
-              이번 세션에서{" "}
-              <b className="text-brick-green">{longTermCount}개</b>가 장기
-              기억으로 굳었어요 — 일주일 넘게 안 봐도 기억할 카드예요
-            </p>
-          )}
-
-          {doneStats && (
-            <div className="w-full rounded-md border-2 border-ink/10 bg-white px-3 py-2 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-bold">오늘 목표</span>
-                <span>
-                  {Math.min(doneStats.reviews_today, doneStats.daily_goal)}/
-                  {doneStats.daily_goal}
-                </span>
-                {doneStats.reviews_today >= doneStats.daily_goal && (
-                  <span className="rounded bg-highlight/60 px-1.5 py-0.5 text-xs font-bold">
-                    목표 달성! 오늘 몫은 끝났어요
-                  </span>
-                )}
-              </div>
-              <div className="mt-1.5 h-2 w-full overflow-hidden rounded bg-ink/10">
-                <div
-                  className="h-full rounded bg-brick-green transition-all"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      (doneStats.reviews_today / doneStats.daily_goal) * 100,
-                    )}%`,
-                  }}
-                />
-              </div>
-              {/* 내일 예고 — 예측 가능한 분량은 부담이 아니라 약속이 된다 */}
-              {doneStats.due_tomorrow > 0 && (
-                <p className="mt-1.5 text-xs opacity-60">
-                  내일은 {doneStats.due_tomorrow}개가 기다려요 — 오늘처럼이면
-                  충분해요
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-3">
-            {/* 오답이 남았으면 정리로 마무리 — 미완성 잔여를 다음 행동으로 (자이가르닉) */}
-            {!weakMode && doneStats && doneStats.weak_count > 0 && (
-              <Brick color="red" href="/study/session?mode=weak">
-                오답 {doneStats.weak_count}개 정리하고 마무리
-              </Brick>
-            )}
-            <Brick color="green" onClick={() => window.location.reload()}>
-              이어서 학습
-            </Brick>
-            <Brick color="yellow" href="/study/network">
-              어휘망 보기
-            </Brick>
-            <Brick color="blue" href="/">
-              홈으로
-            </Brick>
-          </div>
-        </section>
+        <SessionDone
+          weakMode={weakMode}
+          answeredCount={answeredCount}
+          correctCount={correctCount}
+          longTermCount={longTermCount}
+          onRestart={() => window.location.reload()}
+        />
       )}
     </main>
   );
@@ -721,229 +640,6 @@ function ComposeQuiz({
           모르겠어요 (정답 보기)
         </button>
       </div>
-    </div>
-  );
-}
-
-// 정답일 때만 노출하는 3등급 (안키 Hard/Good/Easy). 오답은 자동 Again → 단일 버튼.
-const RATING_BUTTONS: {
-  rating: number;
-  label: string;
-  active: string;
-  idle: string;
-}[] = [
-  {
-    rating: 2,
-    label: "어려움",
-    active: "border-brick-yellow bg-brick-yellow text-ink",
-    idle: "border-brick-yellow/60 bg-white text-ink",
-  },
-  {
-    rating: 3,
-    label: "알맞음",
-    active: "border-brick-green bg-brick-green text-brick-label",
-    idle: "border-brick-green/40 bg-white text-brick-green",
-  },
-  {
-    rating: 4,
-    label: "쉬움",
-    active: "border-brick-blue bg-brick-blue text-brick-label",
-    idle: "border-brick-blue/40 bg-white text-brick-blue",
-  },
-];
-
-function formatInterval(minutes: number): string {
-  if (minutes < 60) return `${Math.max(1, Math.round(minutes))}분 뒤`;
-  if (minutes < 1440) return `${Math.round(minutes / 60)}시간 뒤`;
-  return `${Math.round(minutes / 1440)}일 뒤`;
-}
-
-function Feedback({
-  question,
-  result,
-  onNext,
-}: {
-  question: Question;
-  result: AnswerResult;
-  onNext: () => void;
-}) {
-  const [submitting, setSubmitting] = useState(false);
-  const [showInsight, setShowInsight] = useState(false);
-  const [closeAdded, setCloseAdded] = useState(false);
-
-  // 헷갈린 유사단어를 원탭으로 학습 큐에 추가 — 어휘망 확장 루프 (P3)
-  async function addCloseWord() {
-    if (!result.close_match || closeAdded) return;
-    try {
-      await studyApi.addCard(result.close_match.item_id);
-      setCloseAdded(true);
-    } catch {
-      // 실패는 조용히 — 다음 기회에 다시 시도 가능
-    }
-  }
-
-  // 인사이트는 항목의 영어 표현 기준 (en2ko 는 문제가 영어, 그 외는 정답이 영어)
-  const enWord =
-    question.quiz_mode === "choice_en2ko"
-      ? (question.prompt ?? result.correct_answer)
-      : result.correct_answer;
-
-  // 안키식: 등급 버튼이 곧 "다음" — 자동 산출 등급과 다르면 재평가 후 진행
-  async function pick(rating: number) {
-    if (submitting) return;
-    setSubmitting(true);
-    if (rating !== result.rating_applied) {
-      await studyApi.rate(question.card_id, rating).catch(() => undefined);
-    }
-    onNext();
-  }
-
-  const againMin = result.interval_previews?.["1"];
-
-  return (
-    <div
-      className={`mt-4 max-w-xl rounded-lg border-2 p-4 ${
-        result.correct
-          ? "border-brick-green bg-brick-green/10"
-          : "border-brick-red bg-brick-red/10"
-      }`}
-    >
-      <p className="font-bold">
-        {result.correct ? "[O] 정답!" : "[X] 오답 — 곧 다시 나와요"}
-      </p>
-      {result.long_term_reached && (
-        // 장기 기억 도달 마이크로 축하 — 노력이 실력이 된 순간을 그 자리에서
-        // 알린다. 모달 금지 — 흐름을 끊지 않는다 (user-journey-motivation P0 ①)
-        <p className="mt-1 inline-block rounded bg-brick-green/15 px-2 py-0.5 text-xs font-bold text-brick-green">
-          장기 기억으로 굳었어요! 일주일 넘게 안 봐도 기억할 카드예요
-        </p>
-      )}
-      <div className="mt-2 flex items-center gap-3">
-        <p className="text-lg">{result.correct_answer}</p>
-        {question.level <= 2 && (
-          // 단어/숙어만 인사이트 제공 (패턴/문장은 문장 단위라 제외 — P1)
-          <button
-            type="button"
-            onClick={() => setShowInsight(true)}
-            className="min-h-10 cursor-pointer rounded-full border-2 border-brick-blue/40 bg-white px-3.5 py-1 text-xs font-bold text-brick-blue transition hover:border-brick-blue active:scale-95"
-          >
-            단어 정보
-          </button>
-        )}
-      </div>
-      <p className="text-sm opacity-70">{result.explanation.ko}</p>
-      {result.explanation.thinking_ko && (
-        <p className="text-sm text-brick-blue">
-          ({result.explanation.thinking_ko})
-        </p>
-      )}
-      {result.explanation.context_en && (
-        <p className="mt-1 text-xs opacity-50">
-          &quot;{result.explanation.context_en}&quot;
-        </p>
-      )}
-
-      {!result.correct && result.close_match && (
-        // "아깝다" — 유사단어와 헷갈린 오답은 좌절 대신 비교 학습 기회로
-        <div className="mt-3 rounded-md border-2 border-brick-yellow bg-highlight/30 p-3">
-          <p className="text-sm font-bold">아깝다! 비슷한 단어와 헷갈렸어요</p>
-          <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <p className="text-xs opacity-50">내가 고른 답</p>
-              <p className="font-bold">{result.close_match.en_text}</p>
-              <p className="opacity-70">{result.close_match.ko_text}</p>
-            </div>
-            <div>
-              <p className="text-xs opacity-50">정답 단어</p>
-              <p className="font-bold">{enWord}</p>
-              <p className="opacity-70">{result.explanation.ko}</p>
-            </div>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {question.level <= 2 && (
-              <button
-                type="button"
-                onClick={() => setShowInsight(true)}
-                className="min-h-10 cursor-pointer rounded-full border-2 border-brick-yellow bg-white px-3.5 py-1 text-xs font-bold transition hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
-              >
-                두 단어 차이 자세히 보기
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={closeAdded}
-              onClick={addCloseWord}
-              className="min-h-10 cursor-pointer rounded-full border-2 border-brick-green/60 bg-white px-3.5 py-1 text-xs font-bold text-brick-green transition hover:-translate-y-0.5 active:translate-y-0 active:scale-95 disabled:opacity-60"
-            >
-              {closeAdded
-                ? "학습 큐에 추가됨!"
-                : `"${result.close_match.en_text}" 도 학습에 추가`}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {result.correct ? (
-        <>
-          <p className="mt-4 text-xs opacity-60">
-            얼마나 쉬웠나요? 선택하면 그 시점에 다시 복습해요 (새 단어는 짧게
-            반복하며 익혀요)
-          </p>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {RATING_BUTTONS.map((btn) => {
-              const isAuto = btn.rating === result.rating_applied;
-              const minutes = result.interval_previews?.[String(btn.rating)];
-              return (
-                <button
-                  key={btn.rating}
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => pick(btn.rating)}
-                  // bg-white 를 베이스에 두면 active 의 bg-brick-* 와 충돌해
-                  // (생성 CSS 순서상 bg-white 승리) 흰 바탕+흰 글씨가 됨 → idle 에만 둔다
-                  className={`flex min-h-16 flex-col items-center justify-center rounded-md border-2 font-bold transition hover:-translate-y-0.5 disabled:opacity-50 ${
-                    isAuto ? btn.active : btn.idle
-                  }`}
-                >
-                  <span>{btn.label}</span>
-                  {minutes != null && (
-                    <span
-                      className={`text-xs font-normal ${isAuto ? "" : "opacity-60"}`}
-                    >
-                      {formatInterval(minutes)}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </>
-      ) : (
-        // 오답: 등급 선택 없이 "다시"만 (안키 — 틀리면 Again)
-        <div className="mt-4">
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => pick(1)}
-            className="flex min-h-14 w-full flex-col items-center justify-center rounded-md border-2 border-brick-red bg-brick-red font-bold text-brick-label transition hover:-translate-y-0.5 disabled:opacity-50"
-          >
-            <span>다시 학습</span>
-            {againMin != null && (
-              <span className="text-xs font-normal opacity-90">
-                {formatInterval(againMin)}
-              </span>
-            )}
-          </button>
-        </div>
-      )}
-
-      {showInsight && (
-        <InsightSheet
-          itemId={question.item_id}
-          word={enWord}
-          onClose={() => setShowInsight(false)}
-        />
-      )}
     </div>
   );
 }

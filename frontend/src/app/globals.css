@@ -309,6 +309,25 @@ html[data-theme="school"] .chalk-surface .hl {
   border-bottom: 2px dashed rgba(244, 241, 232, 0.65);
 }
 
+/* 의미색 텍스트 보정 — school 의 brick-green(#2e5b46)은 칠판 판색과 동일해
+   칠판 표면 위에서 글자가 사라진다 (2026-08-05 피드백 카드 스킨화에서 발견).
+   흰 바탕 요소(.bg-white 버튼 등)는 원색이 맞으므로 제외한다. */
+html[data-theme="school"]
+  .chalk-surface
+  :is(.text-brick-green, .text-brick-blue):not(.bg-white) {
+  color: #a9d8bd;
+}
+html[data-theme="school"] .chalk-surface .text-brick-blue:not(.bg-white) {
+  color: #a9c6d9;
+}
+
+/* 밝은 하이라이트 상자(아깝다 비교 등)는 칠판 위에서 불투명 쪽지로 —
+   반투명이면 판색과 섞여 탁해지고 분필 글씨가 그대로 얹혀 안 읽힌다 */
+html[data-theme="school"] .chalk-surface [class*="bg-highlight"] {
+  background-color: var(--color-highlight);
+  color: var(--color-ink);
+}
+
 /* 레고 브릭 스터드 (윗면 도트) — 레고 테마의 기본 형태 */
 .brick-studs::before {
   content: "";

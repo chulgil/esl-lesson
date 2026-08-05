@@ -25,7 +25,8 @@
 - [ ] `frontend/src/app/layout.tsx` — **부트 스크립트 테마 화이트리스트에 key 추가**
   (누락 시 새로고침에서 테마 풀림 — school 사고 재발 방지)
 - [ ] `frontend/src/lib/theme-surfaces.ts` — 5개 레지스트리 전부:
-  - `SURFACE_SKINS` — 시험지·학습 카드·OMR·선지(퀴즈/어순 칩 공용) 스킨 1벌.
+  - `SURFACE_SKINS` — 시험지·학습 카드·OMR·선지(퀴즈/어순 칩 공용)·채점 피드백
+    (`feedbackOk/Bad` + 상태 라벨색, 2026-08-05)·세션 완료(section 재사용) 스킨 1벌.
     **은유는 테마마다 배타적** — 다른 테마가 이미 쓰는 물체(칠판·스프레드시트
     ·블록판 등)를 재사용하면 두 테마가 같아 보인다 (2026-08-04 헤냥이=칠판 사고)
   - **어두운 표면(section/omrPanel 이 어두운 테마)은 `chalk-surface` 클래스를

@@ -102,6 +102,30 @@ async def test_weak_queue_orders_by_stability_and_skips_new_intro(client, db_ses
     assert total_cards == 3
 
 
+async def test_weak_queue_scopes_to_deck_when_content_id_given(client, db_session):
+    """?mode=weak&content_id=N — 덱 필터와 구독 404 게이트가 함께 적용된다."""
+    user = await login(client, db_session)
+    deck_items = await seed_items(db_session, count=1)
+    other_items = await seed_items(db_session, count=1)
+
+    in_deck = await _card_with_log(db_session, user.id, deck_items[0].id, correct=False, days_ago=1)
+    await _card_with_log(db_session, user.id, other_items[0].id, correct=False, days_ago=1)
+
+    from app.models import ItemOccurrence
+
+    deck_content_id = (
+        await db_session.execute(
+            select(ItemOccurrence.content_id).where(ItemOccurrence.item_id == deck_items[0].id)
+        )
+    ).scalar_one()
+
+    res = await client.get(f"/api/study/queue?mode=weak&content_id={deck_content_id}")
+    assert [q["card_id"] for q in res.json()["questions"]] == [in_deck.id]
+
+    # 비구독 콘텐츠는 존재 여부도 흘리지 않는 404 (일반 큐와 동일 계약)
+    assert (await client.get("/api/study/queue?mode=weak&content_id=999999")).status_code == 404
+
+
 async def test_stats_include_weak_count_and_long_term(client, db_session):
     user = await login(client, db_session)
     items = await seed_items(db_session, count=5)
