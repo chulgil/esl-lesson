@@ -32,8 +32,9 @@ class UserSettings(Base):
     )
     daily_new_limit: Mapped[int] = mapped_column(Integer, default=20, server_default="20")
     daily_review_limit: Mapped[int] = mapped_column(Integer, default=200, server_default="200")
-    # 오늘의 목표 — 밀린 양과 무관한 달성 가능 소량 (포기 방지 기획 2026-07-15)
-    daily_goal: Mapped[int] = mapped_column(Integer, default=20, server_default="20")
+    # 오늘의 목표 — 밀린 양과 무관한 달성 가능 소량 (포기 방지 기획 2026-07-15,
+    # 2026-08-05 프리셋 상향: 가볍게 15/기본 30/열심히 50)
+    daily_goal: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
     desired_retention: Mapped[float] = mapped_column(default=0.9, server_default="0.9")
     # 힌트까지 대기 시간(초), 0=끄기 (docs/specs/learning.md 힌트 타이머)
     hint_delay_seconds: Mapped[int] = mapped_column(Integer, default=10, server_default="10")

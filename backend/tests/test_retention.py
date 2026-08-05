@@ -48,7 +48,7 @@ async def _settings(db, user_id: int) -> UserSettings:
 async def test_saver_awarded_once_per_week_on_goal(client, db_session):
     """오늘 목표 달성 → 책갈피 1개 지급, 같은 주 재달성엔 중복 지급 없음."""
     user = await login(client, db_session)
-    await _log_on(db_session, user.id, days_ago=0, count=20)  # 기본 목표 20 달성
+    await _log_on(db_session, user.id, days_ago=0, count=30)  # 기본 목표 30 달성 (2026-08-05 상향)
 
     res = await client.get("/api/study/stats")
     assert res.json()["streak_savers"] == 1
@@ -71,7 +71,7 @@ async def test_saver_cap_at_two(client, db_session):
     settings.streak_savers = 2
     settings.saver_award_week = None  # 지급 가드 해제 상태여도
     await db_session.flush()
-    await _log_on(db_session, user.id, days_ago=0, count=20)
+    await _log_on(db_session, user.id, days_ago=0, count=30)
 
     res = await client.get("/api/study/stats")
     assert res.json()["streak_savers"] == 2  # 상한 유지

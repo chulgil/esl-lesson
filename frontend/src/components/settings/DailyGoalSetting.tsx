@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { studyApi } from "@/lib/study-api";
 
+// 2026-08-05 상향 (가볍게 10->15, 기본 20->30 — 사용자 결정). 업적 티어
+// (10/20/50)는 구 기준 유지 — 이미 달성한 스티커의 소급 롤백 방지
 const CHOICES = [
-  { value: 10, label: "가볍게", desc: "하루 10개 — 바쁜 날에도 지킬 수 있게" },
-  { value: 20, label: "기본", desc: "하루 20개 — 꾸준함에 딱 좋은 양" },
+  { value: 15, label: "가볍게", desc: "하루 15개 — 바쁜 날에도 지킬 수 있게" },
+  { value: 30, label: "기본", desc: "하루 30개 — 꾸준함에 딱 좋은 양" },
   { value: 50, label: "열심히", desc: "하루 50개 — 빠르게 늘리고 싶을 때" },
 ];
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { SegmentPlayer } from "@/components/media/SegmentPlayer";
 import { SessionDone } from "@/components/study/SessionDone";
@@ -373,15 +373,25 @@ function QuestionCard({
   hintDelay: number;
   onSubmit: (answer: string) => void;
 }) {
-  // 힌트: hintDelay 초 동안 무응답이면 힌트를 켠다. 켜진 뒤에는 시간이 아니라
-  // "입력 진행"에 따라 다음 한 단어만 노출한다 (2026-07-11 사용자 피드백).
+  // 힌트: hintDelay 초 "무활동"이면 한 단어만 켠다. 활동(칩 넣기/빼기·타이핑)이
+  // 있으면 힌트를 끄고 타이머를 리셋 — 다음 힌트도 무활동 간격을 다시 기다린다.
+  // (2026-08-05 보고: 이전엔 한 번 켜지면 래치로 남아 칩을 넣을 때마다 다음
+  // 힌트가 줄줄이 나왔고, 활동해도 타이머가 리셋되지 않았다)
   const [hintOn, setHintOn] = useState(false);
+  const [activityTick, setActivityTick] = useState(0);
+  const noteActivity = useCallback(() => setActivityTick((t) => t + 1), []);
   useEffect(() => {
     setHintOn(false);
     if (!hintDelay || disabled || !question.hint_answer) return;
     const timer = setTimeout(() => setHintOn(true), hintDelay * 1000);
     return () => clearTimeout(timer);
-  }, [hintDelay, disabled, question.hint_answer, question.card_id]);
+  }, [
+    hintDelay,
+    disabled,
+    question.hint_answer,
+    question.card_id,
+    activityTick,
+  ]);
 
   // 선다는 정답 보기 하나만 강조(순서 개념 없음)
   const choiceHighlight =
@@ -413,6 +423,7 @@ function QuestionCard({
           question={question}
           disabled={disabled}
           hintOn={hintOn}
+          onActivity={noteActivity}
           onSubmit={onSubmit}
         />
       )}
@@ -421,6 +432,7 @@ function QuestionCard({
           question={question}
           disabled={disabled}
           hintOn={hintOn}
+          onActivity={noteActivity}
           onSubmit={onSubmit}
         />
       )}
@@ -489,11 +501,13 @@ function PatternQuiz({
   question,
   disabled,
   hintOn,
+  onActivity,
   onSubmit,
 }: {
   question: Question;
   disabled: boolean;
   hintOn: boolean;
+  onActivity: () => void;
   onSubmit: (answer: string) => void;
 }) {
   const [picked, setPicked] = useState<number[]>([]);
@@ -520,7 +534,10 @@ function PatternQuiz({
             key={`${chipIdx}-${i}`}
             type="button"
             disabled={disabled}
-            onClick={() => setPicked((p) => p.filter((_, j) => j !== i))}
+            onClick={() => {
+              setPicked((p) => p.filter((_, j) => j !== i));
+              onActivity(); // 칩을 빼도 활동 — 힌트 타이머 리셋
+            }}
             className="mb-1 mr-1 min-h-10 rounded-md bg-brick-blue px-3 py-1 text-sm font-bold text-brick-label transition-colors hover:bg-brick-blue/80"
           >
             {chips[chipIdx]}
@@ -534,7 +551,10 @@ function PatternQuiz({
               key={chipIdx}
               type="button"
               disabled={disabled}
-              onClick={() => setPicked((p) => [...p, chipIdx])}
+              onClick={() => {
+                setPicked((p) => [...p, chipIdx]);
+                onActivity(); // 칩을 넣으면 힌트 타이머 리셋 (2026-08-05 보고)
+              }}
               className={`min-h-10 rounded-md border-2 px-3 py-1 text-sm transition hover:border-brick-blue active:scale-95 ${
                 nextWord && chip === nextWord
                   ? "border-brick-yellow bg-highlight/60 font-bold"
@@ -574,11 +594,13 @@ function ComposeQuiz({
   question,
   disabled,
   hintOn,
+  onActivity,
   onSubmit,
 }: {
   question: Question;
   disabled: boolean;
   hintOn: boolean;
+  onActivity: () => void;
   onSubmit: (answer: string) => void;
 }) {
   const [text, setText] = useState("");
@@ -612,7 +634,10 @@ function ComposeQuiz({
       )}
       <textarea
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          onActivity(); // 타이핑 중엔 힌트 보류 — 멈춘 뒤에만 다음 단어
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && text.trim() && !disabled) {
             e.preventDefault();

@@ -106,7 +106,7 @@ def reminder_payload(remaining: int) -> dict:
     }
 
 
-DEFAULT_DAILY_GOAL = 20
+DEFAULT_DAILY_GOAL = 30  # user_settings 행 없는 유저 폴백 — 모델 기본과 일치
 
 
 async def _goal_progress(db: AsyncSession, user_id: int, now: datetime) -> tuple[int, int]:

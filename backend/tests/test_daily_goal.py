@@ -14,11 +14,11 @@ from tests.test_study import login, seed_items
 async def test_daily_goal_setting_roundtrip(client, db_session):
     await login(client, db_session)
     res = await client.get("/api/settings")
-    assert res.json()["daily_goal"] == 20  # 기본값
+    assert res.json()["daily_goal"] == 30  # 기본값 (2026-08-05 프리셋 상향)
 
-    res = await client.patch("/api/settings", json={"daily_goal": 10})
+    res = await client.patch("/api/settings", json={"daily_goal": 15})
     assert res.status_code == 200
-    assert res.json()["daily_goal"] == 10
+    assert res.json()["daily_goal"] == 15
 
     assert (await client.patch("/api/settings", json={"daily_goal": 3})).status_code == 422
 
@@ -26,7 +26,7 @@ async def test_daily_goal_setting_roundtrip(client, db_session):
 async def test_stats_include_daily_goal(client, db_session):
     await login(client, db_session)
     res = await client.get("/api/study/stats")
-    assert res.json()["daily_goal"] == 20
+    assert res.json()["daily_goal"] == 30
 
 
 async def _log_today(db, user_id: int, count: int) -> None:
@@ -59,9 +59,9 @@ async def test_reminder_message_is_goal_remainder_not_full_backlog(
     vapid_keys,
     monkeypatch,  # noqa: F811
 ):
-    """밀린 30개여도 리마인더는 '목표까지 M개' — 겁주지 않는다."""
+    """밀린 40개여도 리마인더는 '목표까지 M개' — 겁주지 않는다."""
     user = await login(client, db_session)
-    await _add_due_card(db_session, user.id, count=30)
+    await _add_due_card(db_session, user.id, count=40)
     await client.post("/api/push/subscriptions", json=SUB_BODY)
 
     sent: list[dict] = []
@@ -73,8 +73,8 @@ async def test_reminder_message_is_goal_remainder_not_full_backlog(
     monkeypatch.setattr(push, "send_to", fake_send)
     evening = datetime.now(UTC).astimezone(push.KST).replace(hour=20, minute=30)
     assert await push.send_review_reminders(db_session, now=evening.astimezone(UTC)) == 1
-    assert "20개" in sent[0]["body"]  # min(due 30, 목표 20 잔여)
-    assert "30개" not in sent[0]["body"]
+    assert "30개" in sent[0]["body"]  # min(due 40, 목표 30 잔여)
+    assert "40개" not in sent[0]["body"]
 
 
 async def test_reminder_skipped_when_goal_met(
@@ -86,7 +86,7 @@ async def test_reminder_skipped_when_goal_met(
     """오늘 목표를 이미 채운 사용자에게는 발송하지 않는다 — 달성감 보존."""
     user = await login(client, db_session)
     await _add_due_card(db_session, user.id, count=5)
-    await _log_today(db_session, user.id, count=20)  # 목표(기본 20) 달성
+    await _log_today(db_session, user.id, count=30)  # 목표(기본 30) 달성
     await client.post("/api/push/subscriptions", json=SUB_BODY)
 
     sent: list[dict] = []
