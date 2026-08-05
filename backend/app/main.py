@@ -24,6 +24,7 @@ from app.api.game import ws_router as game_ws_router
 from app.api.my_contents import router as my_contents_router
 from app.api.notifications import router as notifications_router
 from app.api.push import router as push_router
+from app.api.routine import router as routine_router
 from app.api.study import cards_router, settings_router
 from app.api.study import router as study_router
 from app.api.themes import router as themes_router
@@ -69,6 +70,7 @@ app.include_router(admin_users_router, prefix="/api")
 app.include_router(contents_router, prefix="/api")
 app.include_router(exams_router, prefix="/api")
 app.include_router(my_contents_router, prefix="/api")
+app.include_router(routine_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 app.include_router(study_router, prefix="/api")
 app.include_router(cards_router, prefix="/api")

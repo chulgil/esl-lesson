@@ -48,6 +48,9 @@ export interface WordInsight {
   collocations?: string[];
   synonyms?: { word: string; ko: string; diff_ko: string }[];
   confusables?: { word: string; ko: string; diff_ko: string }[];
+  /** 어원 분해 — ted-routine P1-4 (구 캐시엔 없음, 신규 생성분부터) */
+  etymology_ko?: string;
+  same_root?: { word: string; ko: string }[];
 }
 
 /** 어휘망 그래프 (docs/proposal/word-insight.md P3) */
@@ -171,6 +174,13 @@ export interface StudyDeck {
   total_cards: number;
 }
 
+/** 콘텐츠 루틴 여정 — 6단계 + 한 문장 요약 (docs/proposal/ted-routine-2026-08.md) */
+export interface ContentRoutine {
+  steps: { step: number; done: boolean }[];
+  completed: boolean;
+  summary: { text: string; feedback: string | null; created_at: string } | null;
+}
+
 export interface LibraryContent {
   id: number;
   title: string;
@@ -291,4 +301,17 @@ export const studyApi = {
   stats: () => request<Stats>("/api/study/stats"),
   library: () => request<{ items: LibraryContent[] }>("/api/contents"),
   libraryDetail: (id: number) => request<LibraryDetail>(`/api/contents/${id}`),
+  // 콘텐츠 루틴 여정 (ted-routine P1) — 구독 콘텐츠만 (비구독 404)
+  routine: (contentId: number) =>
+    request<ContentRoutine>(`/api/contents/${contentId}/routine`),
+  setRoutineStep: (contentId: number, step: number, done: boolean) =>
+    request<{ step: number; done: boolean; completed: boolean }>(
+      `/api/contents/${contentId}/routine/${step}`,
+      { method: "POST", body: JSON.stringify({ done }) },
+    ),
+  submitSummary: (contentId: number, text: string) =>
+    request<{ feedback: string | null }>(`/api/contents/${contentId}/summary`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
 };

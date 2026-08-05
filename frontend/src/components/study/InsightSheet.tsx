@@ -131,6 +131,27 @@ export function InsightSheet({
                 <WordDiffList items={insight.confusables} accent />
               </Section>
             )}
+
+            {/* 어원 — 10개가 30개 되는 레버리지 (ted-routine P1-4).
+                구 캐시엔 필드가 없어 조건부 렌더 */}
+            {insight.etymology_ko && (
+              <Section title="어원">
+                <p className="text-sm">{insight.etymology_ko}</p>
+                {insight.same_root && insight.same_root.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {insight.same_root.map((w) => (
+                      <span
+                        key={w.word}
+                        className="rounded-full border-2 border-brick-blue/30 bg-white px-3 py-1 text-sm"
+                      >
+                        <b>{w.word}</b>
+                        <span className="ml-1 text-xs opacity-60">{w.ko}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </Section>
+            )}
           </div>
         )}
       </div>

@@ -4,6 +4,8 @@ interface YTPlayer {
   playVideo(): void;
   pauseVideo(): void;
   getCurrentTime(): number;
+  /** 섀도잉 배속 (0.75/1.0 — ted-routine P1-2) */
+  setPlaybackRate(rate: number): void;
   destroy?: () => void;
 }
 

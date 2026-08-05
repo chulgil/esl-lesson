@@ -32,10 +32,13 @@ JSON 스키마 (모든 한국어 필드는 자연스러운 한국어로):
  "examples": [{{"en": "예문", "ko": "번역"}}, {{"en": "예문", "ko": "번역"}}],
  "collocations": ["자주 붙는 표현 3개"],
  "synonyms": [{{"word": "유의어", "ko": "뜻", "diff_ko": "언제 이 단어를 쓰는지 한 줄"}}],
- "confusables": [{{"word": "혼동어", "ko": "뜻", "diff_ko": "혼동 포인트 한 줄"}}]}}
+ "confusables": [{{"word": "혼동어", "ko": "뜻", "diff_ko": "혼동 포인트 한 줄"}}],
+ "etymology_ko": "어원 한 줄 — 어근·접두/접미사 분해 (예: im-(안으로) + port(나르다))",
+ "same_root": [{{"word": "같은 어근 단어", "ko": "뜻"}}]}}
 
-규칙: synonyms 2-3개, confusables 1-2개. 실제 사용 문맥이 주어지면 첫 예문으로
-자연스럽게 재사용. JSON 외 다른 텍스트 금지."""
+규칙: synonyms 2-3개, confusables 1-2개, same_root 2-3개 (같은 어근·접사를
+공유해 어원으로 함께 이해되는 단어 — 억지 조합 금지, 마땅치 않으면 빈 배열).
+실제 사용 문맥이 주어지면 첫 예문으로 자연스럽게 재사용. JSON 외 다른 텍스트 금지."""
 
 
 def _parse_json(text: str) -> dict:

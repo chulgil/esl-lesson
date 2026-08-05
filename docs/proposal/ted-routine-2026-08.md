@@ -1,6 +1,7 @@
 # 기획: TED 10단계 루틴 흡수 — "콘텐츠 한 편을 갈아 넣는" 학습 여정
 
-> 작성: 2026-08-05 · 상태: 기획 (구현 착수 전 — P1 선정 후 개별 착수)
+> 작성: 2026-08-05 · 상태: **P1 4건 구현 완료 (2026-08-05)** — 스펙:
+> [content-routine.md](../specs/content-routine.md). P2는 사용률 관측 후.
 > 출처: [TED로 집요하게 영어실력 높인 방법 (10단계 루틴)](https://www.youtube.com/watch?v=0TI4O81gwhQ)
 > — 통번역학과 교수의 방법론. 화자: 수능 4등급 -> 통역 -> 미국 회사 재직.
 > 선행 기획: [duolingo-benchmark-2026-08.md](duolingo-benchmark-2026-08.md) ·

@@ -209,7 +209,36 @@ async def total_xp(db: AsyncSession, user_id: int) -> int:
         + int(exam_submits) * 20
         + int(exam_score_bonus)
         + await retention.quest_bonus_xp(db, user_id)
+        + await routine_xp(db, user_id)
     )
+
+
+async def routine_xp(db: AsyncSession, user_id: int) -> int:
+    """루틴 XP — 완주 콘텐츠(6단계) x 50 + 요약 제출 x 20 (ted-routine P1).
+
+    원장 행에서 실시간 파생 — 적립 테이블 없음 원칙 유지.
+    """
+    from app.models import ContentRoutineProgress, ContentSummary
+    from app.models.routine import ROUTINE_STEP_COUNT
+
+    completed = (
+        await db.execute(
+            select(func.count())
+            .select_from(
+                select(ContentRoutineProgress.content_id)
+                .where(ContentRoutineProgress.user_id == user_id)
+                .group_by(ContentRoutineProgress.content_id)
+                .having(func.count(ContentRoutineProgress.id) >= ROUTINE_STEP_COUNT)
+                .subquery()
+            )
+        )
+    ).scalar_one()
+    summaries = (
+        await db.execute(
+            select(func.count(ContentSummary.id)).where(ContentSummary.user_id == user_id)
+        )
+    ).scalar_one()
+    return completed * 50 + summaries * 20
 
 
 async def spent_xp(db: AsyncSession, user_id: int) -> int:
