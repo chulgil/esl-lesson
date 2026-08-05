@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import Content, ContentSubscription, ItemOccurrence, TranscriptSegment, User
+from app.services.content_difficulty import difficulty_by_content, known_ratio_by_content
 from app.services.visibility import subscribed_content_ids
 
 router = APIRouter(prefix="/contents", tags=["contents"])
@@ -57,6 +58,10 @@ async def list_ready_contents(
         if rows
         else {}
     )
+    # 담기 전에 수준을 보여주는 파생값 — 저장 컬럼 없이 일괄 집계 (content-governance.md)
+    content_ids = [c.id for c in rows]
+    difficulty = await difficulty_by_content(db, content_ids)
+    known_ratio = await known_ratio_by_content(db, user.id, content_ids, item_counts)
     # 담기 버튼 상태 — 담은 콘텐츠만 학습 큐에 편입된다 (content-governance.md)
     subscribed = set(
         (
@@ -84,6 +89,8 @@ async def list_ready_contents(
                 # CC 배지·저작자표시용 (consult-brief §5 — 라이선스 명칭 표시 요건)
                 "youtube_license": c.youtube_license,
                 "item_count": item_counts.get(c.id, 0),
+                "difficulty": difficulty.get(c.id),
+                "known_ratio": known_ratio.get(c.id),
                 "created_at": c.created_at,
             }
             for c in rows

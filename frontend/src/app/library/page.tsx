@@ -6,6 +6,18 @@ import { SubscribeButton } from "@/components/content/SubscribeButton";
 import { examApi, type OpenExam } from "@/lib/exam-api";
 import { studyApi, type LibraryContent } from "@/lib/study-api";
 
+/** 난이도 배지 — 담기 전에 "내 수준의 영상인가"를 보여준다 (content-governance.md) */
+const DIFFICULTY_LABELS = {
+  beginner: "초급",
+  intermediate: "중급",
+  advanced: "고급",
+} as const;
+const DIFFICULTY_STYLES = {
+  beginner: "bg-brick-green/15 text-brick-green",
+  intermediate: "bg-brick-blue/15 text-brick-blue",
+  advanced: "bg-brick-red/15 text-brick-red",
+} as const;
+
 export default function LibraryPage() {
   const [contents, setContents] = useState<LibraryContent[]>([]);
   // 콘텐츠별 열린 시험 — 카드에 시험 칩(1위·내 최고점) 노출 (2026-07-31 goal)
@@ -61,10 +73,22 @@ export default function LibraryPage() {
                     CC BY
                   </span>
                 )}
+                {c.difficulty && (
+                  <span
+                    className={`rounded px-1.5 py-0.5 font-bold ${DIFFICULTY_STYLES[c.difficulty]}`}
+                  >
+                    {DIFFICULTY_LABELS[c.difficulty]}
+                  </span>
+                )}
               </p>
               <p className="mt-1 font-bold">{c.title}</p>
-              <p className="mt-2 text-xs opacity-60">
-                학습 항목 {c.item_count}개
+              <p className="mt-2 flex items-center gap-2 text-xs opacity-60">
+                <span>학습 항목 {c.item_count}개</span>
+                {c.known_ratio !== null && (
+                  <span className="rounded-full bg-ink/10 px-2 py-0.5">
+                    아는 표현 {c.known_ratio}%
+                  </span>
+                )}
               </p>
             </Link>
             {/* 시험 칩 — 도전 상태(내 최고점·1위)를 카드에서 바로 보여준다 */}

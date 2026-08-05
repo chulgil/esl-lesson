@@ -102,7 +102,7 @@ license != creativeCommon 또는 미확인 → content_permissions 필수, 없�
 | POST `/api/admin/contents` | `allow_non_cc` 제거, `permission` 객체 추가 |
 | GET `/api/admin/youtube/cc-search?q=` | **신규 (2026-07-29)** — Data API `search.list`(`videoLicense=creativeCommon` + `videoCaption=closedCaption`)로 CC·자막 보유 영상만 검색. 등록 화면 "CC 영상 찾기" — 선택 시 URL 자동 채움. 검색 필터는 후보용이고 등록 시 `fetch_license` 재확인(이중 게이트). 키 없으면 503, 구글 오류 502. search.list 쿼터 100단위/호출(관리자 전용이라 무해) |
 | GET `/api/admin/contents/{id}` | 응답에 `permission` 포함 (검수 화면 표시용) |
-| GET `/api/contents` | 항목에 `subscribed` 플래그 추가 (담기 버튼 상태) |
+| GET `/api/contents` | 항목에 `subscribed` 플래그 추가 (담기 버튼 상태). 2026-08-05 `difficulty`·`known_ratio` 추가 (아래 절) |
 
 ## 프론트엔드
 
@@ -110,6 +110,20 @@ license != creativeCommon 또는 미확인 → content_permissions 필수, 없�
 - `/library`, `/library/{id}` — 담기/빼기 토글
 - `/admin/contents/new` — CC 차단 시 허락 증빙 폼(권리자·날짜·범위 체크·증빙) 노출, 입력해야 등록
 - `/copyright` — 큐레이션·허락 모델로 문구 갱신
+
+## 난이도 배지·아는 표현 비율 (2026-08-05)
+
+담기는 되돌릴 수 있어도 "잘못 담아 학습 큐가 무너지는" 비용은 사용자가 진다. 목록에서 **담기 전에** 수준을 보여준다 (proposal/effectiveness-audit-2026-08.md P0-2). 저장 컬럼·마이그레이션 없이 `GET /api/contents` 조회 시 실시간 파생한다.
+
+| 필드 | 산출 | 값 |
+|---|---|---|
+| `difficulty` | 콘텐츠 항목의 `difficulty_hint` 가중 평균 (basic=0, intermediate=1, advanced=2) | 평균 >= 1.35 `advanced` / <= 0.6 `beginner` / 그 외 `intermediate` / 항목 0개면 `null` |
+| `known_ratio` | 항목 중 내 `review_cards` 가 이미 있는 항목의 비율 (반올림 정수) | 0~100 / 항목 0개면 `null` |
+
+- DB 의 `basic` 은 노출 라벨 `beginner`(초급) 로 맞춘다 — 업적 티어(beginner/intermediate/advanced) 와 같은 어휘를 쓴다.
+- 두 값 모두 목록 전체를 `GROUP BY` 한 번으로 집계한다 (콘텐츠당 N+1 금지).
+- `known_ratio` 의 분모는 카드에 표시되는 `item_count` 와 동일하다 (사용자가 두 수를 대조할 수 있게).
+- 프론트: `/library` 카드에 난이도 배지(초급 green / 중급 blue / 고급 red) + "아는 표현 n%" 칩.
 
 ## 남는 리스크 (이 스펙 범위 밖)
 
@@ -127,3 +141,5 @@ license != creativeCommon 또는 미확인 → content_permissions 필수, 없�
 - retry: 공용 콘텐츠 재시도 거부, 개인 콘텐츠는 허용
 - 허락 게이트: CC → 증빙 없이 통과 / 비 CC → 증빙 없으면 409 / 범위 누락 시 422 / 정상 입력 시 저장·조회
 - 마이그레이션: 기존 회원 × 공용 콘텐츠 구독 백필
+- 난이도 배지: 고급/중급/초급 분포별 라벨, 경계값(1.35·0.6), 항목 0개 → `null`
+- 아는 표현 비율: 4개 중 2개 보유 → 50, 항목 0개 → `null`, 다른 사용자 카드는 미포함

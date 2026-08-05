@@ -191,6 +191,10 @@ export interface LibraryContent {
   /** "creativeCommon" | "youtube"(표준) | null(미확인) — CC 배지·저작자표시용 */
   youtube_license: string | null;
   item_count: number;
+  /** 항목 difficulty_hint 분포에서 파생 — 항목이 없으면 null */
+  difficulty: "beginner" | "intermediate" | "advanced" | null;
+  /** 이미 내 카드가 있는 항목 비율(0~100) — 항목이 없으면 null */
+  known_ratio: number | null;
 }
 
 export interface AlignedWord {
