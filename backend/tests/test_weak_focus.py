@@ -164,3 +164,40 @@ async def test_stats_include_weak_count_and_long_term(client, db_session):
     assert len(weekly) == 8
     assert weekly[0]["count"] == 0  # 8주 전에는 도달 카드 없음
     assert weekly[-1]["count"] == 1  # 3주 전 도달 → 현재 주 누적 1
+
+
+async def test_queue_questions_include_last_rating(client, db_session):
+    """문항에 직전 등급(last_rating) — 힌트 정책 분기 재료 (2026-08-05).
+
+    처음 학습(신규) = null, 리뷰 후엔 마지막 로그의 rating.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    await login(client, db_session)
+    await seed_items(db_session, count=1)
+
+    res = (await client.get("/api/study/queue")).json()
+    question = res["questions"][0]
+    assert question["last_rating"] is None  # 처음 학습
+
+    answer = await client.post(
+        "/api/study/answer",
+        json={
+            "card_id": question["card_id"],
+            "quiz_mode": question["quiz_mode"],
+            "answer": "오답",
+            "duration_ms": 5000,
+        },
+    )
+    assert answer.status_code == 200  # 오답 -> rating 1
+
+    # 다시 due 로 만들어 재조회 — 직전 등급이 실린다
+    from app.models import ReviewCard
+
+    card = await db_session.get(ReviewCard, question["card_id"])
+    card.due_at = datetime.now(UTC) - timedelta(minutes=1)
+    await db_session.commit()
+
+    res = (await client.get("/api/study/queue")).json()
+    again = next(q for q in res["questions"] if q["card_id"] == question["card_id"])
+    assert again["last_rating"] == 1

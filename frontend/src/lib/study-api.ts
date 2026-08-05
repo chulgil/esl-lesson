@@ -4,6 +4,9 @@ export interface Question {
   card_id: number;
   item_id: number;
   state: string;
+  /** 직전 리뷰 등급(1~4) — null 은 처음 학습. 힌트 정책 분기: 쉬움(4)만
+   *  시간차 힌트, 그 외는 순차 힌트 (learning.md 힌트 타이머) */
+  last_rating: number | null;
   quiz_mode: "choice_en2ko" | "choice_ko2en" | "cloze" | "pattern" | "compose";
   level: number;
   prompt?: string;

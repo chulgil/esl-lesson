@@ -325,6 +325,18 @@ async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: i
 
     media_by_item = await _media_for_items(db, list(items_by_id.keys()))
 
+    # 직전 등급 — 힌트 정책 분기 재료 (2026-08-05: 쉬움(4)만 시간차 힌트,
+    # 처음 학습/다시/어려움/알맞음은 순차 힌트 — learning.md 힌트 타이머)
+    last_rating: dict[int, int] = {}
+    rating_rows = await db.execute(
+        select(ReviewLog.card_id, ReviewLog.rating)
+        .where(ReviewLog.card_id.in_([c.id for c in cards]))
+        .order_by(ReviewLog.card_id, ReviewLog.id.desc())
+    )
+    for cid, rating in rating_rows:
+        if cid not in last_rating:
+            last_rating[cid] = rating
+
     # P2: 임베딩 최근접 유사단어를 오답 선지에 우선 배치 (실패 시 랜덤 폴백)
     similar_by_item: dict[int, list[dict]] = {}
     if embeddings.enabled(db):
@@ -350,6 +362,7 @@ async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: i
                 "card_id": card.id,
                 "item_id": item.id,
                 "state": card.state,
+                "last_rating": last_rating.get(card.id),
                 "media": media_by_item.get(item.id),
                 **question,
             }

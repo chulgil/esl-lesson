@@ -373,21 +373,32 @@ function QuestionCard({
   hintDelay: number;
   onSubmit: (answer: string) => void;
 }) {
-  // 힌트: hintDelay 초 "무활동"이면 한 단어만 켠다. 활동(칩 넣기/빼기·타이핑)이
-  // 있으면 힌트를 끄고 타이머를 리셋 — 다음 힌트도 무활동 간격을 다시 기다린다.
-  // (2026-08-05 보고: 이전엔 한 번 켜지면 래치로 남아 칩을 넣을 때마다 다음
-  // 힌트가 줄줄이 나왔고, 활동해도 타이머가 리셋되지 않았다)
+  // 힌트 정책 — 카드 숙련도로 분기 (2026-08-05 사용자 정책):
+  // · 처음 학습·직전 등급 다시/어려움/알맞음(1~3): 첫 무활동 지연 후 켜지면
+  //   래치 유지 — 입력 진행에 따라 다음 단어를 순차로 안내 (헤매는 카드는
+  //   끊김 없이 이끈다)
+  // · 직전 등급 쉬움(4)만: 단계마다 무활동 시간차 — 활동하면 힌트를 끄고
+  //   타이머 리셋, 다시 지연을 기다려야 다음 한 단어 (아는 카드는 스스로
+  //   떠올릴 시간을 준다)
+  const paced = question.last_rating === 4;
   const [hintOn, setHintOn] = useState(false);
+  const hintOnRef = useRef(false);
   const [activityTick, setActivityTick] = useState(0);
   const noteActivity = useCallback(() => setActivityTick((t) => t + 1), []);
   useEffect(() => {
-    setHintOn(false);
     if (!hintDelay || disabled || !question.hint_answer) return;
-    const timer = setTimeout(() => setHintOn(true), hintDelay * 1000);
+    if (!paced && hintOnRef.current) return; // 순차 모드: 한 번 켜지면 유지
+    hintOnRef.current = false;
+    setHintOn(false);
+    const timer = setTimeout(() => {
+      hintOnRef.current = true;
+      setHintOn(true);
+    }, hintDelay * 1000);
     return () => clearTimeout(timer);
   }, [
     hintDelay,
     disabled,
+    paced,
     question.hint_answer,
     question.card_id,
     activityTick,
