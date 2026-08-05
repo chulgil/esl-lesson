@@ -214,6 +214,7 @@ async def send_message(
     )
     db.add(msg)
     conv.last_message_at = datetime.now(UTC)
+    conv_id = conv.id  # rollback 은 ORM 객체를 만료시킨다 — 값으로 캡처
     try:
         await db.commit()
     except IntegrityError:
@@ -222,7 +223,7 @@ async def send_message(
         existing = (
             await db.execute(
                 select(ChatMessage).where(
-                    ChatMessage.conversation_id == conv.id,
+                    ChatMessage.conversation_id == conv_id,
                     ChatMessage.client_msg_id == client_msg_id,
                 )
             )
@@ -231,8 +232,8 @@ async def send_message(
     await db.refresh(msg)
 
     data = (await attach_reply_previews(db, [message_dict(msg)]))[0]
-    if conv.id in _recent:
-        _recent[conv.id].append(data)
+    if conv_id in _recent:
+        _recent[conv_id].append(data)
     _invalidate_unread(to_user_id)
     return data, True
 

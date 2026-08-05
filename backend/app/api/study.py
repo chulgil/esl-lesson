@@ -126,24 +126,28 @@ async def get_queue(
     ).scalar_one()
 
     review_budget = max(0, settings.daily_review_limit - reviews_today)
-    due_cards = list(
-        (
-            await db.execute(
-                select(ReviewCard)
-                .join(LearningItem, LearningItem.id == ReviewCard.item_id)
-                .where(
-                    ReviewCard.user_id == user.id,
-                    ReviewCard.due_at <= now,
-                    ReviewCard.suspended.is_(False),
-                    visible_item_clause(user.id),
-                    LearningItem.item_type.in_(types),
-                    *deck_scope,
+
+    async def fetch_due_cards() -> list[ReviewCard]:
+        return list(
+            (
+                await db.execute(
+                    select(ReviewCard)
+                    .join(LearningItem, LearningItem.id == ReviewCard.item_id)
+                    .where(
+                        ReviewCard.user_id == user.id,
+                        ReviewCard.due_at <= now,
+                        ReviewCard.suspended.is_(False),
+                        visible_item_clause(user.id),
+                        LearningItem.item_type.in_(types),
+                        *deck_scope,
+                    )
+                    .order_by(ReviewCard.due_at)
+                    .limit(review_budget)
                 )
-                .order_by(ReviewCard.due_at)
-                .limit(review_budget)
-            )
-        ).scalars()
-    )
+            ).scalars()
+        )
+
+    due_cards = await fetch_due_cards()
 
     # 오늘 만난 카드 = 현재 가시(구독 중)인 것만 예산에 계산 — 담기 A 로 한도를
     # 쓰고 A 를 뺀 뒤 B 를 담으면, A 의 숨은 카드가 예산을 잠근 채 due 도 0 이라
@@ -190,9 +194,14 @@ async def get_queue(
             await db.flush()
         except IntegrityError:
             # 동시 요청(중복 탭)이 같은 항목을 먼저 도입 (uq_cards_user_item)
-            # — 이번 응답은 due 카드만 반환, 신규는 승자 쪽 응답에 실림
+            # — 이번 응답은 due 카드만 반환, 신규는 승자 쪽 응답에 실림.
+            # rollback 이 user/settings/due 인스턴스를 전부 만료시키므로
+            # 재로드 후 재조회 (2026-08-05 스윕 — MissingGreenlet 방지)
             await db.rollback()
             new_cards = []
+            await db.refresh(user)
+            await db.refresh(settings)
+            due_cards = await fetch_due_cards()
 
     ordered = due_cards + new_cards
     page = ordered[:QUEUE_PAGE_SIZE]
@@ -914,7 +923,8 @@ async def add_card(
     ).scalar_one_or_none()
     if existing is not None:
         return {"added": False, "card_id": existing.id}
-    card = ReviewCard(user_id=user.id, item_id=body.item_id, state="new", due_at=datetime.now(UTC))
+    uid = user.id  # rollback 은 ORM 객체를 만료시킨다 — 값으로 캡처
+    card = ReviewCard(user_id=uid, item_id=body.item_id, state="new", due_at=datetime.now(UTC))
     db.add(card)
     try:
         await db.commit()
@@ -924,7 +934,7 @@ async def add_card(
         winner = (
             await db.execute(
                 select(ReviewCard).where(
-                    ReviewCard.user_id == user.id, ReviewCard.item_id == body.item_id
+                    ReviewCard.user_id == uid, ReviewCard.item_id == body.item_id
                 )
             )
         ).scalar_one()

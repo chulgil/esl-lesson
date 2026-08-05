@@ -64,6 +64,7 @@ async def subscribe(
                 auth=body.keys.auth,
             )
         )
+    uid = user.id  # rollback 은 ORM 객체를 만료시킨다 — 값으로 캡처
     try:
         await db.commit()
     except IntegrityError:
@@ -74,7 +75,7 @@ async def subscribe(
                 select(PushSubscription).where(PushSubscription.endpoint == body.endpoint)
             )
         ).scalar_one()
-        winner.user_id = user.id
+        winner.user_id = uid
         winner.p256dh = body.keys.p256dh
         winner.auth = body.keys.auth
         await db.commit()

@@ -43,6 +43,8 @@ export default function LibraryDetailPage() {
   // 섀도잉 3단 (ted-routine P1-2): 0 끄기 / 1 느리게(0.75x)+자막 /
   // 2 원속도+자막 / 3 원속도+자막 가림. "이해 후 섀도잉" 원리의 단계 그대로
   const [shadowStage, setShadowStage] = useState<0 | 1 | 2 | 3>(0);
+  const shadowStageRef = useRef<0 | 1 | 2 | 3>(0);
+  shadowStageRef.current = shadowStage;
   const [peek, setPeek] = useState(false); // 3단에서 "잠깐 보기"
   const [subtitleLead, setSubtitleLead] = useState(DEFAULT_LEAD_MS);
   const leadRef = useRef(DEFAULT_LEAD_MS);
@@ -77,6 +79,18 @@ export default function LibraryDetailPage() {
       playerRef.current = new window.YT!.Player("yt-player", {
         videoId: detail!.youtube_video_id,
         playerVars: { rel: 0 },
+        events: {
+          // 플레이어 준비 전에 섀도잉을 켠 경우 배속을 뒤늦게라도 적용
+          onReady: () => {
+            try {
+              playerRef.current?.setPlaybackRate(
+                shadowStageRef.current === 1 ? 0.75 : 1,
+              );
+            } catch {
+              // 무시 — 배속은 컨트롤 재선택으로 복구 가능
+            }
+          },
+        },
       });
     }
 
@@ -154,7 +168,7 @@ export default function LibraryDetailPage() {
     try {
       playerRef.current?.setPlaybackRate(shadowStage === 1 ? 0.75 : 1);
     } catch {
-      // 플레이어 미초기화 — 다음 재생에서 자연 적용
+      // 플레이어 미초기화 — onReady 핸들러가 늦게라도 적용
     }
   }, [shadowStage]);
   useEffect(() => {

@@ -81,8 +81,22 @@ export function RoutineGuide({
     if (busyStep) return;
     setBusyStep(step);
     try {
-      await studyApi.setRoutineStep(contentId, step, !doneSet.has(step));
-      setRoutine(await studyApi.routine(contentId));
+      // 응답으로 로컬 갱신 — 토글마다 전체 재조회(GET)하지 않는다
+      const res = await studyApi.setRoutineStep(
+        contentId,
+        step,
+        !doneSet.has(step),
+      );
+      setRoutine(
+        (prev) =>
+          prev && {
+            ...prev,
+            completed: res.completed,
+            steps: prev.steps.map((s) =>
+              s.step === res.step ? { ...s, done: res.done } : s,
+            ),
+          },
+      );
     } catch {
       // 실패는 조용히 — 다음 탭에서 재시도
     }

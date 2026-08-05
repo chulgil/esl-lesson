@@ -116,8 +116,11 @@ async def streak_with_savers(
         try:
             await db.commit()
         except IntegrityError:
-            # 동시 stats 호출 경합 — 먼저 저장된 쪽을 채택하고 이번 계산값은 유지
+            # 동시 stats 호출 경합 — 먼저 저장된 쪽을 채택하고 이번 계산값은 유지.
+            # rollback 이 settings 를 만료시키므로 재로드 — 호출자(stats)가 이어서
+            # settings 필드를 읽어도 안전 (MissingGreenlet 방지, 2026-08-05 스윕)
             await db.rollback()
+            await db.refresh(settings)
 
     saved_days = sorted(d for d in used)
     return streak, saved_days
