@@ -16,7 +16,7 @@ from app.core.db import get_db
 from app.models import Content, ExtractionJob, TranscriptSegment
 from app.services.alignment import apply_alignment
 from app.services.pipeline import _align_ko_by_time
-from app.services.youtube import Snippet, merge_into_sentences
+from app.services.youtube import Snippet, merge_into_sentences, strip_caption_credits
 from app.workers.queue import enqueue
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -159,7 +159,8 @@ async def submit_transcript(
                 seq=seq,
                 start_ms=snippet.start_ms,
                 end_ms=snippet.end_ms,
-                en_text=snippet.text,
+                # 선두 자막 크레딧(Translator:/Reviewer:) 제거 (2026-08-05 검증)
+                en_text=strip_caption_credits(snippet.text),
                 ko_text=ko_texts.get(seq),
             )
         )

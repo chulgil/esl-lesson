@@ -27,6 +27,7 @@ from app.models.push import PushSubscription
 from app.models.retention import QuestCompletion, StreakSaverUse, XpSpend
 from app.models.routine import ContentRoutineProgress, ContentSummary
 from app.models.theme import ThemeGrant, ThemeRewardRule, ThemeSetting
+from app.models.tts import TtsAudio
 from app.models.user import User, UserSettings
 
 __all__ = [
@@ -60,6 +61,7 @@ __all__ = [
     "ReviewLog",
     "StreakSaverUse",
     "XpSpend",
+    "TtsAudio",
     "ThemeGrant",
     "ThemeRewardRule",
     "ThemeSetting",

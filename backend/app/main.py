@@ -28,6 +28,7 @@ from app.api.routine import router as routine_router
 from app.api.study import cards_router, settings_router
 from app.api.study import router as study_router
 from app.api.themes import router as themes_router
+from app.api.tts import router as tts_router
 from app.core.config import assert_production_secrets, get_settings
 from app.core.db import get_db
 from app.workers.queue import start_workers, stop_workers
@@ -71,6 +72,7 @@ app.include_router(contents_router, prefix="/api")
 app.include_router(exams_router, prefix="/api")
 app.include_router(my_contents_router, prefix="/api")
 app.include_router(routine_router, prefix="/api")
+app.include_router(tts_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 app.include_router(study_router, prefix="/api")
 app.include_router(cards_router, prefix="/api")

@@ -164,6 +164,43 @@ async def search_cc_videos(
     return {"items": results, "next_page_token": data.get("nextPageToken")}
 
 
+CREDIT_LABELS = ("translator:", "reviewer:", "transcriber:")
+# 이름에 끼는 소문자 전치사(카운트 제외) — "Peter van de Ven" 류
+NAME_PARTICLES = {"van", "de", "der", "von", "da", "del", "la", "le", "di", "den"}
+
+
+def strip_caption_credits(text: str) -> str:
+    """자막 선두의 TED 크레딧("Translator: 이름 Reviewer: 이름") 제거.
+
+    자막 첫 큐에 크레딧이 발화와 병합되어 들어와 학습 텍스트를 오염시켰다
+    (2026-08-05 콘텐츠 검증 — content 7 실측). 이름은 "이름+성" 2토큰(전치사
+    카운트 제외)으로 보고, 문장부호가 붙은 토큰(발화 시작)에서 멈춘다 —
+    상한을 늘리면 대문자로 시작하는 발화 첫 단어까지 삼킨다.
+    """
+    tokens = text.split()
+    i = 0
+    while i < len(tokens) and tokens[i].lower() in CREDIT_LABELS:
+        i += 1
+        counted = 0
+        while i < len(tokens) and counted < 2:
+            token = tokens[i]
+            if tokens[i].lower() in CREDIT_LABELS:
+                break  # 다음 크레딧 라벨 — 바깥 루프가 처리
+            if any(p in token for p in ",.!?"):
+                break  # 문장부호 = 발화 시작
+            if token.lower() in NAME_PARTICLES:
+                i += 1
+                continue  # 전치사는 카운트 없이 소비
+            if token[0].isupper():
+                i += 1
+                counted += 1
+                continue
+            break
+    if i == 0:
+        return text
+    return " ".join(tokens[i:])
+
+
 @dataclass
 class Snippet:
     text: str

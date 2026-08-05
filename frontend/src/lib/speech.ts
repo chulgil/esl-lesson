@@ -106,8 +106,8 @@ export function primeVoices() {
   }
 }
 
-/** 단어 발음 재생 — 사용자 제스처 안에서 동기 호출 (iOS 제약) */
-export function speakWord(word: string) {
+/** 브라우저 내장 TTS — 서버 신경망 음성 실패 시 폴백 전용 */
+function speakWithBrowserTts(word: string) {
   if (!supported()) return;
   if (!cachedVoice) cachedVoice = pickVoice(window.speechSynthesis.getVoices());
 
@@ -123,4 +123,28 @@ export function speakWord(word: string) {
   utter.volume = 1;
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utter);
+}
+
+let currentAudio: HTMLAudioElement | null = null;
+
+/** 단어 발음 재생 — 서버 신경망 TTS(캐시) 우선, 실패 시 브라우저 TTS 폴백.
+ *
+ *  브라우저 내장 음성은 기기 의존이라 기계음이 흔했다 (2026-08-05 보고).
+ *  Audio 요소를 제스처 안에서 동기 생성해 iOS 재생 제약을 지키고,
+ *  src 가 곧 인증 요청이라(same-origin 쿠키) 별도 fetch 가 필요 없다. */
+export function speakWord(word: string) {
+  if (typeof window === "undefined") return;
+  currentAudio?.pause();
+
+  let fellBack = false;
+  const fallback = () => {
+    if (fellBack) return; // play 거부 + error 이벤트 이중 발화 가드
+    fellBack = true;
+    speakWithBrowserTts(word);
+  };
+
+  const audio = new Audio(`/api/tts?text=${encodeURIComponent(word)}`);
+  currentAudio = audio;
+  audio.addEventListener("error", fallback, { once: true });
+  audio.play().catch(fallback);
 }

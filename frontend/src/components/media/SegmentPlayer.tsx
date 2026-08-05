@@ -27,9 +27,11 @@ export function SegmentPlayer({
   loopRef.current = loop;
 
   const start = media.start_ms / 1000;
-  // 자동 자막의 end_ms 가 문장 범위를 넘길 수 있어 상한(8초)으로 제한 (2026-07-11 피드백)
+  // 상한은 30초 안전망만 — 문장 경계 보간 도입 후 end_ms 가 정확해졌는데
+  // 옛 8초 상한이 15~24초짜리 정상 긴 문장을 중간 절단했다 (2026-08-05
+  // 콘텐츠 검증: 발화 8~16자/초로 재생시간이 텍스트와 일치함을 실측)
   const rawEnd = media.end_ms / 1000;
-  const end = Math.min(rawEnd, start + 8);
+  const end = Math.min(rawEnd, start + 30);
 
   useEffect(() => {
     if (!open || !holderRef.current) return;

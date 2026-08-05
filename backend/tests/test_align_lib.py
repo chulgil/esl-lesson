@@ -119,3 +119,21 @@ def test_process_alignments_reports_failed_on_none(monkeypatch):
         client, aligner=FakeAligner(), downloader=lambda vid: "/tmp/none.m4a"
     )
     assert client.posts[0][0].endswith("/api/agent/transcripts/8/alignment/failed")
+
+
+def test_strip_caption_credits():
+    """자막 선두 크레딧 제거 — content 7 실측 케이스 (2026-08-05)."""
+    from app.services.youtube import strip_caption_credits
+
+    assert (
+        strip_caption_credits(
+            "Translator: Queenie Lee Reviewer: Peter van de Ven Ten, nine, eight"
+        )
+        == "Ten, nine, eight"
+    )
+    # 크레딧 없으면 원문 그대로
+    assert strip_caption_credits("Ten, nine, eight") == "Ten, nine, eight"
+    # 단독 라벨 하나만
+    assert strip_caption_credits("Transcriber: Jane Doe So here we go") == "So here we go"
+    # 본문 중간의 translator 단어는 건드리지 않는다
+    assert strip_caption_credits("The translator: a story") == "The translator: a story"

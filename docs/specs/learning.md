@@ -202,7 +202,7 @@
 전량 복제·전송이 공정이용 4요소 중 가장 불리한 지점이라 "재생 중 문장만 표시"로
 전환. 권리자 삭제 요청 채널은 `/copyright` (privacy·라이브러리에서 링크).
 
-- 구현: 클라이언트 폴링으로 `player.getCurrentTime()` 확인, end 초과 시 `seekTo(start)`. 자동 자막의 end_ms 가 문장을 넘길 수 있어 **재생 상한 8초**로 제한한다(2026-07-11 피드백).
+- 구현: 클라이언트 폴링으로 `player.getCurrentTime()` 확인, end 초과 시 `seekTo(start)`. 재생 상한: 문장 경계 보간 도입 후 end_ms 가 정확해져 **라이브러리는 상한 없음**, 세션 구간 듣기(SegmentPlayer)는 **30초 안전망**만 — 옛 8초 상한은 15~24초 정상 긴 문장을 절단했다 (2026-08-05 검증: 발화 8~16자/초로 재생시간·텍스트 일치 실측).
 - 데이터: `GET /api/contents/{id}` 가 세그먼트별 `start_ms`/`end_ms`와 `youtube_video_id`를 반환.
 
 ## API

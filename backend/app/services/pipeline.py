@@ -16,7 +16,7 @@ from app.core.db import get_session_factory
 from app.models import Content, ExtractionJob, ItemOccurrence, LearningItem, TranscriptSegment
 from app.models.item import normalize_key
 from app.services import embeddings, extraction, youtube
-from app.services.youtube import TranscriptBlockedError
+from app.services.youtube import TranscriptBlockedError, strip_caption_credits
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,8 @@ async def _step_transcript(db: AsyncSession, content: Content) -> dict:
                 seq=seq,
                 start_ms=snippet.start_ms,
                 end_ms=snippet.end_ms,
-                en_text=snippet.text,
+                # 선두 자막 크레딧(Translator:/Reviewer:) 제거 (2026-08-05 검증)
+                en_text=strip_caption_credits(snippet.text),
                 ko_text=ko_texts.get(seq),
             )
         )

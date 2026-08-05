@@ -11,7 +11,9 @@
   (단어·숙어)만 노출. 패턴/문장은 문장 단위라 제외
 - 바텀시트: 헤더(단어 + TTS 재생 + 닫기) → IPA·품사 → 뉘앙스 →
   예문 2 → 자주 붙는 표현 → 유의어 → 헷갈리기 쉬운 단어
-- TTS 는 브라우저 내장 SpeechSynthesis (en-US, 서버 비용 0)
+- TTS: **서버 신경망 음성 우선** (edge-tts en-US-ChristopherNeural, `GET /api/tts`
+  — `tts_audio` DB 캐시, 2026-08-05 "로봇 목소리" 보고로 전환) + 실패 시
+  브라우저 SpeechSynthesis 폴백 (기존 음성 선택 로직 유지)
 - **음성은 반드시 명시 지정** (`frontend/src/lib/speech.ts`). `lang="en-US"` 만 주면 시스템 로케일이 한국어인 맥에서 en 음성 41개 중 default 플래그가 하나도 없어 목록 첫 항목 Albert(F0 229Hz, 쉰 목소리) 나 시스템이 유일하게 male 로 표기하는 Fred(포먼트 합성) 가 걸린다 — 학습용으로 못 씀 (2026-07-27 계측). 성인 남성 우선순위(Alex/Aaron/Tom/Reed/Eddy/Microsoft·Google 남성/Daniel) + 장난용 음성 블랙리스트로 선택하고 `rate 0.9` 로 재생.
 - 최초 조회는 생성 시간 수 초 — 스켈레톤 + "만들고 있어요" 안내
 - 실패 시: "불러오지 못했어요 — 다시 열어주세요" (재시도 = 재조회)
