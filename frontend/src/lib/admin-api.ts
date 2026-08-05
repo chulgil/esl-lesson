@@ -141,10 +141,13 @@ export const adminApi = {
   getContent: (id: number) =>
     request<ContentDetail>(`/api/admin/contents/${id}`),
 
-  /** CC(creativeCommon)·자막 보유 영상만 검색 — 등록 후보 (content-governance.md) */
-  ccSearch: (q: string) =>
-    request<{ items: CcSearchItem[] }>(
-      `/api/admin/youtube/cc-search?q=${encodeURIComponent(q)}`,
+  /** CC(creativeCommon)·자막 보유·영어 영상만 검색 — 등록 후보
+   *  (content-governance.md). pageToken 으로 다음 페이지 (2026-08-05) */
+  ccSearch: (q: string, pageToken?: string) =>
+    request<{ items: CcSearchItem[]; next_page_token: string | null }>(
+      `/api/admin/youtube/cc-search?q=${encodeURIComponent(q)}${
+        pageToken ? `&page_token=${encodeURIComponent(pageToken)}` : ""
+      }`,
     ),
 
   createContent: (body: {

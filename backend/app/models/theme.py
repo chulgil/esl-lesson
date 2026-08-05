@@ -1,6 +1,6 @@
 """테마 엔타이틀먼트 — 제한 테마 보유권 (docs/specs/theme-mall.md)."""
 
-from sqlalchemy import BigInteger, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, CreatedAtMixin, PkMixin
@@ -16,6 +16,9 @@ class ThemeSetting(Base):
 
     theme_key: Mapped[str] = mapped_column(String(32), primary_key=True)
     access: Mapped[str] = mapped_column(String(16))  # "free" | "restricted"
+    # XP 상점 가격 — NULL = 미판매. 업적 보상 규칙이 있는 테마는 가격 설정
+    # 자체를 거부한다 (이벤트/업적 전용 — 2026-08-05 사용자 결정)
+    price_xp: Mapped[int | None] = mapped_column(Integer)
 
 
 class ThemeRewardRule(Base, PkMixin, CreatedAtMixin):

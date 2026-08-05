@@ -234,8 +234,14 @@ export default function StudyHubPage() {
             무관하게 쌓여요
           </p>
           <CardCollection stats={stats} />
-          {/* 장기 기억 — FSRS stability 기반 "진짜 실력" 증명 (learning.md) */}
-          {stats.long_term && <LongTermMemoryCard data={stats.long_term} />}
+          {/* 장기 기억 — FSRS stability 기반 "진짜 실력" 증명 (learning.md).
+              앵커 분모 = 만난 카드(reps>0) 합 — 2026-08-05 재설계 */}
+          {stats.long_term && (
+            <LongTermMemoryCard
+              data={stats.long_term}
+              metCount={stats.levels.reduce((sum, lv) => sum + lv.cards, 0)}
+            />
+          )}
         </section>
       )}
 

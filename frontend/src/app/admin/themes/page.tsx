@@ -88,6 +88,28 @@ export default function AdminThemesPage() {
     }
   }
 
+  // XP 상점 가격 입력 — 빈 값 = 판매 중단 (업적 보상 규칙과 독립·동시 설정 가능)
+  async function handleSetPrice(t: AdminThemeItem) {
+    const label = THEME_LABELS[t.key] ?? t.key;
+    const input = prompt(
+      `${label} 테마의 XP 판매 가격 (비우면 판매 중단)`,
+      t.price_xp != null ? String(t.price_xp) : "",
+    );
+    if (input === null) return; // 취소
+    const price = input.trim() === "" ? null : Number(input.trim());
+    if (price !== null && (!Number.isInteger(price) || price < 1)) {
+      setError("가격은 1 이상의 정수여야 해요");
+      return;
+    }
+    setError(null);
+    try {
+      await themeApi.setPrice(t.key, price);
+      loadThemes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "가격 설정 실패");
+    }
+  }
+
   async function handleRevoke(grant: ThemeGrantItem) {
     if (!confirm(`${grant.email} 의 테마를 회수할까요?`)) return;
     setError(null);
@@ -115,6 +137,7 @@ export default function AdminThemesPage() {
               <th className="p-2">라벨</th>
               <th className="p-2 w-20">정책</th>
               <th className="p-2 w-24">전환</th>
+              <th className="p-2 w-28">XP 가격</th>
               <th className="p-2 w-24">보유자 수</th>
             </tr>
           </thead>
@@ -155,6 +178,23 @@ export default function AdminThemesPage() {
                       >
                         {restricted ? "무료로" : "제한으로"}
                       </button>
+                    )}
+                  </td>
+                  <td className="p-2">
+                    {/* XP 상점 — 제한 테마만 판매 가능, 빈 값 = 미판매 */}
+                    {restricted ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSetPrice(t);
+                        }}
+                        className="rounded border-2 border-ink/20 px-2 py-0.5 text-xs font-bold hover:border-ink/50"
+                      >
+                        {t.price_xp != null ? `${t.price_xp} XP` : "미판매"}
+                      </button>
+                    ) : (
+                      <span className="text-xs opacity-40">-</span>
                     )}
                   </td>
                   {/* 무료 테마는 grant 개념이 없다 — 전원 사용 가능 */}

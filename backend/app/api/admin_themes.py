@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,9 +49,15 @@ async def theme_stats(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
         ).all()
     )
     access_map = await effective_theme_access(db)
+    prices = dict((await db.execute(select(ThemeSetting.theme_key, ThemeSetting.price_xp))).all())
     return {
         "items": [
-            {"key": key, "access": access, "grants": counts.get(key, 0)}
+            {
+                "key": key,
+                "access": access,
+                "grants": counts.get(key, 0),
+                "price_xp": prices.get(key),
+            }
             for key, access in access_map.items()
         ]
     }
@@ -80,6 +86,35 @@ async def set_theme_access(
         setting.access = body.access
     await db.commit()
     return {"key": theme_key, "access": body.access}
+
+
+class PricePatch(BaseModel):
+    # null = 판매 중단 (XP 상점에서 내려감)
+    price_xp: int | None = Field(default=None, ge=1, le=1_000_000)
+
+
+@router.patch("/{theme_key}/price")
+async def set_theme_price(
+    theme_key: str, body: PricePatch, db: Annotated[AsyncSession, Depends(get_db)]
+) -> dict:
+    """XP 상점 가격 설정 (theme-mall.md XP 상점) — restricted 테마만.
+
+    업적 보상 규칙과 독립 — 같은 테마를 업적으로도 얻고 XP 로도 살 수 있다
+    (2026-08-05 사용자 결정). 보상 전용으로 두려면 가격을 비워두면 된다.
+    """
+    await restricted_or_raise(db, theme_key)
+    setting = await db.get(ThemeSetting, theme_key)
+    if setting is None:
+        # 행 없음 = 카탈로그 기본값 사용 중 — 기본 access 를 그대로 물려받아 생성
+        db.add(
+            ThemeSetting(
+                theme_key=theme_key, access=THEME_ACCESS[theme_key], price_xp=body.price_xp
+            )
+        )
+    else:
+        setting.price_xp = body.price_xp
+    await db.commit()
+    return {"key": theme_key, "price_xp": body.price_xp}
 
 
 class RewardRuleCreate(BaseModel):

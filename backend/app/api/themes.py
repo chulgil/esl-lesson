@@ -1,14 +1,16 @@
-"""사용자 테마 카탈로그 API (docs/specs/theme-mall.md)."""
+"""사용자 테마 카탈로그 + XP 상점 API (docs/specs/theme-mall.md)."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.models import ThemeRewardRule, User
+from app.models import ThemeGrant, ThemeRewardRule, ThemeSetting, User, XpSpend
+from app.services import progress
 from app.services.achievements import DEFINITIONS
 from app.services.theme_rewards import sync_theme_rewards
 from app.services.themes import allowed_theme_keys, effective_theme_access
@@ -35,7 +37,12 @@ async def list_themes(
     rules = (await db.execute(select(ThemeRewardRule))).scalars().all()
     unlock_by_theme = {r.theme_key: r.achievement_key for r in rules}
 
+    # XP 상점 — restricted 테마의 가격 (보상 규칙과 독립, theme-mall.md)
+    prices = dict((await db.execute(select(ThemeSetting.theme_key, ThemeSetting.price_xp))).all())
+    available = await progress.available_xp(db, user.id)
+
     return {
+        "available_xp": available,
         "items": [
             {
                 "key": key,
@@ -45,7 +52,56 @@ async def list_themes(
                 if key in unlock_by_theme
                 else None,
                 "unlock_key": unlock_by_theme.get(key),
+                # 업적 보상과 XP 판매는 독립 — 동시 설정 가능 (2026-08-05 결정)
+                "price_xp": prices.get(key) if access == "restricted" else None,
             }
             for key, access in access_map.items()
-        ]
+        ],
     }
+
+
+@router.post("/{theme_key}/purchase")
+async def purchase_theme(
+    theme_key: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """XP 로 테마 구매 — 가용 XP(누적-소비)에서 차감, 레벨은 불변.
+
+    업적 보상 규칙과 XP 판매는 독립 설정 — 동시 사용 가능 (2026-08-05 결정:
+    업적으로도 얻고 XP 로도 살 수 있다). 가격은 백오피스가
+    theme_settings.price_xp 로 설정하며 NULL 은 미판매다. 기간 한정
+    이벤트 판매는 후속(theme-mall.md XP 상점 P2).
+    """
+    access = (await effective_theme_access(db)).get(theme_key)
+    if access is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "theme_not_found")
+    if access != "restricted":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "theme_not_restricted")
+    setting = await db.get(ThemeSetting, theme_key)
+    price = setting.price_xp if setting else None
+    if price is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "theme_not_for_sale")
+
+    owned = (
+        await db.execute(
+            select(ThemeGrant.id).where(
+                ThemeGrant.user_id == user.id, ThemeGrant.theme_key == theme_key
+            )
+        )
+    ).first()
+    if owned:
+        raise HTTPException(status.HTTP_409_CONFLICT, "already_owned")
+
+    available = await progress.available_xp(db, user.id)
+    if available < price:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
+
+    db.add(XpSpend(user_id=user.id, amount=price, reason=f"theme:{theme_key}"))
+    db.add(ThemeGrant(user_id=user.id, theme_key=theme_key, note="XP 구매", granted_by=None))
+    try:
+        await db.commit()
+    except IntegrityError as exc:  # 동시 구매 경합 (uq_theme_grants_user_theme)
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "already_owned") from exc
+    return {"key": theme_key, "allowed": True, "available_xp": available - price}

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import LearningItem, ReviewCard, ReviewLog
+from app.models import LearningItem, ReviewCard, ReviewLog, XpSpend
 from app.services.fsrs_service import LONG_TERM_STABILITY_DAYS
 from app.services.visibility import visible_item_clause
 
@@ -116,3 +116,111 @@ async def long_term_stats(db: AsyncSession, user_id: int, now: datetime) -> dict
             }
         )
     return {"count": count, "weekly": weekly}
+
+
+# ---------- XP (적립 실시간 집계 + 소비 원장) ----------
+
+
+async def total_xp(db: AsyncSession, user_id: int) -> int:
+    """누적 XP — 복습 10 + 게임 참여 20 + 테트리스 승리 30 + 시험 20+점수/10
+    + 미션 보너스. 적립 테이블 없이 로그 실시간 집계 (소급 반영 원칙).
+    api/study.py stats 에서 이관 (2026-08-05 — XP 상점이 재사용).
+    """
+    from sqlalchemy import or_
+
+    from app.models import (
+        DictationRace,
+        ExamAttempt,
+        GameMatch,
+        QuizRoyaleMatch,
+        QuizRoyalePlayer,
+        ScrambleRace,
+        TypingRace,
+    )
+    from app.services import retention
+
+    total_reviews = (
+        await db.execute(select(func.count(ReviewLog.id)).where(ReviewLog.user_id == user_id))
+    ).scalar_one()
+    tetris_played = (
+        await db.execute(
+            select(func.count(GameMatch.id)).where(
+                or_(GameMatch.player1_id == user_id, GameMatch.player2_id == user_id),
+                GameMatch.status == "finished",
+            )
+        )
+    ).scalar_one()
+    tetris_wins = (
+        await db.execute(
+            select(func.count(GameMatch.id)).where(
+                GameMatch.winner_id == user_id, GameMatch.status == "finished"
+            )
+        )
+    ).scalar_one()
+    typing_played = (
+        await db.execute(
+            select(func.count(TypingRace.id)).where(
+                or_(TypingRace.player1_id == user_id, TypingRace.player2_id == user_id),
+                TypingRace.status == "finished",
+            )
+        )
+    ).scalar_one()
+    quiz_played = (
+        await db.execute(
+            select(func.count(QuizRoyalePlayer.id))
+            .join(QuizRoyaleMatch, QuizRoyaleMatch.id == QuizRoyalePlayer.match_id)
+            .where(
+                QuizRoyalePlayer.user_id == user_id,
+                QuizRoyaleMatch.status == "finished",
+            )
+        )
+    ).scalar_one()
+    scramble_played = (
+        await db.execute(
+            select(func.count(ScrambleRace.id)).where(
+                or_(ScrambleRace.player1_id == user_id, ScrambleRace.player2_id == user_id),
+                ScrambleRace.status == "finished",
+            )
+        )
+    ).scalar_one()
+    dictation_played = (
+        await db.execute(
+            select(func.count(DictationRace.id)).where(
+                or_(DictationRace.player1_id == user_id, DictationRace.player2_id == user_id),
+                DictationRace.status == "finished",
+            )
+        )
+    ).scalar_one()
+    # 시험 XP — 제출 20 + 점수 10점당 1 (api/exams.py exam_xp 와 동일 산식).
+    # 건별 floor(score/10) 합 — 합계에 //10 하면 건별 산식과 어긋난다 (25+15: 3 vs 4)
+    exam_submits, exam_score_bonus = (
+        await db.execute(
+            select(
+                func.count(ExamAttempt.id),
+                func.coalesce(func.sum(func.floor(ExamAttempt.score / 10.0)), 0),
+            ).where(ExamAttempt.user_id == user_id, ExamAttempt.submitted_at.is_not(None))
+        )
+    ).one()
+
+    return (
+        total_reviews * 10
+        + (tetris_played + typing_played + quiz_played + scramble_played + dictation_played) * 20
+        + tetris_wins * 30
+        + int(exam_submits) * 20
+        + int(exam_score_bonus)
+        + await retention.quest_bonus_xp(db, user_id)
+    )
+
+
+async def spent_xp(db: AsyncSession, user_id: int) -> int:
+    """소비 XP 합 — xp_spends 원장 (테마 구매 등)."""
+    return (
+        await db.execute(
+            select(func.coalesce(func.sum(XpSpend.amount), 0)).where(XpSpend.user_id == user_id)
+        )
+    ).scalar_one()
+
+
+async def available_xp(db: AsyncSession, user_id: int) -> int:
+    """가용 XP = 누적 - 소비. 레벨은 누적 XP 기준 불변 — 구매해도 레벨은 안 내려간다."""
+    return await total_xp(db, user_id) - await spent_xp(db, user_id)

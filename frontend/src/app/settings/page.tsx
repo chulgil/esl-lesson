@@ -43,6 +43,11 @@ function ThemeSection() {
     Record<string, { current: number; target: number }>
   >({});
   const [reverted, setReverted] = useState(false);
+  // XP 상점 — 잠긴 테마의 가격 + 내 가용 XP (theme-mall.md XP 상점)
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  const [availableXp, setAvailableXp] = useState<number | null>(null);
+  const [buying, setBuying] = useState<string | null>(null);
+  const [buyError, setBuyError] = useState<string | null>(null);
 
   useEffect(() => {
     themeApi
@@ -58,6 +63,14 @@ function ThemeSection() {
               .map((i) => [i.key, { title: i.unlock!, key: i.unlock_key! }]),
           ),
         );
+        setPrices(
+          Object.fromEntries(
+            res.items
+              .filter((i) => i.price_xp != null)
+              .map((i) => [i.key, i.price_xp!]),
+          ),
+        );
+        setAvailableXp(res.available_xp);
       })
       .catch(() => {});
     // 해금 업적 진행률 — "얼마나 남았는지" 가 보여야 행동으로 이어진다
@@ -84,15 +97,46 @@ function ThemeSection() {
     }
   }, [allowed, theme]);
 
+  // XP 구매 — 성공 시 즉시 해금 + 그 테마로 전환 (구매의 보상을 바로 체감)
+  async function buyTheme(key: string) {
+    if (buying) return;
+    setBuying(key);
+    setBuyError(null);
+    try {
+      const res = await themeApi.purchase(key);
+      setAllowed((prev) => new Set([...(prev ?? new Set()), key]));
+      setAvailableXp(res.available_xp);
+      setAppTheme(key as Parameters<typeof setAppTheme>[0]);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "구매 실패";
+      setBuyError(
+        {
+          insufficient_xp: "XP가 부족해요 — 복습·게임으로 더 모을 수 있어요",
+          already_owned: "이미 보유한 테마예요",
+          theme_not_for_sale: "지금은 판매하지 않는 테마예요",
+        }[message] ?? message,
+      );
+    }
+    setBuying(null);
+  }
+
   return (
     <section className="mt-10 max-w-lg">
       <p className="mb-1 text-sm font-bold">테마</p>
       <p className="mb-3 text-xs opacity-60">
         앱 전체(배경·버튼·게임 보드)의 디자인 컨셉이 함께 바뀝니다.
         <span className="block">
-          새 테마는 업적을 달성하거나 이벤트로 받으면 열려요.
+          새 테마는 업적 달성·이벤트, 또는 XP 로 열 수 있어요.
+          {availableXp !== null && (
+            <span className="ml-1 rounded bg-brick-blue/10 px-1.5 py-0.5 font-bold text-brick-blue">
+              보유 {availableXp} XP
+            </span>
+          )}
         </span>
       </p>
+      {buyError && (
+        <p className="mb-3 text-xs font-bold text-brick-red">{buyError}</p>
+      )}
       {reverted && (
         <p className="mb-3 text-xs font-bold text-brick-red">
           사용 권한이 없는 테마라 기본으로 되돌렸어요
@@ -133,12 +177,46 @@ function ThemeSection() {
                 <span className="block text-xs opacity-60">{t.desc}</span>
               </span>
               {locked ? (
-                <span className="flex flex-col items-end gap-0.5">
-                  <span className="rounded-full bg-ink/10 px-3 py-1 text-xs font-bold opacity-70">
-                    {unlocks[t.key]
-                      ? `'${unlocks[t.key].title}' 달성 시 열려요`
-                      : "이벤트·구매로 열려요"}
-                  </span>
+                <span className="flex flex-col items-end gap-1">
+                  {unlocks[t.key] ? (
+                    <span className="rounded-full bg-ink/10 px-3 py-1 text-xs font-bold opacity-70">
+                      {`'${unlocks[t.key].title}' 달성 시 열려요`}
+                    </span>
+                  ) : (
+                    prices[t.key] == null && (
+                      <span className="rounded-full bg-ink/10 px-3 py-1 text-xs font-bold opacity-70">
+                        이벤트·지급으로 열려요
+                      </span>
+                    )
+                  )}
+                  {/* XP 구매 — 업적 해금과 동시 제공 가능 (theme-mall.md).
+                      중첩 button 금지라 span[role=button] + 전파 차단 */}
+                  {prices[t.key] != null && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        buyTheme(t.key);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          buyTheme(t.key);
+                        }
+                      }}
+                      className={`cursor-pointer rounded-full border-2 px-3 py-1 text-xs font-bold transition ${
+                        availableXp !== null && availableXp >= prices[t.key]
+                          ? "border-brick-blue bg-brick-blue/10 text-brick-blue hover:-translate-y-0.5"
+                          : "border-ink/15 opacity-50"
+                      }`}
+                    >
+                      {buying === t.key
+                        ? "구매 중..."
+                        : `${prices[t.key]} XP로 열기`}
+                    </span>
+                  )}
                   {/* 진행률 — 얼마나 남았는지 보여야 "해볼까" 로 이어진다 */}
                   {unlocks[t.key] && progress[unlocks[t.key].key] && (
                     <span className="text-[10px] opacity-50">

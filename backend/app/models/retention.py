@@ -42,3 +42,20 @@ class QuestCompletion(Base, PkMixin, CreatedAtMixin):
     day: Mapped[date_type] = mapped_column(Date)
     quest_key: Mapped[str] = mapped_column(Text)
     xp: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class XpSpend(Base, PkMixin, CreatedAtMixin):
+    """XP 소비 원장 — 테마 구매 등 상점 지출 (docs/specs/theme-mall.md XP 상점).
+
+    적립은 로그 실시간 집계 원칙 그대로 두고(레벨은 누적 XP 기준 불변),
+    소비만 원장에 남긴다 — 가용 XP = 누적 XP - 소비 합.
+    """
+
+    __tablename__ = "xp_spends"
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    amount: Mapped[int] = mapped_column(Integer)
+    # 지출 사유 — "theme:ocean" 형식 (감사·중복 방지 조회용)
+    reason: Mapped[str] = mapped_column(Text)

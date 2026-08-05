@@ -39,6 +39,8 @@ export default function NewContentPage() {
   const [ccItems, setCcItems] = useState<CcSearchItem[] | null>(null);
   const [ccSearching, setCcSearching] = useState(false);
   const [ccError, setCcError] = useState<string | null>(null);
+  // 다음 페이지 토큰 — null 이면 더 없음 (2026-08-05 페이징)
+  const [ccNextToken, setCcNextToken] = useState<string | null>(null);
   const [permission, setPermission] =
     useState<ContentPermission>(EMPTY_PERMISSION);
 
@@ -86,13 +88,19 @@ export default function NewContentPage() {
     }
   }
 
-  async function searchCc() {
+  async function searchCc(more = false) {
     if (!ccQuery.trim()) return;
     setCcSearching(true);
     setCcError(null);
     try {
-      const res = await adminApi.ccSearch(ccQuery.trim());
-      setCcItems(res.items);
+      const res = await adminApi.ccSearch(
+        ccQuery.trim(),
+        more ? (ccNextToken ?? undefined) : undefined,
+      );
+      setCcItems((prev) =>
+        more && prev ? [...prev, ...res.items] : res.items,
+      );
+      setCcNextToken(res.next_page_token ?? null);
     } catch (e) {
       const message = e instanceof Error ? e.message : "검색 실패";
       setCcError(
@@ -172,7 +180,8 @@ export default function NewContentPage() {
                 />
                 <button
                   type="button"
-                  onClick={searchCc}
+                  // 클릭 이벤트가 more 인자로 들어가지 않게 명시 호출
+                  onClick={() => searchCc()}
                   disabled={ccSearching || !ccQuery.trim()}
                   className="shrink-0 rounded-md border-2 border-brick-green bg-white px-3 text-sm font-bold text-brick-green disabled:opacity-40"
                 >
@@ -231,6 +240,17 @@ export default function NewContentPage() {
                     );
                   })}
                 </ul>
+              )}
+              {/* 페이징 — 결과가 적다는 보고(2026-08-05)로 50개+더 보기 도입 */}
+              {ccItems && ccItems.length > 0 && ccNextToken && (
+                <button
+                  type="button"
+                  onClick={() => searchCc(true)}
+                  disabled={ccSearching}
+                  className="mt-2 w-full rounded-md border-2 border-ink/20 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"
+                >
+                  {ccSearching ? "불러오는 중..." : "결과 더 보기"}
+                </button>
               )}
             </div>
           </>

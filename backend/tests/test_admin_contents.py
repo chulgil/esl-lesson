@@ -208,34 +208,54 @@ async def test_approve_all_skips_hintless_sentences(admin_client, db_session):
     assert res.json() == {"approved": 1, "skipped": 1}
 
 
-async def test_cc_search_returns_mapped_items(admin_client, monkeypatch):
-    """CC 검색 — Data API 응답을 등록 후보 형태로 매핑."""
+async def test_cc_search_returns_mapped_items_with_paging(admin_client, monkeypatch):
+    """CC 검색 — Data API 응답 매핑 + page_token 전달 + next_page_token 반환."""
     from app.api import admin_contents
 
-    async def fake_search(query, max_results=12):
+    async def fake_search(query, page_token=None):
         assert query == "cooking"
-        return [
-            {
-                "video_id": "abc123def45",
-                "title": "CC Cooking",
-                "channel_title": "Chef",
-                "published_at": "2026-01-01T00:00:00Z",
-                "thumbnail_url": "https://i.ytimg.com/vi/abc123def45/mqdefault.jpg",
-            }
-        ]
+        assert page_token == "PT1"
+        return {
+            "items": [
+                {
+                    "video_id": "abc123def45",
+                    "title": "CC Cooking",
+                    "channel_title": "Chef",
+                    "published_at": "2026-01-01T00:00:00Z",
+                    "thumbnail_url": "https://i.ytimg.com/vi/abc123def45/mqdefault.jpg",
+                }
+            ],
+            "next_page_token": "PT2",
+        }
 
     monkeypatch.setattr(admin_contents.youtube, "search_cc_videos", fake_search)
-    res = await admin_client.get("/api/admin/youtube/cc-search", params={"q": "cooking"})
+    res = await admin_client.get(
+        "/api/admin/youtube/cc-search", params={"q": "cooking", "page_token": "PT1"}
+    )
     assert res.status_code == 200
-    items = res.json()["items"]
-    assert items[0]["video_id"] == "abc123def45"
-    assert items[0]["channel_title"] == "Chef"
+    data = res.json()
+    assert data["items"][0]["video_id"] == "abc123def45"
+    assert data["items"][0]["channel_title"] == "Chef"
+    assert data["next_page_token"] == "PT2"
+
+
+def test_cc_search_language_filter():
+    """언어 메타 판정 — 명시적 비영어만 제외, 미표기는 통과 (2026-08-05)."""
+    from app.services.youtube import is_language_ok
+
+    assert is_language_ok("en") is True
+    assert is_language_ok("en-US") is True
+    assert is_language_ok("EN-GB") is True
+    assert is_language_ok(None) is True  # 미표기 — 메타 없는 영어 영상이 많다
+    assert is_language_ok("") is True
+    assert is_language_ok("ko") is False
+    assert is_language_ok("ja") is False
 
 
 async def test_cc_search_without_api_key_returns_503(admin_client, monkeypatch):
     from app.api import admin_contents
 
-    async def no_key(query, max_results=12):
+    async def no_key(query, page_token=None):
         return None
 
     monkeypatch.setattr(admin_contents.youtube, "search_cc_videos", no_key)

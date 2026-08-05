@@ -11,6 +11,8 @@ export interface ThemeCatalogItem {
   unlock: string | null;
   /** 해금 업적 키 — 업적 진행률(current/target)과 조인용 */
   unlock_key: string | null;
+  /** XP 상점 가격 — null 은 미판매 (보상 테마는 항상 null, theme-mall.md) */
+  price_xp: number | null;
 }
 
 /** 업적→테마 보상 규칙 (백오피스 관리) */
@@ -27,6 +29,8 @@ export interface AdminThemeItem {
   access: ThemeAccess;
   /** 보유자 수 (grant 행 수) */
   grants: number;
+  /** XP 상점 가격 — null 은 미판매 */
+  price_xp: number | null;
 }
 
 export interface ThemeGrantItem {
@@ -52,7 +56,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const themeApi = {
-  themes: () => request<{ items: ThemeCatalogItem[] }>("/api/themes"),
+  themes: () =>
+    request<{ items: ThemeCatalogItem[]; available_xp: number }>("/api/themes"),
+
+  /** XP 로 테마 구매 — 가용 XP 차감, 레벨(누적 XP)은 불변 (theme-mall.md XP 상점) */
+  purchase: (key: string) =>
+    request<{ key: string; allowed: boolean; available_xp: number }>(
+      `/api/themes/${key}/purchase`,
+      { method: "POST" },
+    ),
+
+  /** 백오피스 — XP 상점 가격 설정 (null = 판매 중단) */
+  setPrice: (key: string, priceXp: number | null) =>
+    request<{ key: string; price_xp: number | null }>(
+      `/api/admin/themes/${key}/price`,
+      { method: "PATCH", body: JSON.stringify({ price_xp: priceXp }) },
+    ),
 
   adminThemes: () => request<{ items: AdminThemeItem[] }>("/api/admin/themes"),
 

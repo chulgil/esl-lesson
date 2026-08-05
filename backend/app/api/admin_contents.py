@@ -36,18 +36,20 @@ router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(requir
 @router.get("/youtube/cc-search")
 async def cc_search(
     q: Annotated[str, Query(min_length=1, max_length=100)],
+    page_token: Annotated[str | None, Query(max_length=300)] = None,
 ) -> dict:
-    """CC(creativeCommon)·자막 보유 영상만 검색 — 등록 후보 제시.
+    """CC(creativeCommon)·자막 보유·영어 영상만 검색 — 등록 후보 제시.
 
-    검색 필터는 후보용이고, 등록(POST /contents) 시 fetch_license 가
-    라이선스를 서버에서 재확인한다 (허위/변경 대비 이중 게이트)."""
+    page_token 으로 다음 페이지 (2026-08-05 페이징). 검색 필터는 후보용이고,
+    등록(POST /contents) 시 fetch_license 가 라이선스를 서버에서 재확인한다
+    (허위/변경 대비 이중 게이트)."""
     try:
-        items = await youtube.search_cc_videos(q)
+        result = await youtube.search_cc_videos(q, page_token=page_token)
     except Exception as exc:  # noqa: BLE001 — 쿼터 초과 등 구글 API 오류
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "youtube_search_failed") from exc
-    if items is None:
+    if result is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "youtube_api_key_missing")
-    return {"items": items}
+    return result
 
 
 async def get_public_content(db: AsyncSession, content_id: int) -> Content:

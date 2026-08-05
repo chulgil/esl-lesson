@@ -76,40 +76,81 @@ async def fetch_license(video_id: str) -> str | None:
 DATA_API_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
 
 
-async def search_cc_videos(query: str, max_results: int = 12) -> list[dict] | None:
-    """Data API 검색 — CC(creativeCommon) + 자막 보유 영상만.
+def is_language_ok(lang: str | None, language: str = "en") -> bool:
+    """언어 메타 판정 — 명시적 비대상 언어만 제외.
+
+    defaultAudioLanguage/defaultLanguage 는 업로더 설정이라 미표기가 흔하다 —
+    미표기(None/"")는 통과시키고, ko/ja 등 명시적 타언어만 거른다. 전부
+    엄격 차단하면 메타 없는 영어 영상까지 사라져 결과가 텅 빈다.
+    """
+    if not lang:
+        return True
+    return lang.lower().startswith(language)
+
+
+async def search_cc_videos(
+    query: str,
+    page_token: str | None = None,
+    max_results: int = 50,
+    language: str = "en",
+) -> dict | None:
+    """Data API 검색 — CC(creativeCommon) + 자막 보유 + 학습 언어(영어) 영상만.
 
     백오피스 "CC 영상 찾기"용 (docs/specs/content-governance.md). None = API 키
-    미설정. videoCaption=closedCaption 으로 자막 없는 영상을 사전에 거른다
-    (파이프라인이 자막 전제). 등록 시 fetch_license 가 라이선스를 재확인하므로
-    검색 필터는 후보 제시용이다. search.list 쿼터 100단위/호출 — 관리자 전용.
+    미설정. 반환: {"items": [...], "next_page_token": str|None}.
+
+    - videoCaption=closedCaption: 자막 없는 영상 사전 제거 (파이프라인이 자막 전제)
+    - relevanceLanguage 는 부스팅일 뿐 필터가 아니라 비영어가 섞였다 (2026-08-05
+      보고) → regionCode + videos.list snippet 언어 메타로 명시적 비영어 후처리 제거
+    - 결과가 적다·페이징이 없다 보고 → maxResults 50(API 최대) + pageToken 페이징
+    - 쿼터: search.list 100 + videos.list 1 per 호출 — 관리자 전용이라 허용.
+      등록 시 fetch_license 가 라이선스를 재확인하므로 검색 필터는 후보 제시용.
     """
     from app.core.config import get_settings
 
     api_key = get_settings().youtube_api_key
     if not api_key:
         return None
+    params = {
+        "part": "snippet",
+        "q": query,
+        "type": "video",
+        "videoLicense": "creativeCommon",
+        "videoCaption": "closedCaption",
+        "relevanceLanguage": language,
+        "regionCode": "US",
+        "maxResults": max_results,
+        "key": api_key,
+    }
+    if page_token:
+        params["pageToken"] = page_token
     async with httpx.AsyncClient(timeout=10) as client:
-        res = await client.get(
-            DATA_API_SEARCH_URL,
-            params={
-                "part": "snippet",
-                "q": query,
-                "type": "video",
-                "videoLicense": "creativeCommon",
-                "videoCaption": "closedCaption",
-                "relevanceLanguage": "en",
-                "maxResults": max_results,
-                "key": api_key,
-            },
-        )
+        res = await client.get(DATA_API_SEARCH_URL, params=params)
         res.raise_for_status()
-        items = res.json().get("items", [])
+        data = res.json()
+        items = data.get("items", [])
+
+        # 언어 메타 일괄 조회 — 명시적 비영어 제거 (videos.list 1 unit)
+        ids = [i.get("id", {}).get("videoId") for i in items]
+        ids = [v for v in ids if v]
+        lang_of: dict[str, str | None] = {}
+        if ids:
+            vres = await client.get(
+                DATA_API_VIDEOS_URL,
+                params={"part": "snippet", "id": ",".join(ids), "key": api_key},
+            )
+            vres.raise_for_status()
+            for v in vres.json().get("items", []):
+                sn = v.get("snippet", {})
+                lang_of[v.get("id", "")] = sn.get("defaultAudioLanguage") or sn.get(
+                    "defaultLanguage"
+                )
+
     results = []
     for item in items:
         video_id = item.get("id", {}).get("videoId")
         snippet = item.get("snippet", {})
-        if not video_id:
+        if not video_id or not is_language_ok(lang_of.get(video_id), language):
             continue
         results.append(
             {
@@ -120,7 +161,7 @@ async def search_cc_videos(query: str, max_results: int = 12) -> list[dict] | No
                 "thumbnail_url": (snippet.get("thumbnails", {}).get("medium") or {}).get("url", ""),
             }
         )
-    return results
+    return {"items": results, "next_page_token": data.get("nextPageToken")}
 
 
 @dataclass

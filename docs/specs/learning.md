@@ -52,9 +52,11 @@
 - 설정에서 난이도를 올리면 상위 항목이 추가된다. `levels_enabled = 1..study_level` 로 파생.
 - 문장(레벨4) 외 모든 유형은 선택/조립 — 초보자가 타이핑 부담 없이 매일 학습.
 
-## 힌트 타이머 (2026-07-11 추가)
+## 힌트 타이머 (2026-07-11 추가 · 2026-08-05 무활동 리셋 개정)
 
-무응답이 `hint_delay_seconds`(설정, 기본 10초, 0=끄기) 지나면 힌트가 켜진다. 켜진 뒤에는 **시간이 아니라 입력 진행에 따라 다음 한 단어만** 노출한다(2026-07-11 개정) — 선다: 정답 보기 강조 / 패턴: 지금까지 고른 다음 칩 하나 강조 / 영작: 맞게 친 단어 다음의 한 단어만 표시. 전체를 한꺼번에 보여주지 않아 순서를 익히게 한다.
+**무활동**이 `hint_delay_seconds`(설정, 기본 10초, 0=끄기) 지나면 힌트가 **한 단어만** 켜진다 — 선다: 정답 보기 강조 / 패턴: 지금까지 고른 다음 칩 하나 강조 / 영작: 맞게 친 단어 다음의 한 단어만 표시.
+
+활동(칩 넣기/빼기·타이핑)이 있으면 힌트가 꺼지고 타이머가 리셋된다 — 다음 한 단어도 다시 무활동 간격을 기다린다 (2026-08-05 보고: 이전엔 한 번 켜지면 래치로 남아 칩을 넣을 때마다 다음 힌트가 줄줄이 나왔고, 활동해도 타이머가 리셋되지 않았다). 전체를 한꺼번에 보여주지 않아 순서를 스스로 떠올리게 한다.
 
 ## 카드 생성/큐 정책
 
@@ -209,7 +211,7 @@
 | GET `/api/study/decks` | 덱(담은 콘텐츠)별 due/new 카운트 — study-decks.md |
 | GET `/api/study/network` | 어휘망 그래프 (임베딩 유사도) — word-insight.md |
 | GET `/api/study/items/{id}/insight` | 단어 인사이트 카드 (가시성 게이트) — word-insight.md |
-| GET `/api/study/achievements` / `/quests` / `/leaderboard` | 업적·퀘스트·학습 리더보드 (리텐션 팩 — proposal/retention-plan.md, `services/achievements.py`, `services/retention.py`). 업적은 33종 티어 스티커(2026-07-30, 오늘의 목표 가볍게10/기본20/열심히50 = 하루 최대 복습 수 지표 포함): 패밀리 4그룹(study/streak/game/social) x 난이도 티어(beginner/intermediate/advanced/master = 초급/중급/고급/마스터, 단발은 null). 같은 지표(복습·단어·스트릭·승리·참여·타자·친구)가 티어 여러 개를 먹인다 — 적립 테이블 없이 로그 실시간 집계(소급 반영) 원칙 유지 |
+| GET `/api/study/achievements` / `/quests` / `/leaderboard` | 업적·퀘스트·학습 리더보드 (리텐션 팩 — proposal/retention-plan.md, `services/achievements.py`, `services/retention.py`). 업적은 33종 티어 스티커(2026-07-30, 하루 최대 복습 수 티어 10/20/50 포함 — 목표 프리셋은 2026-08-05 상향(15/30/50), 업적 티어는 구 기준 유지(소급 롤백 방지)): 패밀리 4그룹(study/streak/game/social) x 난이도 티어(beginner/intermediate/advanced/master = 초급/중급/고급/마스터, 단발은 null). 같은 지표(복습·단어·스트릭·승리·참여·타자·친구)가 티어 여러 개를 먹인다 — 적립 테이블 없이 로그 실시간 집계(소급 반영) 원칙 유지 |
 | POST `/api/cards` | 항목 원탭 카드 추가 (게임 ReviewPanel·어휘망에서 사용, 멱등) |
 | POST `/api/cards/{id}/suspend` | 카드 학습 제외/복귀 |
 | GET/PATCH `/api/settings` | 일일 한도, 목표 기억률, 레벨 토글, 힌트 지연, 리마인더 시각(`reminder_hour` — push-reminder.md) |
