@@ -1,7 +1,7 @@
 """XP 상점 — theme_settings.price_xp + xp_spends 소비 원장 (theme-mall.md XP 상점).
 
-Revision ID: e2f3a4b5c6d7
-Revises: d1e2f3a4b5c6
+Revision ID: dd44ee55ff66
+Revises: aa11bb22cc33
 Create Date: 2026-08-05
 """
 
@@ -9,8 +9,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "e2f3a4b5c6d7"
-down_revision = "d1e2f3a4b5c6"
+revision = "dd44ee55ff66"
+down_revision = "aa11bb22cc33"
 branch_labels = None
 depends_on = None
 

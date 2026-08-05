@@ -4,7 +4,7 @@
 바뀌었으므로 옛 값을 두면 설정 화면에서 어떤 프리셋도 선택되지 않은 상태가 된다.
 수동 커스텀 값(그 외)은 건드리지 않는다. 업적 티어(10/20/50)는 별도 유지.
 
-Revision ID: d1e2f3a4b5c6
+
 Revises: c0d1e2f3a4b5
 Create Date: 2026-08-05
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "d1e2f3a4b5c6"
+revision = "aa11bb22cc33"
 down_revision = "c0d1e2f3a4b5"
 branch_labels = None
 depends_on = None
