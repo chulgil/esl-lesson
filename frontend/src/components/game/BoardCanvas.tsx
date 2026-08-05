@@ -7,7 +7,7 @@ const ROWS = 12;
 
 /** 보드 배경 테마 — 전역 앱 테마(설정 > 테마)를 따른다 */
 export type BoardTheme =
-  "candy" | "note" | "lego" | "cat" | "school" | "academy";
+  "candy" | "note" | "lego" | "cat" | "school" | "academy" | "ocean";
 
 const THEME_BORDER: Record<BoardTheme, string> = {
   candy: "border-[#F0C4E0]",
@@ -16,6 +16,7 @@ const THEME_BORDER: Record<BoardTheme, string> = {
   cat: "border-[#EFD4AF]",
   school: "border-[#8A6A48]", // 칠판 나무 프레임
   academy: "border-[#C7B892]", // 갱지 문제지 가장자리
+  ocean: "border-[#8FD4E8]", // 물빛 수영장 타일 프레임
 };
 
 /** 테마별 낙하물 팔레트 — 몸통 색 순환 + 텍스트/가비지/아이템 (2026-07-31
@@ -68,6 +69,13 @@ const PALETTES: Record<BoardTheme, BoardPalette> = {
     text: "#B23A2B",
     garbage: "#CFC6AC",
     garbageText: "#6B6353",
+  },
+  // 여름 바다: 수영 튜브 파스텔 — 물빛·햇살·산호 (텍스트는 딥씨 네이비)
+  ocean: {
+    colors: ["#7ED6E8", "#FFD98A", "#FF9E85", "#8FE3C8", "#B9D9FF"],
+    text: "#0F4C5C",
+    garbage: "#9FB6BE", // 물이끼 낀 부표
+    garbageText: "#41565E",
   },
 };
 
@@ -376,6 +384,34 @@ function drawBackground(
     ctx.moveTo(cell * 1.5, 0);
     ctx.lineTo(cell * 1.5, height);
     ctx.stroke();
+    return;
+  }
+  if (theme === "ocean") {
+    // 시원한 바다 — 수면에서 깊어지는 물빛 + 파도 비늘 + 하단 모래바닥
+    const sea = ctx.createLinearGradient(0, 0, 0, height);
+    sea.addColorStop(0, "#DDF5FA");
+    sea.addColorStop(0.65, "#A5E0EE");
+    sea.addColorStop(1, "#84CFE2");
+    ctx.fillStyle = sea;
+    ctx.fillRect(0, 0, width, height);
+    // 파도 비늘 — 줄마다 반칸 어긋난 반원 (세이가이하)
+    ctx.strokeStyle = "rgba(255,255,255,0.45)";
+    ctx.lineWidth = 2;
+    const waveW = 34;
+    for (let row = 0; row < 5; row++) {
+      const y = height * (0.14 + row * 0.18);
+      const offset = row % 2 === 0 ? 0 : waveW / 2;
+      for (let wx = -waveW; wx < width + waveW; wx += waveW) {
+        ctx.beginPath();
+        ctx.arc(wx + offset + waveW / 2, y, waveW / 2, Math.PI, 0, false);
+        ctx.stroke();
+      }
+    }
+    // 모래바닥 + 물거품 경계선
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.fillRect(0, height - 13, width, 3);
+    ctx.fillStyle = "#F4E2AC";
+    ctx.fillRect(0, height - 10, width, 10);
     return;
   }
   // candy: 파스텔 그라데이션 + 은은한 버블
@@ -730,6 +766,34 @@ function drawBrickBody(
     ctx.beginPath();
     ctx.arc(x + w - r - 4, y + r + 3, r, 0, Math.PI * 2);
     ctx.stroke();
+    return;
+  }
+  if (theme === "ocean") {
+    // 수영 튜브 조각 — 파스텔 몸통 + 흰 사선 스트라이프 + 물그림자 (여름 바다)
+    ctx.fillStyle = "rgba(15,76,92,0.16)";
+    roundRect(ctx, x + 2, y + 3, w, h, radius);
+    ctx.fill();
+    ctx.fillStyle = color;
+    roundRect(ctx, x, y, w, h, radius);
+    ctx.fill();
+    ctx.save();
+    roundRect(ctx, x, y, w, h, radius);
+    ctx.clip();
+    ctx.fillStyle = "rgba(255,255,255,0.38)";
+    const stripeW = Math.max(8, w * 0.1);
+    for (let sx = x - h; sx < x + w + h; sx += stripeW * 2.6) {
+      ctx.beginPath();
+      ctx.moveTo(sx, y + h);
+      ctx.lineTo(sx + stripeW, y + h);
+      ctx.lineTo(sx + stripeW + h * 0.5, y);
+      ctx.lineTo(sx + h * 0.5, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.fillStyle = "rgba(15,76,92,0.10)";
+    roundRect(ctx, x, y + h * 0.62, w, h * 0.38, radius);
+    ctx.fill();
     return;
   }
   // candy: 젤리 몸통 + 아랫면 그림자 + 글로시 하이라이트

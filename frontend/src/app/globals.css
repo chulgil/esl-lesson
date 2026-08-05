@@ -199,6 +199,62 @@ html[data-theme="academy"] .notebook-lines {
   background-size: 26px 26px;
 }
 
+/* 전역 테마: 여름 바다 — 한여름 시원한 파도 + 물거품 (2026-08-05 신설).
+   은유: 물빛 표면 + 파도 물결(세이가이하) 배경 + 산호 채점 포인트 +
+   유리병 편지(채팅). 파도/물 은유는 이 테마의 배타 소유. */
+html[data-theme="ocean"] {
+  --color-paper: #eefafd;
+  --color-paper-line: #c4e9f2;
+  --color-margin-red: #ff8f6b; /* 산호 마진선 */
+  --color-ink: #0f4c5c; /* 딥씨 잉크 */
+  --color-brick-red: #ff7a59; /* 산호 */
+  --color-brick-red-shadow: #d75f41;
+  --color-brick-yellow: #ffc94d; /* 햇살 */
+  --color-brick-yellow-shadow: #d6a437;
+  --color-brick-blue: #1f8fb5; /* 파도 */
+  --color-brick-blue-shadow: #176f8e;
+  --color-brick-green: #12a08e; /* 에메랄드 물빛 */
+  --color-brick-green-shadow: #0d7d6f;
+  --color-highlight: #b9ecf4; /* 물빛 형광펜 */
+  /* 햇살 노랑·파스텔 위 흰 글씨는 대비 미달 — 딥씨 잉크로 (candy/cat 선례) */
+  --color-brick-label: #06333f;
+  /* 물방울 몽글 모서리 */
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+}
+
+/* 여름 바다: 줄노트 대신 파도 비늘(세이가이하) — 어긋난 반원 두 겹 */
+html[data-theme="ocean"] .notebook-lines {
+  background-image:
+    radial-gradient(
+      circle at 50% 100%,
+      transparent 18px,
+      rgba(31, 143, 181, 0.11) 19px,
+      rgba(31, 143, 181, 0.11) 20px,
+      transparent 21px
+    ),
+    radial-gradient(
+      circle at 50% 100%,
+      transparent 18px,
+      rgba(31, 143, 181, 0.07) 19px,
+      rgba(31, 143, 181, 0.07) 20px,
+      transparent 21px
+    );
+  background-size:
+    48px 24px,
+    48px 24px;
+  background-position:
+    0 0,
+    24px 12px;
+}
+
+/* 여름 바다: 물속 소프트 그림자 — 시원한 파랑 번짐 */
+html[data-theme="ocean"] :is(.shadow-sm, .shadow-md) {
+  box-shadow: 0 6px 16px -6px
+    color-mix(in srgb, var(--color-brick-blue) 40%, transparent);
+}
+
 /* 전역 테마: 헤냥이 — 크림 고양이 톤, 몰랑몰랑 파스텔 */
 html[data-theme="cat"] {
   --color-paper: #fff6ea;

@@ -18,6 +18,7 @@ THEME_ACCESS: dict[str, str] = {
     "cat": "restricted",
     "school": "restricted",
     "academy": "restricted",
+    "ocean": "restricted",  # 여름 바다 (2026-08-05) — 시즌 지급/업적 보상용
 }
 
 # 잠금 해제 복귀(fallback) 테마 — 제한 전환 금지 (클라 가드가 여기로 복귀시킨다)

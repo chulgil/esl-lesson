@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 
 /** 전역 앱 테마 — 디자인 토큰(data-theme)과 게임 보드가 함께 따른다 */
 export type AppTheme =
-  "note" | "candy" | "lego" | "cat" | "excel" | "school" | "academy";
+  "note" | "candy" | "lego" | "cat" | "excel" | "school" | "academy" | "ocean";
 
 export const APP_THEMES: {
   key: AppTheme;
@@ -49,6 +49,12 @@ export const APP_THEMES: {
     desc: "갱지 모의고사 + 빨간 채점펜 — 문제 푸는 기분",
   },
   {
+    key: "ocean",
+    label: "여름 바다",
+    swatch: "#BDE9F2",
+    desc: "한여름 파도와 물거품 — 시원한 바닷가 기분",
+  },
+  {
     key: "excel",
     label: "오피스",
     swatch: "#E2EFDA",
@@ -67,7 +73,8 @@ function isTheme(v: unknown): v is AppTheme {
     v === "cat" ||
     v === "excel" ||
     v === "school" ||
-    v === "academy"
+    v === "academy" ||
+    v === "ocean"
   );
 }
 

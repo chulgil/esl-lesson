@@ -8,7 +8,8 @@ import { type AppTheme, useAppTheme } from "@/lib/theme";
  *
  *  컨셉 매핑: 노트=종이 시험지 / 캔디=파스텔 사탕판 / 레고=블록판 /
  *  헤냥이=크림 고양이 카드(발도장) / 오피스=문서 위장 /
- *  학교수업=칠판(분필·나무 프레임) / 학원=갱지 모의고사(빨간 채점펜).
+ *  학교수업=칠판(분필·나무 프레임) / 학원=갱지 모의고사(빨간 채점펜) /
+ *  여름바다=물거품 카드(파도 물결·산호 채점, 2026-08-05).
  *
  *  컨셉은 테마마다 배타적이다 — 한 물체는 한 테마만 쓴다. 헤냥이가 칠판을 쓰던
  *  것을 학교수업으로 돌려주고(2026-08-04), 학교수업이 겸하던 갱지는 학원 테마로
@@ -19,14 +20,15 @@ import { type AppTheme, useAppTheme } from "@/lib/theme";
 /** BoardCanvas 가 전용 스킨을 가진 테마 — excel 만 노트 보드로 폴백
  *  (오피스 위장 중 화려한 게임 보드 금지 결정 유지, docs/specs/chat.md) */
 export type BoardSkinTheme =
-  "note" | "candy" | "lego" | "cat" | "school" | "academy";
+  "note" | "candy" | "lego" | "cat" | "school" | "academy" | "ocean";
 
 export function boardThemeOf(theme: AppTheme): BoardSkinTheme {
   return theme === "candy" ||
     theme === "lego" ||
     theme === "cat" ||
     theme === "school" ||
-    theme === "academy"
+    theme === "academy" ||
+    theme === "ocean"
     ? theme
     : "note";
 }
@@ -44,6 +46,7 @@ export const CLOCK_OF: Record<AppTheme, ClockKind> = {
   note: "analog",
   school: "analog",
   academy: "analog",
+  ocean: "analog", // 해변 카페 벽시계 — 전용 장식은 P2 (물방울 초침 후보)
   candy: "analog-candy",
   cat: "analog-cat",
   lego: "digital",
@@ -60,6 +63,7 @@ export const CHAT_LABEL_OF: Record<AppTheme, string> = {
   excel: "공유 문서",
   school: "쪽지",
   academy: "질문지",
+  ocean: "유리병 편지",
 };
 
 /** 채팅 알림에 띄울 내용 없는 문구 (2026-08-04) — 발신자·본문을 싣지 않는다.
@@ -96,6 +100,8 @@ export const NAV_LABEL_OF: Record<AppTheme, Record<NavKey, string>> = {
     library: "문제집",
     game: "쉬는시간",
   },
+  // 여름 바다 — 배울 거리는 보물섬에서 건지고, 게임은 파도풀에서 논다
+  ocean: { home: "홈", study: "학습", library: "보물섬", game: "파도풀" },
 };
 
 // --- 표면(문항 카드) 스킨 — 시험지·학습 세션 공용 --------------------------------
@@ -349,6 +355,39 @@ export const SURFACE_SKINS: Record<AppTheme, SurfaceSkin> = {
     // 채점펜 — 갱지 위 초록/빨강 괘선 (오답은 빨간펜이 학원 시그니처)
     feedbackOk: "rounded-none border-2 border-brick-green/60 bg-[#fbf6e6]",
     feedbackBad: "rounded-none border-2 border-brick-red bg-[#fbf6e6]",
+    feedbackOkText: "text-brick-green",
+    feedbackBadText: "text-brick-red",
+  },
+  // 여름 바다 — 물거품 카드 (2026-08-05 신설). 시원한 물빛 표면 + 파도(wavy)
+  // 밑줄 표제 + 산호 채점 포인트. 물/파도 은유는 이 테마의 배타 소유.
+  ocean: {
+    radius: "rounded-2xl",
+    omrPanel: "rounded-2xl border-2 border-brick-blue/35 bg-[#f2fbfd]",
+    omrLabel: "물결 답안지",
+    omrCell:
+      "rounded-2xl border-2 border-dashed border-brick-blue/30 bg-white opacity-75 hover:opacity-100",
+    omrCellActive:
+      "rounded-2xl border-2 border-brick-red bg-brick-red/15 text-brick-red",
+    omrCellMarked:
+      "rounded-2xl border-2 border-brick-blue bg-brick-blue text-white",
+    section: "rounded-2xl border-2 border-brick-blue/35 bg-[#f2fbfd]",
+    // 물결 표제 — 물빛 밴드 + 파도 밑줄 (캔디의 빨강 물결과 색·모양 구분)
+    band: "rounded-2xl bg-highlight/60 px-4 py-2 text-center",
+    bandTitle:
+      "font-hand text-lg leading-tight font-bold underline decoration-brick-blue/60 decoration-wavy underline-offset-4",
+    bandMeta: "mt-0.5 text-[10px] tracking-widest opacity-60",
+    divider: "mb-3 border-b-2 border-dotted border-brick-blue/25",
+    number: "text-xs font-bold text-brick-blue/80",
+    prompt: "text-lg font-medium",
+    promptSub: "mt-1 text-sm opacity-60",
+    choice:
+      "rounded-2xl border-brick-blue/30 bg-white hover:border-brick-blue/70",
+    choiceSelected: "rounded-2xl border-brick-blue bg-brick-blue/10 font-bold",
+    mark: "rounded-2xl border-brick-blue/40",
+    markSelected: "rounded-2xl border-brick-blue bg-brick-blue text-white",
+    // 채점 — 정답은 에메랄드 물빛, 오답은 산호
+    feedbackOk: "rounded-2xl border-2 border-brick-green/60 bg-brick-green/10",
+    feedbackBad: "rounded-2xl border-2 border-brick-red/60 bg-brick-red/10",
     feedbackOkText: "text-brick-green",
     feedbackBadText: "text-brick-red",
   },
