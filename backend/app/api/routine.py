@@ -8,14 +8,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.my_contents import get_subscribed_content
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.models import ContentRoutineProgress, ContentSummary, User
+from app.models import ContentRoutineProgress, ContentSummary, ListenCheck, User
 from app.models.routine import ROUTINE_STEP_COUNT
 from app.services import routine as routine_service
 
@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/contents", tags=["routine"])
 
 SUMMARY_STEP = ROUTINE_STEP_COUNT  # 마지막 단계 = 한 문장 요약
+LISTEN_STAGE_BEFORE = 1  # 1단계 첫 청취 시점
+LISTEN_STAGE_AFTER = 2  # 6단계 루틴 마무리 시점
 
 
 async def _done_steps(db: AsyncSession, user_id: int, content_id: int) -> set[int]:
@@ -53,13 +55,30 @@ async def _latest_summary(db: AsyncSession, user_id: int, content_id: int) -> di
     return {"text": row.text, "feedback": row.feedback, "created_at": row.created_at}
 
 
-def _routine_payload(done: set[int], summary: dict | None) -> dict:
+async def _listen_scores(db: AsyncSession, user_id: int, content_id: int) -> dict:
+    """재청취 이해도 전후 점수 — 미기록 stage 는 None."""
+    rows = (
+        await db.execute(
+            select(ListenCheck.stage, ListenCheck.score).where(
+                ListenCheck.user_id == user_id, ListenCheck.content_id == content_id
+            )
+        )
+    ).all()
+    by_stage = {stage: score for stage, score in rows}
+    return {
+        "before": by_stage.get(LISTEN_STAGE_BEFORE),
+        "after": by_stage.get(LISTEN_STAGE_AFTER),
+    }
+
+
+def _routine_payload(done: set[int], summary: dict | None, listen: dict) -> dict:
     return {
         "steps": [
             {"step": step, "done": step in done} for step in range(1, ROUTINE_STEP_COUNT + 1)
         ],
         "completed": len(done) == ROUTINE_STEP_COUNT,
         "summary": summary,
+        "listen": listen,
     }
 
 
@@ -72,7 +91,8 @@ async def get_routine(
     content = await get_subscribed_content(db, content_id, user)
     done = await _done_steps(db, user.id, content.id)
     summary = await _latest_summary(db, user.id, content.id)
-    return _routine_payload(done, summary)
+    listen = await _listen_scores(db, user.id, content.id)
+    return _routine_payload(done, summary, listen)
 
 
 class StepBody(BaseModel):
@@ -143,3 +163,36 @@ async def submit_summary(
         db.add(ContentSummary(user_id=uid, content_id=cid, text=body.text, feedback=feedback))
         await db.commit()
     return {"feedback": feedback}
+
+
+class ListenCheckBody(BaseModel):
+    stage: int = Field(ge=LISTEN_STAGE_BEFORE, le=LISTEN_STAGE_AFTER)
+    score: int = Field(ge=1, le=5)
+
+
+@router.post("/{content_id}/listen-check")
+async def submit_listen_check(
+    content_id: int,
+    body: ListenCheckBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """재청취 이해도 기록 — 같은 stage 재제출은 점수 갱신 (upsert)."""
+    content = await get_subscribed_content(db, content_id, user)
+    uid, cid = user.id, content.id  # rollback 대비 값 캡처
+    db.add(ListenCheck(user_id=uid, content_id=cid, stage=body.stage, score=body.score))
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()  # 이미 기록된 stage — 점수만 갱신
+        await db.execute(
+            update(ListenCheck)
+            .where(
+                ListenCheck.user_id == uid,
+                ListenCheck.content_id == cid,
+                ListenCheck.stage == body.stage,
+            )
+            .values(score=body.score)
+        )
+        await db.commit()
+    return {"stage": body.stage, "score": body.score}

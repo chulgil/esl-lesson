@@ -179,6 +179,8 @@ export interface ContentRoutine {
   steps: { step: number; done: boolean }[];
   completed: boolean;
   summary: { text: string; feedback: string | null; created_at: string } | null;
+  /** 재청취 이해도 1~5 — before=첫 청취(1단계), after=루틴 후(6단계) */
+  listen: { before: number | null; after: number | null };
 }
 
 export interface LibraryContent {
@@ -314,4 +316,10 @@ export const studyApi = {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
+  // 재청취 이해도 셀프 체크 — 같은 stage 재제출은 갱신 (effectiveness-audit P1)
+  submitListenCheck: (contentId: number, stage: 1 | 2, score: number) =>
+    request<{ stage: number; score: number }>(
+      `/api/contents/${contentId}/listen-check`,
+      { method: "POST", body: JSON.stringify({ stage, score }) },
+    ),
 };

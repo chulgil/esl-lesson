@@ -34,11 +34,27 @@
 - **LLM 실패 시에도 저장은 진행** (feedback=null) — 인출 자체가 목적.
 - 재제출 허용 — 이력 보존(`content_summaries`), 화면엔 최신 1건 표시.
 
+## 재청취 이해도 (2026-08-05)
+
+"안 들리던 게 들린다"를 측정 가능한 증거로 — 루틴 앞뒤에 **"얼마나 들렸나요?"
+1~5 셀프 체크**를 끼운다 (기획: [effectiveness-audit-2026-08.md](../proposal/effectiveness-audit-2026-08.md) P1).
+
+| stage | 시점 | 화면 위치 |
+|---|---|---|
+| 1 | 첫 청취 — 루틴 1단계 | 1단계 항목 아래 |
+| 2 | 루틴 후 — 6단계 요약 뒤 | 요약 영역 아래 |
+
+- 재제출은 **갱신(upsert)** — 이력이 아니라 현재값 1건 (uq user+content+stage).
+- 전후 둘 다 기록되면 "처음 b → 지금 a" 를 초록 강조, 상승 시 델타(+n) 표시.
+- score 범위 밖(0, 6)·stage 범위 밖은 422.
+
 ## 데이터·XP
 
 - `content_routine_progress(user_id, content_id, step)` — 행 존재=완료, 해제=삭제
   (uq user+content+step, 멱등)
 - `content_summaries(user_id, content_id, text, feedback)` — 제출 이력
+- `listen_checks(user_id, content_id, stage, score)` — 재청취 이해도 1~5
+  (uq user+content+stage, upsert)
 - XP (로그 실시간 파생 — `progress.routine_xp`): **완주(6단계) 콘텐츠 x 50 +
   요약 제출 x 20**
 
@@ -46,9 +62,10 @@
 
 | 메서드/경로 | 설명 |
 |---|---|
-| GET `/api/contents/{id}/routine` | `{steps:[{step,done}], completed, summary}` — 구독 콘텐츠만 (비구독 404) |
+| GET `/api/contents/{id}/routine` | `{steps:[{step,done}], completed, summary, listen:{before,after}}` — 구독 콘텐츠만 (비구독 404) |
 | POST `/api/contents/{id}/routine/{step}` | `{done}` 체크/해제 (step 1~6, 멱등) |
 | POST `/api/contents/{id}/summary` | `{text}` → `{feedback}` — 저장 + 6단계 자동 체크 |
+| POST `/api/contents/{id}/listen-check` | `{stage:1\|2, score:1~5}` → `{stage, score}` — 재제출은 갱신 |
 
 ## 어원 (word-insight 확장, P1-4)
 

@@ -52,6 +52,41 @@ const STEPS: {
   },
 ];
 
+/** 재청취 이해도 1~5 — "안 들리던 게 들린다"를 재는 셀프 체크
+ *  (docs/proposal/effectiveness-audit-2026-08.md P1) */
+function ListenCheckRow({
+  value,
+  disabled,
+  onPick,
+}: {
+  value: number | null;
+  disabled: boolean;
+  onPick: (score: number) => void;
+}) {
+  return (
+    <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <span className="text-xs font-bold opacity-70">얼마나 들렸나요?</span>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          disabled={disabled}
+          onClick={() => onPick(n)}
+          aria-pressed={value === n}
+          aria-label={`들린 정도 ${n}점`}
+          className={`h-6 w-6 shrink-0 cursor-pointer rounded-full border-2 text-[11px] font-bold transition ${
+            value === n
+              ? "border-brick-blue bg-brick-blue text-brick-label"
+              : "border-ink/25 bg-white hover:border-brick-blue/60"
+          }`}
+        >
+          {n}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 export function RoutineGuide({
   contentId,
   onStartShadowing,
@@ -63,6 +98,7 @@ export function RoutineGuide({
   const [summaryText, setSummaryText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [busyStep, setBusyStep] = useState<number | null>(null);
+  const [listenBusy, setListenBusy] = useState(false);
 
   useEffect(() => {
     studyApi
@@ -101,6 +137,28 @@ export function RoutineGuide({
       // 실패는 조용히 — 다음 탭에서 재시도
     }
     setBusyStep(null);
+  }
+
+  async function pickListen(stage: 1 | 2, score: number) {
+    if (listenBusy) return;
+    setListenBusy(true);
+    try {
+      // 응답으로 로컬 갱신 — 전체 재조회(GET)하지 않는다
+      const res = await studyApi.submitListenCheck(contentId, stage, score);
+      setRoutine(
+        (prev) =>
+          prev && {
+            ...prev,
+            listen:
+              stage === 1
+                ? { ...prev.listen, before: res.score }
+                : { ...prev.listen, after: res.score },
+          },
+      );
+    } catch {
+      // 실패는 조용히 — 다시 누르면 재시도
+    }
+    setListenBusy(false);
   }
 
   async function submitSummary() {
@@ -174,6 +232,13 @@ export function RoutineGuide({
                   {s.title}
                 </span>
                 <span className="block text-xs opacity-60">{s.desc}</span>
+                {s.step === 1 && (
+                  <ListenCheckRow
+                    value={routine.listen.before}
+                    disabled={listenBusy}
+                    onPick={(score) => pickListen(1, score)}
+                  />
+                )}
               </span>
               {s.step === 4 && (
                 <Link
@@ -238,6 +303,22 @@ export function RoutineGuide({
             )}
           </div>
         )}
+
+        {/* 루틴 후 재청취 이해도 — 첫 청취와의 전후 비교가 효과의 증거 */}
+        <div className="mt-3 border-t-2 border-dashed border-brick-blue/20 pt-2">
+          <ListenCheckRow
+            value={routine.listen.after}
+            disabled={listenBusy}
+            onPick={(score) => pickListen(2, score)}
+          />
+          {routine.listen.before !== null && routine.listen.after !== null && (
+            <p className="mt-1.5 text-xs font-bold text-brick-green">
+              처음 {routine.listen.before} &rarr; 지금 {routine.listen.after}
+              {routine.listen.after > routine.listen.before &&
+                ` (+${routine.listen.after - routine.listen.before} 만큼 더 들려요!)`}
+            </p>
+          )}
+        </div>
       </div>
     </section>
   );
