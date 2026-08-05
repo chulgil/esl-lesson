@@ -7,6 +7,7 @@ import { NoteSkin } from "@/components/chat/skins/NoteSkin";
 import { fakeFilename } from "@/components/chat/skins/ExcelChrome";
 import { useChatRoom } from "@/components/chat/useChatRoom";
 import { useAppTheme } from "@/lib/theme";
+import { CHAT_LABEL_OF } from "@/lib/theme-surfaces";
 
 /** 대화방 페이지 — 데이터는 useChatRoom 훅, 표현은 테마별 스킨.
  *  오피스 테마 = 스프레드시트 위장, 그 외 = 교환 노트 위장 (docs/specs/chat.md). */
@@ -16,13 +17,14 @@ export default function ChatRoomPage() {
   const theme = useAppTheme();
   const skinProps = useChatRoom(otherId);
 
-  // 위장 문서 제목 — 브라우저 탭 목록에서도 업무 문서로 보이게
+  // 위장 문서 제목 — 브라우저 탭 목록에서도 업무 문서로 보이게. 테마 라벨은
+  // CHAT_LABEL_OF 가 정본 (하드코딩은 cat/school/ocean 라벨 무시, 2026-08-05)
   useEffect(() => {
     const prev = document.title;
     document.title =
       theme === "excel"
         ? `${fakeFilename("공유문서")} - 통합 문서`
-        : "교환 노트";
+        : CHAT_LABEL_OF[theme];
     return () => {
       document.title = prev;
     };

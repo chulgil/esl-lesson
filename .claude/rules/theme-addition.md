@@ -16,14 +16,18 @@
 
 ### 1. 프론트 코어 (필수 — 하나라도 빠지면 테마가 동작하지 않음)
 
-- [ ] `frontend/src/lib/theme.ts` — `APP_THEMES` 에 항목 추가 (key/label/desc/swatch)
+- [ ] `frontend/src/lib/theme-keys.ts` — `THEME_KEYS` 배열에 키 추가 (2026-08-05
+  단일 정본화: 유니온 타입·isTheme·부트 화이트리스트가 전부 여기서 파생 —
+  배열 순서 = 설정 표시 순서)
+- [ ] `frontend/src/lib/theme.ts` — `THEME_META` 에 라벨/스와치/설명 추가
+  (Record 라 누락 시 컴파일 에러)
 - [ ] `frontend/src/app/globals.css` — `html[data-theme=X]` 블록:
   - 색 토큰: `--color-brick-*` 재정의. **`--color-brick-label` 대비 필수 확인**
     (파스텔 배경이면 잉크색 — 흰 글씨는 대비 미달. candy/cat 선례)
   - 형태 토큰: `--radius-*`, 그림자 (테마 성격에 맞게 — 레고=하드섀도, 학교=플랫)
   - 배경 패턴 (모눈/스터드/발도장 등)
-- [ ] `frontend/src/app/layout.tsx` — **부트 스크립트 테마 화이트리스트에 key 추가**
-  (누락 시 새로고침에서 테마 풀림 — school 사고 재발 방지)
+- [ ] `frontend/src/app/layout.tsx` — 부트 화이트리스트는 `THEME_KEYS` 파생으로
+  자동 (2026-08-05) — **별도 작업 불필요**, THEME_KEYS 추가만 확인
 - [ ] `frontend/src/lib/theme-surfaces.ts` — 5개 레지스트리 전부:
   - `SURFACE_SKINS` — 시험지·학습 카드·OMR·선지(퀴즈/어순 칩 공용)·채점 피드백
     (`feedbackOk/Bad` + 상태 라벨색, 2026-08-05)·세션 완료(section 재사용) 스킨 1벌.

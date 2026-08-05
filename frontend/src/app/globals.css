@@ -224,29 +224,32 @@ html[data-theme="ocean"] {
   --radius-xl: 1.25rem;
 }
 
-/* 여름 바다: 줄노트 대신 파도 비늘(세이가이하) — 어긋난 반원 두 겹 */
+/* 여름 바다: 모래사장 + 바다 — 위는 바다, 물거품 경계, 아래는 모래로
+   이어지는 해변 구도 + 아주 옅은 잔물결 라인 (모래 위에선 물결 자국으로
+   읽힌다). 초기의 겹친 반원(세이가이하)은 정신없다는 보고(2026-08-05)로
+   교체 — 배경은 고요하게, 파도 은유의 밀도는 표면·게임 보드가 맡는다.
+   fixed: 스크롤해도 해변 구도 유지 (iOS 는 scroll 폴백 — 긴 페이지에
+   바다→모래가 펼쳐지는 것도 자연스럽다). */
 html[data-theme="ocean"] .notebook-lines {
   background-image:
-    radial-gradient(
-      circle at 50% 100%,
-      transparent 18px,
-      rgba(31, 143, 181, 0.11) 19px,
-      rgba(31, 143, 181, 0.11) 20px,
-      transparent 21px
+    repeating-linear-gradient(
+      transparent,
+      transparent 46px,
+      rgba(31, 143, 181, 0.07) 46px,
+      rgba(31, 143, 181, 0.07) 47px,
+      transparent 47px,
+      transparent 51px,
+      rgba(31, 143, 181, 0.04) 51px,
+      rgba(31, 143, 181, 0.04) 52px
     ),
-    radial-gradient(
-      circle at 50% 100%,
-      transparent 18px,
-      rgba(31, 143, 181, 0.07) 19px,
-      rgba(31, 143, 181, 0.07) 20px,
-      transparent 21px
+    linear-gradient(
+      #d2eff6 0%,
+      #c3e9f2 42%,
+      #e8f6f3 58%,
+      #f4ead0 74%,
+      #f8f0da 100%
     );
-  background-size:
-    48px 24px,
-    48px 24px;
-  background-position:
-    0 0,
-    24px 12px;
+  background-attachment: fixed, fixed;
 }
 
 /* 여름 바다: 물속 소프트 그림자 — 시원한 파랑 번짐 */

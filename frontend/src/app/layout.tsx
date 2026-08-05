@@ -8,6 +8,7 @@ import { BuildRefreshWatcher } from "@/components/nav/BuildRefreshWatcher";
 import { NotificationSetupGuide } from "@/components/chat/NotificationSetupGuide";
 import { InviteToaster } from "@/components/game/InviteToaster";
 import { HenyangPeek } from "@/components/theme/HenyangPeek";
+import { THEME_KEYS } from "@/lib/theme-keys";
 
 const gaegu = Gaegu({
   variable: "--font-gaegu",
@@ -66,10 +67,14 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={`${gaegu.variable} ${body.variable} antialiased`}>
-        {/* 전역 테마 부트 — 페인트 전에 data-theme 적용 (FOUC 방지) */}
+        {/* 전역 테마 부트 — 페인트 전에 data-theme 적용 (FOUC 방지).
+            화이트리스트는 theme-keys.ts 에서 파생 — 수기 나열로 새 테마를
+            빠뜨리던 사고(school, 2026-07-31)를 구조적으로 차단 (2026-08-05) */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem("app.theme");if(t==="candy"||t==="lego"||t==="note"||t==="cat"||t==="excel"||t==="school"||t==="academy"||t==="ocean")document.documentElement.setAttribute("data-theme",t)}catch(e){}`,
+            __html: `try{var t=localStorage.getItem("app.theme");if(${JSON.stringify(
+              THEME_KEYS,
+            )}.indexOf(t)>=0)document.documentElement.setAttribute("data-theme",t)}catch(e){}`,
           }}
         />
         <AppNav />

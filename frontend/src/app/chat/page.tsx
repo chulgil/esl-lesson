@@ -12,6 +12,7 @@ import { BackLink } from "@/components/nav/BackLink";
 import { chatApi, type ChatConversation } from "@/lib/chat-api";
 import { onChatEvent } from "@/lib/chat-signals";
 import { useAppTheme } from "@/lib/theme";
+import { CHAT_LABEL_OF } from "@/lib/theme-surfaces";
 import { timeAgo } from "@/lib/time";
 
 /** 대화 목록 — 테마별 위장 (docs/specs/chat.md 위장 테마).
@@ -41,11 +42,12 @@ export default function ChatListPage() {
     });
   }, [load]);
 
-  // 위장 문서 제목 (브라우저 탭 목록 대비)
+  // 위장 문서 제목 (브라우저 탭 목록 대비) — 테마 라벨은 CHAT_LABEL_OF 가
+  // 정본 ("교환 노트" 하드코딩은 cat/school/ocean 라벨을 무시했다, 2026-08-05)
   useEffect(() => {
     const prev = document.title;
     document.title =
-      theme === "excel" ? fakeFilename("공유문서함") : "교환 노트";
+      theme === "excel" ? fakeFilename("공유문서함") : CHAT_LABEL_OF[theme];
     return () => {
       document.title = prev;
     };

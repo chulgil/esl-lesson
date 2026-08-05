@@ -2,12 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import type { BoardState } from "@/lib/game-ws";
+import type { BoardSkinTheme } from "@/lib/theme-surfaces";
 
 const ROWS = 12;
 
-/** 보드 배경 테마 — 전역 앱 테마(설정 > 테마)를 따른다 */
-export type BoardTheme =
-  "candy" | "note" | "lego" | "cat" | "school" | "academy" | "ocean";
+/** 보드 배경 테마 — theme-surfaces 의 BoardSkinTheme 이 정본 (2026-08-05
+ *  통합: 같은 유니온을 두 파일이 따로 들고 있어 새 테마마다 이중 수정이었다) */
+export type BoardTheme = BoardSkinTheme;
 
 const THEME_BORDER: Record<BoardTheme, string> = {
   candy: "border-[#F0C4E0]",
@@ -394,12 +395,13 @@ function drawBackground(
     sea.addColorStop(1, "#84CFE2");
     ctx.fillStyle = sea;
     ctx.fillRect(0, 0, width, height);
-    // 파도 비늘 — 줄마다 반칸 어긋난 반원 (세이가이하)
-    ctx.strokeStyle = "rgba(255,255,255,0.45)";
+    // 잔잔한 파도 — 성긴 반원 세 줄, 옅게 (빽빽한 원 겹침은 정신없다는
+    // 보고로 배경과 함께 톤 다운, 2026-08-05)
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
     ctx.lineWidth = 2;
-    const waveW = 34;
-    for (let row = 0; row < 5; row++) {
-      const y = height * (0.14 + row * 0.18);
+    const waveW = 46;
+    for (let row = 0; row < 3; row++) {
+      const y = height * (0.22 + row * 0.26);
       const offset = row % 2 === 0 ? 0 : waveW / 2;
       for (let wx = -waveW; wx < width + waveW; wx += waveW) {
         ctx.beginPath();
