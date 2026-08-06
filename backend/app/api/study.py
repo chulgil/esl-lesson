@@ -17,6 +17,7 @@ from app.models import (
     Content,
     ItemOccurrence,
     LearningItem,
+    PushSubscription,
     ReviewCard,
     ReviewLog,
     ThemeRewardRule,
@@ -1018,7 +1019,7 @@ async def read_settings(
 ) -> dict:
     settings = await get_user_settings(db, user)
     await db.commit()
-    return _settings_dict(settings)
+    return _settings_dict(settings, await _push_subscribed(db, user.id))
 
 
 @settings_router.patch("")
@@ -1050,10 +1051,20 @@ async def update_settings(
         if value is not None:
             setattr(settings, field, value)
     await db.commit()
-    return _settings_dict(settings)
+    return _settings_dict(settings, await _push_subscribed(db, user.id))
 
 
-def _settings_dict(settings: UserSettings) -> dict:
+async def _push_subscribed(db: AsyncSession, user_id: int) -> bool:
+    """이 유저의 기기 중 하나라도 푸시 구독이 살아 있는가 — 온보딩 체크리스트
+    ③ 리마인더 설정 완료 판정 (docs/proposal/effectiveness-audit-2026-08.md 구멍 4).
+    구독 행은 기기당 1개라 존재 여부만 보면 된다."""
+    row = await db.execute(
+        select(PushSubscription.id).where(PushSubscription.user_id == user_id).limit(1)
+    )
+    return row.scalar_one_or_none() is not None
+
+
+def _settings_dict(settings: UserSettings, push_subscribed: bool) -> dict:
     return {
         "daily_new_limit": settings.daily_new_limit,
         "daily_review_limit": settings.daily_review_limit,
@@ -1063,4 +1074,5 @@ def _settings_dict(settings: UserSettings) -> dict:
         "reminder_hour": settings.reminder_hour,
         "study_level": settings.study_level,
         "levels_enabled": settings.levels_enabled,
+        "push_subscribed": push_subscribed,
     }

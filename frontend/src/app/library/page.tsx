@@ -126,7 +126,17 @@ export default function LibraryPage() {
           </div>
         ))}
         {contents.length === 0 && !error && (
-          <p className="text-sm opacity-50">아직 준비된 콘텐츠가 없어요.</p>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm opacity-50">아직 준비된 콘텐츠가 없어요.</p>
+            {/* 빈 화면에서 방법을 만나게 — 담을 게 없는 순간이 "왜 이 앱인가"를
+                읽어볼 유일한 여유 시간이다 (effectiveness-audit 3차 구멍 4) */}
+            <Link
+              href="/method"
+              className="text-sm font-bold text-brick-blue underline-offset-2 hover:underline"
+            >
+              이 앱이 영어를 늘리는 방법 보기 →
+            </Link>
+          </div>
         )}
       </div>
 

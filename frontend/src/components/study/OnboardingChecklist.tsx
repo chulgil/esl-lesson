@@ -3,25 +3,55 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { friendsApi } from "@/lib/friends-api";
-import type { Stats } from "@/lib/study-api";
+import { pushEnabled } from "@/lib/push";
+import { studyApi, type Stats } from "@/lib/study-api";
 
-/** 시작 체크리스트 — 신규 사용자가 빈 화면에서 길을 잃지 않게 (P2 온보딩).
- *  "영상 등록" 단계는 제거 (2026-07-28) — 유튜브 등록이 관리자 전용 사양으로
- *  바뀌어 일반 사용자는 달성 불가(영구 미완료로 남던 문제). */
+/** 첫 주 계약 — 이 앱으로 "어떻게" 공부하는지를 3단계로 가르친다
+ *  (docs/proposal/effectiveness-audit-2026-08.md 구멍 4).
+ *
+ *  이전엔 첫 학습·친구 추가 2항목이었다 — 친구 추가는 학습 핵심이 아니라
+ *  신규 사용자가 이 앱의 학습법(영상 갈아 넣기·리마인더)을 만나지 못했다.
+ *  "영상 등록" 단계는 여전히 제외 (2026-07-28: 관리자 전용 사양이라 달성 불가).
+ *  친구 추가는 학습 3단계를 끝낸 뒤에만 꺼낸다. */
 export function OnboardingChecklist({ stats }: { stats: Stats }) {
   const [friendCount, setFriendCount] = useState<number | null>(null);
+  const [routineStarted, setRoutineStarted] = useState<boolean | null>(null);
+  // null = 로딩 중. reminderReady=false 면 VAPID 미설정 환경 — 단계 자체를 숨긴다
+  const [reminderDone, setReminderDone] = useState<boolean | null>(null);
+  const [reminderReady, setReminderReady] = useState<boolean | null>(null);
 
   useEffect(() => {
     friendsApi
       .list()
       .then((res) => setFriendCount(res.friends.length))
       .catch(() => setFriendCount(0));
+    studyApi
+      .decks()
+      .then((res) =>
+        setRoutineStarted(res.items.some((d) => d.routine_done > 0)),
+      )
+      .catch(() => setRoutineStarted(false));
+    studyApi
+      .getSettings()
+      .then((s) => setReminderDone(s.push_subscribed))
+      .catch(() => setReminderDone(false));
+    pushEnabled()
+      .then(setReminderReady)
+      .catch(() => setReminderReady(false));
   }, []);
 
-  if (friendCount === null) return null;
+  if (
+    friendCount === null ||
+    routineStarted === null ||
+    reminderDone === null ||
+    reminderReady === null
+  ) {
+    return null;
+  }
 
   const totalCards = stats.levels.reduce((sum, lv) => sum + lv.cards, 0);
-  const steps = [
+  // 학습 핵심 3단계 — 이 순서가 곧 이 앱의 학습법이다
+  const coreSteps = [
     {
       label: "첫 학습 시작하기",
       desc: "라이브러리 영상에서 추출된 단어·문장이 복습 카드로 나와요",
@@ -29,12 +59,35 @@ export function OnboardingChecklist({ stats }: { stats: Stats }) {
       done: totalCards > 0,
     },
     {
-      label: "친구 추가하기",
-      desc: "주간 랭킹에서 함께 경쟁하고 게임에 초대할 수 있어요",
-      href: "/friends",
-      done: friendCount > 0,
+      label: "영상 한 편 갈아 넣기 시작",
+      desc: "영상 한 편을 6단계로 갈아 넣는 게 이 앱의 학습법이에요",
+      href: "/library",
+      done: routineStarted,
     },
+    ...(reminderReady
+      ? [
+          {
+            label: "복습 리마인더 시각 정하기",
+            desc: "언제 할지 미리 정해두면 그 시각에 알림이 와요 — 습관은 결심이 아니라 시각으로 붙어요",
+            href: "/settings",
+            done: reminderDone,
+          },
+        ]
+      : []),
   ];
+
+  // 친구 추가는 학습 3단계를 끝낸 사람에게만 — 첫 주 계약을 흐리지 않는다
+  const steps = coreSteps.every((s) => s.done)
+    ? [
+        ...coreSteps,
+        {
+          label: "친구 추가하기",
+          desc: "주간 랭킹에서 함께 경쟁하고 게임에 초대할 수 있어요",
+          href: "/friends",
+          done: friendCount > 0,
+        },
+      ]
+    : coreSteps;
 
   if (steps.every((s) => s.done)) return null;
 
@@ -42,10 +95,20 @@ export function OnboardingChecklist({ stats }: { stats: Stats }) {
 
   return (
     <section className="max-w-xl rounded-lg border-2 border-brick-blue/40 bg-white p-4">
-      <p className="text-sm font-bold">
-        시작 체크리스트
-        <span className="ml-2 font-normal opacity-60">{doneCount}/2 완료</span>
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="text-sm font-bold">
+          시작 체크리스트
+          <span className="ml-2 font-normal opacity-60">
+            {doneCount}/{steps.length} 완료
+          </span>
+        </p>
+        <Link
+          href="/method"
+          className="ml-auto text-xs font-bold text-brick-blue underline-offset-2 hover:underline"
+        >
+          이 앱이 영어를 늘리는 방법 →
+        </Link>
+      </div>
       <ul className="mt-2 flex flex-col gap-1.5">
         {steps.map((step) => (
           <li key={step.label}>
