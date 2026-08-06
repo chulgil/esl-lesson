@@ -313,6 +313,23 @@ async def get_decks(
         ).all()
     )
 
+    # 루틴 진행(0~6) — 시작한 "갈아 넣기" 여정을 덱에서 상기시킨다
+    # (effectiveness-audit 2차: 라이브러리 상세에만 있으면 잊힌다)
+    from app.models import ContentRoutineProgress
+
+    routine_by_content = dict(
+        (
+            await db.execute(
+                select(ContentRoutineProgress.content_id, func.count(ContentRoutineProgress.id))
+                .where(
+                    ContentRoutineProgress.user_id == user.id,
+                    ContentRoutineProgress.content_id.in_(ids),
+                )
+                .group_by(ContentRoutineProgress.content_id)
+            )
+        ).all()
+    )
+
     items = [
         {
             "content_id": cid,
@@ -320,6 +337,7 @@ async def get_decks(
             "due": due_by_content.get(cid, 0),
             "new_available": new_by_content.get(cid, 0),
             "total_cards": total_by_content.get(cid, 0),
+            "routine_done": routine_by_content.get(cid, 0),
         }
         for cid, title in contents
     ]

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import {
   adminApi,
@@ -41,6 +41,10 @@ export default function NewContentPage() {
   const [ccError, setCcError] = useState<string | null>(null);
   // 다음 페이지 토큰 — null 이면 더 없음 (2026-08-05 페이징)
   const [ccNextToken, setCcNextToken] = useState<string | null>(null);
+  // 사용자 요청 — 수요를 보고 CC 검색으로 채운다 (effectiveness-audit P0-3)
+  const [requests, setRequests] = useState<
+    { id: number; text: string; nickname: string }[]
+  >([]);
   const [permission, setPermission] =
     useState<ContentPermission>(EMPTY_PERMISSION);
 
@@ -87,6 +91,13 @@ export default function NewContentPage() {
       setSubmitting(false);
     }
   }
+
+  useEffect(() => {
+    adminApi
+      .contentRequests()
+      .then((res) => setRequests(res.items.slice(0, 5)))
+      .catch(() => undefined);
+  }, []);
 
   async function searchCc(more = false) {
     if (!ccQuery.trim()) return;
@@ -161,6 +172,12 @@ export default function NewContentPage() {
             {/* CC 영상 찾기 — 검색 필터는 후보용, 등록 시 서버가 라이선스 재확인 */}
             <div className="mt-2 rounded-md border-2 border-brick-green/30 bg-brick-green/5 p-3">
               <p className="text-sm font-bold">CC(재사용 허용) 영상 찾기</p>
+              {requests.length > 0 && (
+                <div className="mt-1 rounded bg-highlight/30 px-2 py-1.5 text-xs">
+                  <span className="font-bold">사용자 요청:</span>{" "}
+                  {requests.map((r) => `"${r.text}"(${r.nickname})`).join(" · ")}
+                </div>
+              )}
               <p className="mb-2 text-xs opacity-60">
                 크리에이티브 커먼즈 + 자막 보유 영상만 검색돼요 — 선택하면 URL이
                 채워집니다

@@ -138,3 +138,18 @@ class ExtractionJob(Base, PkMixin):
     finished_at: Mapped[datetime | None]
 
     content: Mapped[Content] = relationship(back_populates="jobs")
+
+
+class ContentRequest(Base, PkMixin, CreatedAtMixin):
+    """사용자의 콘텐츠 요청 — "이런 영상이 보고 싶어요".
+
+    공급을 수요와 연결한다 (effectiveness-audit-2026-08.md P0-3): 관리자가
+    백오피스 등록 화면에서 요청 목록을 보고 CC 검색으로 채운다.
+    """
+
+    __tablename__ = "content_requests"
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    text: Mapped[str] = mapped_column(Text)

@@ -172,6 +172,8 @@ export interface StudyDeck {
   due: number;
   new_available: number;
   total_cards: number;
+  /** "갈아 넣기" 루틴 완료 단계 수 0~6 — 시작한 여정 상기 (content-routine.md) */
+  routine_done: number;
 }
 
 /** 콘텐츠 루틴 여정 — 6단계 + 한 문장 요약 (docs/proposal/ted-routine-2026-08.md) */
@@ -315,6 +317,12 @@ export const studyApi = {
       `/api/contents/${contentId}/routine/${step}`,
       { method: "POST", body: JSON.stringify({ done }) },
     ),
+  /** "이런 영상이 보고 싶어요" — 공급을 수요와 연결 (하루 5건) */
+  requestContent: (text: string) =>
+    request<{ saved: boolean }>("/api/contents/requests", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
   submitSummary: (contentId: number, text: string) =>
     request<{ feedback: string | null }>(`/api/contents/${contentId}/summary`, {
       method: "POST",

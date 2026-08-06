@@ -104,3 +104,19 @@ async def test_summary_saved_even_when_llm_fails(client, db_session, monkeypatch
     assert (await client.get(f"/api/contents/{cid}/routine")).json()["summary"]["text"] == (
         "A short one."
     )
+
+
+async def test_decks_include_routine_progress(client, db_session):
+    """학습 탭 덱 목록에 루틴 진행(0~6) — 시작한 여정을 상기시킨다
+    (effectiveness-audit 2차: 장치 사용 0건 = 발견 가능성 문제)."""
+    user = await login(client, db_session)
+    await seed_items(db_session, count=1)
+    cid = await _subscribed_content_id(db_session, user.id)
+
+    decks = (await client.get("/api/study/decks")).json()["items"]
+    assert next(d for d in decks if d["content_id"] == cid)["routine_done"] == 0
+
+    for step in (1, 2, 3):
+        await client.post(f"/api/contents/{cid}/routine/{step}", json={"done": True})
+    decks = (await client.get("/api/study/decks")).json()["items"]
+    assert next(d for d in decks if d["content_id"] == cid)["routine_done"] == 3

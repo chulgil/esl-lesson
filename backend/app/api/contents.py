@@ -6,12 +6,20 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.models import Content, ContentSubscription, ItemOccurrence, TranscriptSegment, User
+from app.models import (
+    Content,
+    ContentRequest,
+    ContentSubscription,
+    ItemOccurrence,
+    TranscriptSegment,
+    User,
+)
 from app.services.content_difficulty import difficulty_by_content, known_ratio_by_content
 from app.services.visibility import subscribed_content_ids
 
@@ -164,3 +172,42 @@ async def get_ready_content(
             for s in segments
         ],
     }
+
+
+class ContentRequestBody(BaseModel):
+    text: str = Field(min_length=2, max_length=300)
+
+
+REQUESTS_PER_DAY = 5
+
+
+@router.post("/requests")
+async def create_content_request(
+    body: ContentRequestBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """"이런 영상이 보고 싶어요" — 공급을 수요와 연결 (effectiveness-audit P0-3).
+
+    관리자가 백오피스 등록 화면에서 목록을 보고 CC 검색으로 채운다.
+    하루 5건 제한 — 남용 가드.
+    """
+    from datetime import UTC, datetime, timedelta, timezone
+
+    kst = timezone(timedelta(hours=9))
+    day_start = (
+        datetime.now(UTC).astimezone(kst).replace(hour=0, minute=0, second=0, microsecond=0)
+    ).astimezone(UTC)
+    today_count = (
+        await db.execute(
+            select(func.count(ContentRequest.id)).where(
+                ContentRequest.user_id == user.id, ContentRequest.created_at >= day_start
+            )
+        )
+    ).scalar_one()
+    if today_count >= REQUESTS_PER_DAY:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "daily_request_limit")
+
+    db.add(ContentRequest(user_id=user.id, text=body.text.strip()))
+    await db.commit()
+    return {"saved": True}

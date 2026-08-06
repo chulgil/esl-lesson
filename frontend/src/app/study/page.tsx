@@ -155,6 +155,32 @@ export default function StudyHubPage() {
                         </span>
                       )}
                     </p>
+                    {/* 갈아 넣기 진행 — 시작한 여정을 데일리 동선에서 상기
+                        (effectiveness-audit 2차: 상세에만 있으면 잊힌다) */}
+                    <Link
+                      href={`/library/${deck.content_id}`}
+                      className="mt-1 flex w-fit items-center gap-1.5 rounded px-0.5 text-[11px] opacity-70 hover:opacity-100"
+                    >
+                      <span className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5, 6].map((n) => (
+                          <span
+                            key={n}
+                            className={`h-1.5 w-3 rounded-sm ${
+                              n <= deck.routine_done
+                                ? "bg-brick-green"
+                                : "bg-ink/15"
+                            }`}
+                          />
+                        ))}
+                      </span>
+                      <span className="font-bold">
+                        {deck.routine_done === 0
+                          ? "갈아 넣기 시작 →"
+                          : deck.routine_done >= 6
+                            ? "갈아 넣기 완주!"
+                            : `갈아 넣는 중 ${deck.routine_done}/6 →`}
+                      </span>
+                    </Link>
                   </div>
                   <Link
                     href={`/study/session?content=${deck.content_id}`}

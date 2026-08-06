@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ContentRequestForm } from "@/components/content/ContentRequestForm";
 import { SubscribeButton } from "@/components/content/SubscribeButton";
 import { examApi, type OpenExam } from "@/lib/exam-api";
 import { studyApi, type LibraryContent } from "@/lib/study-api";
@@ -136,6 +137,7 @@ export default function LibraryPage() {
           저작권 안내
         </Link>
       </p>
+      <ContentRequestForm />
     </main>
   );
 }

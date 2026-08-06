@@ -13,6 +13,7 @@ from app.core.security import require_admin
 from app.models import (
     Content,
     ContentPermission,
+    ContentRequest,
     ItemOccurrence,
     LearningItem,
     TranscriptSegment,
@@ -151,6 +152,28 @@ async def list_contents(
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = ((await db.execute(query.offset((page - 1) * size).limit(size))).scalars()).all()
     return {"total": total, "page": page, "items": [content_summary(c) for c in rows]}
+
+
+@router.get("/contents/requests")
+async def list_content_requests(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
+    """사용자 콘텐츠 요청 목록 — 등록 화면에서 수요를 보고 CC 검색으로 채운다.
+
+    주의: /contents/{content_id} 보다 먼저 등록해야 한다 (경로 매칭 순서).
+    """
+    rows = (
+        await db.execute(
+            select(ContentRequest, User.nickname)
+            .join(User, User.id == ContentRequest.user_id)
+            .order_by(ContentRequest.id.desc())
+            .limit(50)
+        )
+    ).all()
+    return {
+        "items": [
+            {"id": r.id, "text": r.text, "nickname": nickname, "created_at": r.created_at}
+            for r, nickname in rows
+        ]
+    }
 
 
 @router.get("/contents/{content_id}")

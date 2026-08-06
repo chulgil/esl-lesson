@@ -141,6 +141,12 @@ export const adminApi = {
   getContent: (id: number) =>
     request<ContentDetail>(`/api/admin/contents/${id}`),
 
+  /** 사용자 콘텐츠 요청 — 등록 화면에서 수요 확인 (effectiveness-audit P0-3) */
+  contentRequests: () =>
+    request<{
+      items: { id: number; text: string; nickname: string; created_at: string }[];
+    }>("/api/admin/contents/requests"),
+
   /** CC(creativeCommon)·자막 보유·영어 영상만 검색 — 등록 후보
    *  (content-governance.md). pageToken 으로 다음 페이지 (2026-08-05) */
   ccSearch: (q: string, pageToken?: string) =>

@@ -143,3 +143,11 @@ license != creativeCommon 또는 미확인 → content_permissions 필수, 없�
 - 마이그레이션: 기존 회원 × 공용 콘텐츠 구독 백필
 - 난이도 배지: 고급/중급/초급 분포별 라벨, 경계값(1.35·0.6), 항목 0개 → `null`
 - 아는 표현 비율: 4개 중 2개 보유 → 50, 항목 0개 → `null`, 다른 사용자 카드는 미포함
+
+
+## 콘텐츠 요청 (2026-08-06 — 공급을 수요와 연결)
+
+- 사용자: 라이브러리 하단 "이런 영상이 보고 싶어요" 폼 → POST `/api/contents/requests`
+  (`content_requests` 저장, 하루 5건 제한)
+- 관리자: 등록 화면 CC 검색 상단에 최근 요청 5건 노출 (GET `/api/admin/contents/requests`
+  — 정적 경로라 `/contents/{id}` 보다 먼저 등록, 최근 50건)

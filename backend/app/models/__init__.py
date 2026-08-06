@@ -6,6 +6,7 @@ from app.models.chat import ChatMessage, ChatRead, Conversation
 from app.models.content import (
     Content,
     ContentPermission,
+    ContentRequest,
     ContentSubscription,
     ExtractionJob,
     TranscriptSegment,
@@ -56,6 +57,7 @@ __all__ = [
     "Notification",
     "PushSubscription",
     "QuestCompletion",
+    "ContentRequest",
     "ContentRoutineProgress",
     "ContentSummary",
     "ReviewCard",

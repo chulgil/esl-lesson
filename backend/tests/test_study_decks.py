@@ -80,6 +80,7 @@ async def test_decks_lists_subscribed_contents_with_counts(client, db_session):
         "due": 1,
         "new_available": 1,  # items_a[2] 만 카드 없음
         "total_cards": 2,
+        "routine_done": 0,
     }
     assert b["due"] == 0 and b["new_available"] == 2 and b["total_cards"] == 0
 

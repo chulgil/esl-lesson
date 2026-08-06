@@ -5,6 +5,7 @@ import { BackLink } from "@/components/nav/BackLink";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RoutineGuide } from "@/components/content/RoutineGuide";
+import { RecordCompare } from "@/components/media/RecordCompare";
 import { SubscribeButton } from "@/components/content/SubscribeButton";
 import { ExamEntryCard } from "@/components/exam/ExamEntryCard";
 import { TranscriptWords } from "@/components/media/TranscriptWords";
@@ -405,6 +406,17 @@ export default function LibraryDetailPage() {
                 </button>
               ))}
             </div>
+
+            {/* 말하기 녹음 즉석 비교 — 원어민 재생은 현재 문장 구간 재사용
+                (effectiveness-audit P2 격상분, 서버 저장 없음) */}
+            <RecordCompare
+              disabled={!current || current.start_ms == null}
+              onPlayNative={() => {
+                if (current?.start_ms != null) {
+                  playSegment(current.start_ms, current.end_ms);
+                }
+              }}
+            />
 
             <p className="text-center text-xs opacity-50">
               원저작자 보호를 위해 전체 스크립트는 제공하지 않아요 — 문장별
