@@ -8,3 +8,4 @@
 .cg/
 .harness/
 .cg-harness-backup-*/
+.worktrees
