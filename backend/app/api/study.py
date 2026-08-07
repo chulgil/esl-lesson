@@ -35,6 +35,7 @@ from app.services import (
     quiz,
     retention,
     vocab_network,
+    weekly_report,
 )
 from app.services.theme_rewards import sync_theme_rewards
 from app.services.visibility import subscribed_content_ids, visible_item_clause
@@ -758,6 +759,19 @@ async def get_stats(
         ],
         "daily": daily,
     }
+
+
+@router.get("/weekly-report")
+async def get_weekly_report(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """지난주 성적표 — 그 전주와의 델타 (docs/specs/weekly-report.md).
+
+    집계 테이블 없이 매 호출 로그에서 파생한다 (장기 기억 지표와 동일 원칙).
+    """
+    user_settings = await get_user_settings(db, user)
+    return await weekly_report.build(db, user.id, user_settings)
 
 
 @router.get("/achievements")

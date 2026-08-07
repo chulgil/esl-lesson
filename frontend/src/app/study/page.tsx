@@ -6,6 +6,7 @@ import { Brick } from "@/components/brick/Brick";
 import { AchievementBadges } from "@/components/study/AchievementBadges";
 import { CardCollection } from "@/components/study/CardCollection";
 import { LongTermMemoryCard } from "@/components/study/LongTermMemoryCard";
+import { WeeklyReportCard } from "@/components/study/WeeklyReportCard";
 import { examApi, type OpenExam } from "@/lib/exam-api";
 import { friendsApi } from "@/lib/friends-api";
 import {
@@ -100,6 +101,9 @@ export default function StudyHubPage() {
           </Link>
         </section>
       )}
+
+      {/* 지난주 성적표 — 주 단위 증거 서사, 그 주 내내 상시 (weekly-report.md) */}
+      <WeeklyReportCard />
 
       {/* 오답 정리 — 최근 7일 틀린 카드 보충 학습 (docs/specs/learning.md,
           기획: duolingo-benchmark-2026-08.md). 없으면 숨김 — 잘하고 있는 사람에게

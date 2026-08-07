@@ -176,6 +176,26 @@ export interface StudyDeck {
   routine_done: number;
 }
 
+/** 주간 성적표 — 지난주 vs 그 전주, 전부 로그 실시간 파생 (docs/specs/weekly-report.md) */
+export interface WeeklyReport {
+  week_start: string;
+  week_end: string;
+  reviews: number;
+  reviews_delta: number;
+  accuracy: number | null;
+  /** 전주 복습이 없으면 null — 0% 에서 올랐다고 말하지 않는다 */
+  accuracy_delta: number | null;
+  long_term_new: number;
+  long_term_new_delta: number;
+  routine_steps: number;
+  routine_steps_delta: number;
+  /** 재청취 이해도 전후 평균 차 — 비교쌍 없으면 null */
+  listen: { delta: number; contents: number } | null;
+  streak_days: number;
+  /** 지난주 복습 1개 이상 — 노출 게이트 */
+  has_data: boolean;
+}
+
 /** 콘텐츠 루틴 여정 — 6단계 + 한 문장 요약 (docs/proposal/ted-routine-2026-08.md) */
 export interface ContentRoutine {
   steps: { step: number; done: boolean }[];
@@ -310,6 +330,7 @@ export const studyApi = {
   leaderboard: () => request<{ items: StudyRank[] }>("/api/study/leaderboard"),
   quests: () => request<QuestBoard>("/api/study/quests"),
   stats: () => request<Stats>("/api/study/stats"),
+  weeklyReport: () => request<WeeklyReport>("/api/study/weekly-report"),
   library: () => request<{ items: LibraryContent[] }>("/api/contents"),
   libraryDetail: (id: number) => request<LibraryDetail>(`/api/contents/${id}`),
   // 콘텐츠 루틴 여정 (ted-routine P1) — 구독 콘텐츠만 (비구독 404)

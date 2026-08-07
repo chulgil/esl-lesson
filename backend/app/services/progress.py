@@ -4,7 +4,7 @@
 api/study.py 에서 분리 (2026-08-05 유지보수 리팩토링) — 선정·산출 규칙의 정본.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,6 +74,24 @@ async def weak_count(db: AsyncSession, user_id: int, types: list[str], now: date
     ).scalar_one()
 
 
+async def long_term_reach_dates(db: AsyncSession, user_id: int) -> list[date]:
+    """카드별 "간격 7일+ 첫 도달" 날짜(KST) — 현재 가시성과 무관한 역사적 도달 기록.
+
+    장기 기억 추이(long_term_stats)와 주간 성적표(services/weekly_report)의 공용 재료.
+    """
+    reach_rows = (
+        await db.execute(
+            select(func.min(ReviewLog.reviewed_at))
+            .where(
+                ReviewLog.user_id == user_id,
+                ReviewLog.scheduled_days >= LONG_TERM_STABILITY_DAYS,
+            )
+            .group_by(ReviewLog.card_id)
+        )
+    ).scalars()
+    return [r.astimezone(KST).date() for r in reach_rows]
+
+
 async def long_term_stats(db: AsyncSession, user_id: int, now: datetime) -> dict:
     """장기 기억 — stability 임계 이상 카드 수 + 주별 도달 누적 (로그 재생, 소급 가능)."""
     count = (
@@ -90,18 +108,7 @@ async def long_term_stats(db: AsyncSession, user_id: int, now: datetime) -> dict
         )
     ).scalar_one()
 
-    # 카드별 "간격 7일+ 첫 도달" 시각 — 현재 가시성과 무관한 역사적 도달 기록
-    reach_rows = (
-        await db.execute(
-            select(func.min(ReviewLog.reviewed_at))
-            .where(
-                ReviewLog.user_id == user_id,
-                ReviewLog.scheduled_days >= LONG_TERM_STABILITY_DAYS,
-            )
-            .group_by(ReviewLog.card_id)
-        )
-    ).scalars()
-    reach_dates = [r.astimezone(KST).date() for r in reach_rows]
+    reach_dates = await long_term_reach_dates(db, user_id)
 
     today = now.astimezone(KST).date()
     this_monday = today - timedelta(days=today.weekday())
@@ -223,8 +230,7 @@ async def routine_xp(db: AsyncSession, user_id: int) -> int:
 
     completed = (
         await db.execute(
-            select(func.count())
-            .select_from(
+            select(func.count()).select_from(
                 select(ContentRoutineProgress.content_id)
                 .where(ContentRoutineProgress.user_id == user_id)
                 .group_by(ContentRoutineProgress.content_id)
