@@ -1,4 +1,8 @@
-"""복습 리마인더 루프 — 10분 주기로 발송 조건 평가 (docs/specs/push-reminder.md)."""
+"""푸시 발송 루프 — 10분 주기로 조건 평가.
+
+복습 리마인더(docs/specs/push-reminder.md) + 월요일 주간 성적표
+(docs/specs/weekly-report.md) 를 같은 루프에서 평가한다.
+"""
 
 import asyncio
 import logging
@@ -20,9 +24,13 @@ async def _loop() -> None:
             factory = get_session_factory()
             async with factory() as db:
                 sent = await push.send_review_reminders(db)
+                # 주간 성적표 — 같은 루프에 얹는다 (월요일·주 1회 게이트는 서비스가 판단)
+                weekly = await push.send_weekly_reports(db)
                 await db.commit()
                 if sent:
                     logger.info("review reminders sent: %s", sent)
+                if weekly:
+                    logger.info("weekly reports sent: %s", weekly)
         except Exception:
             logger.exception("reminder loop failed")
         await asyncio.sleep(CHECK_INTERVAL_SECONDS)

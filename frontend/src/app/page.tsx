@@ -8,6 +8,7 @@ import { DailyQuestsCard } from "@/components/study/DailyQuestsCard";
 import { OnboardingChecklist } from "@/components/study/OnboardingChecklist";
 import { StreakCelebration } from "@/components/study/StreakCelebration";
 import { StreakSaverThanks } from "@/components/study/StreakSaverThanks";
+import { WeeklyReportBanner } from "@/components/study/WeeklyReportBanner";
 import { fetchMe, type Me } from "@/lib/api";
 import { studyApi, type Stats } from "@/lib/study-api";
 
@@ -121,6 +122,9 @@ function Dashboard({ me }: { me: Me }) {
           streakDays={stats.streak_days}
         />
       )}
+
+      {/* 주간 성적표 — 새 성적표가 나온 주의 첫 방문에 1회 (weekly-report.md) */}
+      <WeeklyReportBanner />
 
       {/* 오늘의 목표 — 밀린 전체가 아닌 목표 기준 진행 (포기 방지 기획 2026-07-15) */}
       {stats && <DailyGoalCard stats={stats} />}

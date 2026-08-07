@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.models import LearningItem, PushSubscription, ReviewCard, ReviewLog, UserSettings
+from app.services import retention, weekly_report
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -181,5 +182,76 @@ async def send_review_reminders(db: AsyncSession, now: datetime | None = None) -
             elif result == "gone":
                 await db.delete(sub)
             # "error" — 마킹하지 않고 유지, 다음 루프에서 재시도 (독스트링 계약)
+    await db.flush()
+    return sent
+
+
+# ---------- 주간 성적표 (docs/specs/weekly-report.md) ----------
+
+WEEKLY_REPORT_WEEKDAY = 0  # 월요일(KST) — 새 출발 효과, 한 주를 성적표로 연다
+
+
+def weekly_report_payload(reviews: int, delta: int) -> dict:
+    """절대치보다 델타 — 변화가 없으면 수치만 (성적표 카드와 같은 카피 규칙).
+
+    성적표가 다루는 주가 '지난주'라 비교 대상은 '그 전주' — 화면 카피와 표현을 맞춘다.
+    """
+    trend = f", 그 전주보다 {delta:+d}" if delta else ""
+    return {
+        "title": "ESL Lessonaza",
+        "body": f"지난주 성적표가 나왔어요 — 복습 {reviews}개{trend}",
+        "url": "/study",
+        "tag": "weekly-report",
+    }
+
+
+async def send_weekly_reports(db: AsyncSession, now: datetime | None = None) -> int:
+    """월요일(KST) `reminder_hour` 이후 주 1회 발송. 발송 수 반환, 커밋은 호출자 책임.
+
+    - dedup 은 대상 주 ISO 를 `user_settings.weekly_report_week` 에 기록 (책갈피
+      주간 지급 가드와 같은 패턴). 리마인더의 기기별 `last_sent_on` 과 달리
+      **사용자 단위** — 성적표는 기기가 아니라 사람에게 한 번인 사건이다.
+    - 지난주 복습 0건이면 보내지 않는다 (빈 성적표는 이탈 유발) — 마킹도 하지
+      않아, 뒤늦게 로그가 소급되면 같은 월요일 안에는 다시 평가된다.
+    """
+    settings = get_settings()
+    if not enabled(settings):
+        return 0
+    now = now or datetime.now(UTC)
+    local = now.astimezone(KST)
+    if local.weekday() != WEEKLY_REPORT_WEEKDAY or local.hour < MIN_REMINDER_HOUR:
+        return 0
+    week = retention.iso_week(weekly_report.last_week_start(now))
+
+    subs = (await db.execute(select(PushSubscription))).scalars().all()
+    by_user: dict[int, list[PushSubscription]] = {}
+    for sub in subs:
+        by_user.setdefault(sub.user_id, []).append(sub)
+
+    sent = 0
+    for user_id, user_subs in by_user.items():
+        user_settings = await db.get(UserSettings, user_id)
+        if user_settings is None:
+            user_settings = UserSettings(user_id=user_id)
+            db.add(user_settings)
+            await db.flush()
+        if user_settings.weekly_report_week == week:
+            continue
+        if local.hour < user_settings.reminder_hour:
+            continue  # 아직 이 사용자의 시각 전 — 마킹 없이 다음 루프에서 재평가
+        reviews, prev_reviews = await weekly_report.review_counts(db, user_id, now)
+        if reviews == 0:
+            continue
+        payload = weekly_report_payload(reviews, reviews - prev_reviews)
+        delivered = False
+        for sub in user_subs:
+            result = await send_to(sub, payload, settings)
+            if result == "ok":
+                delivered = True
+                sent += 1
+            elif result == "gone":
+                await db.delete(sub)
+        if delivered:
+            user_settings.weekly_report_week = week
     await db.flush()
     return sent

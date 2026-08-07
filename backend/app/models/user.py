@@ -49,3 +49,6 @@ class UserSettings(Base):
     streak_savers: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # 마지막 지급 ISO 주 ("2026-W29") — 주 1회 지급 가드
     saver_award_week: Mapped[str | None] = mapped_column(Text)
+    # 주간 성적표를 보낸 대상 주 ISO ("2026-W31" = 그 성적표가 다룬 지난주)
+    # — 월요일 1회 발송 가드 (docs/specs/weekly-report.md)
+    weekly_report_week: Mapped[str | None] = mapped_column(Text)
