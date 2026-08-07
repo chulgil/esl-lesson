@@ -35,6 +35,12 @@ async function fetchConfig(): Promise<{
   return res.json();
 }
 
+/** 서버가 푸시를 쏠 수 있는 환경인가(VAPID 설정 여부) — 브라우저 지원과 무관.
+ *  온보딩 체크리스트가 "리마인더 설정" 단계를 아예 낼지 결정한다. */
+export async function pushEnabled(): Promise<boolean> {
+  return (await fetchConfig()).enabled;
+}
+
 /** base64url → Uint8Array (applicationServerKey 포맷) */
 function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
