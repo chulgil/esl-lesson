@@ -283,6 +283,8 @@ export const studyApi = {
       daily_goal: number;
       /** 복습 리마인더 시각(KST, 5-23) — push-reminder.md */
       reminder_hour: number;
+      /** 내 기기 중 푸시 구독이 하나라도 있는가 — 온보딩 ③ 완료 판정 */
+      push_subscribed: boolean;
     }>("/api/settings"),
   patchSettings: (body: {
     hint_delay_seconds?: number;
@@ -296,6 +298,7 @@ export const studyApi = {
       levels_enabled: number[];
       daily_goal: number;
       reminder_hour: number;
+      push_subscribed: boolean;
     }>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   answer: (body: {
     card_id: number;
