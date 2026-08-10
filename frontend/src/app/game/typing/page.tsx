@@ -26,6 +26,37 @@ interface Row {
   done: boolean;
 }
 
+/** 공백 무시 매칭 — 정답 체크에서 스페이스를 건너뛴다 (2026-08-10 사용자 기획).
+ *
+ * 모바일 키보드의 자동 공백/공백 누락이 오타가 되지 않게, 입력과 목표 문장을
+ * 둘 다 공백 제거 후 비교한다. prefix 는 원문(target) 인덱스 기준 — 진행줄
+ * 표시와 서버 중계(chars)가 원문 길이를 쓰기 때문에 건너뛴 공백을 포함한다.
+ */
+function stripSpaces(s: string): string {
+  return s.replace(/\s+/g, "");
+}
+
+function matchIgnoringSpaces(
+  value: string,
+  target: string,
+): { prefix: number; matched: number; wrong: number } {
+  const typed = stripSpaces(value);
+  let ti = 0; // 원문 인덱스
+  let n = 0; // 공백 제외 정타 수
+  while (ti < target.length && n < typed.length) {
+    if (/\s/.test(target[ti])) {
+      ti += 1;
+      continue;
+    }
+    if (target[ti] !== typed[n]) break;
+    ti += 1;
+    n += 1;
+  }
+  // 정타 직후의 공백도 통과 처리 — 진행줄이 단어 경계에서 멈춰 보이지 않게
+  while (ti < target.length && /\s/.test(target[ti])) ti += 1;
+  return { prefix: ti, matched: n, wrong: typed.length - n };
+}
+
 export default function TypingRacePage() {
   return (
     <Suspense>
@@ -71,6 +102,10 @@ function TypingRaceInner() {
   const prevLenRef = useRef(0);
   const lastSentRef = useRef(0);
   const myNameRef = useRef("나");
+  // 문장별 남은 시간 — 예고 없이 다음 문장으로 넘어가는 "끊김" 체감 방지
+  const [timeLeft, setTimeLeft] = useState(0);
+  const deadlineRef = useRef(0);
+  const secondsRef = useRef(60);
 
   useEffect(() => {
     fetchMe().then((me) => {
@@ -89,6 +124,7 @@ function TypingRaceInner() {
         break;
       case "tp.start": {
         setStart(msg);
+        secondsRef.current = msg.sentence_seconds;
         setEnd(null);
         setReview([]);
         setRows(
@@ -110,6 +146,8 @@ function TypingRaceInner() {
         errorsRef.current = 0;
         prevLenRef.current = 0;
         lastSentRef.current = 0;
+        deadlineRef.current = Date.now() + secondsRef.current * 1000;
+        setTimeLeft(secondsRef.current);
         setRows((prev) =>
           Object.fromEntries(
             Object.values(prev).map((r) => [
@@ -182,27 +220,34 @@ function TypingRaceInner() {
     if (phase === "racing") inputRef.current?.focus();
   }, [phase, idx]);
 
+  // 문장별 카운트다운 표시 (받아쓰기/스크램블과 동일 패턴)
+  useEffect(() => {
+    if (phase !== "racing") return;
+    const t = setInterval(() => {
+      setTimeLeft(
+        Math.max(0, Math.ceil((deadlineRef.current - Date.now()) / 1000)),
+      );
+    }, 250);
+    return () => clearInterval(t);
+  }, [phase]);
+
   const sentences = start?.sentences ?? [];
   const target = sentences[idx]?.en ?? "";
   const targetKo = sentences[idx]?.ko ?? "";
-
-  function correctPrefixLen(value: string): number {
-    let n = 0;
-    while (n < value.length && value[n] === target[n]) n += 1;
-    return n;
-  }
+  // 공백 무시 매칭 — 렌더/전송이 같은 결과를 쓰도록 한 번만 계산
+  const typedMatch = matchIgnoringSpaces(typed, target);
 
   function onType(value: string) {
     if (phase !== "racing" || myDone) return;
-    if (
-      value.length > prevLenRef.current &&
-      value[value.length - 1] !== target[value.length - 1]
-    ) {
+    const info = matchIgnoringSpaces(value, target);
+    const typedLen = stripSpaces(value).length;
+    // 오타 카운트 — 공백 입력은 무시, 새 글자가 매치를 늘리지 못하면 오타
+    if (typedLen > prevLenRef.current && info.wrong > 0) {
       errorsRef.current += 1;
     }
-    prevLenRef.current = value.length;
+    prevLenRef.current = typedLen;
 
-    const prefix = correctPrefixLen(value);
+    const prefix = info.prefix;
     // 진행 중계는 2자 이상 변할 때만 — 메시지 폭주 방지
     if (Math.abs(prefix - lastSentRef.current) >= 2) {
       lastSentRef.current = prefix;
@@ -218,7 +263,7 @@ function TypingRaceInner() {
       },
     }));
 
-    if (value === target) {
+    if (info.matched === stripSpaces(target).length) {
       socketRef.current?.tpDone(idx, target.length, errorsRef.current);
       setMyDone(true);
       setTyped("");
@@ -251,8 +296,17 @@ function TypingRaceInner() {
           <span className="hl">영문 타자연습</span>
         </h1>
         {phase === "racing" && start && (
-          <span className="ml-auto rounded-full bg-white px-3 py-1 text-sm font-bold shadow-sm">
-            {idx + 1} / {start.total}
+          <span className="ml-auto flex items-center gap-2">
+            <span
+              className={`rounded-full px-3 py-1 text-sm font-bold shadow-sm ${
+                timeLeft <= 10 ? "bg-brick-red/15 text-brick-red" : "bg-white"
+              }`}
+            >
+              {timeLeft}초
+            </span>
+            <span className="rounded-full bg-white px-3 py-1 text-sm font-bold shadow-sm">
+              {idx + 1} / {start.total}
+            </span>
           </span>
         )}
       </header>
@@ -270,7 +324,10 @@ function TypingRaceInner() {
               </li>
               <li>
                 <b>전원이 완성하면 다음 문장</b>으로 — 총 10문장, 문장당 최대
-                30초
+                1분
+              </li>
+              <li>
+                <b>띄어쓰기(공백)는 안 쳐도 돼요</b> — 정답 체크에서 무시돼요
               </li>
               <li>
                 플레이어마다 진행 줄과 <b>WPM(타속)</b>이 실시간으로 표시돼요
@@ -397,14 +454,18 @@ function TypingRaceInner() {
           {/* 샘플 문장 — 모두가 같은 문장을 침 */}
           <div className="rounded-lg border-2 border-ink/10 bg-white p-5 font-mono text-lg leading-relaxed">
             {target.split("").map((ch, i) => {
-              const prefix = correctPrefixLen(typed);
+              // 공백 무시 매칭 — 정타는 원문 prefix, 오타는 그 뒤로 오타 수만큼
+              const wrongEnd = Math.min(
+                target.length,
+                typedMatch.prefix + typedMatch.wrong,
+              );
               const state = myDone
                 ? "correct"
-                : i < prefix
+                : i < typedMatch.prefix
                   ? "correct"
-                  : i < typed.length
+                  : i < wrongEnd
                     ? "wrong"
-                    : i === typed.length
+                    : i === wrongEnd
                       ? "cursor"
                       : "rest";
               return (
