@@ -172,7 +172,7 @@ export interface StudyDeck {
   due: number;
   new_available: number;
   total_cards: number;
-  /** "갈아 넣기" 루틴 완료 단계 수 0~6 — 시작한 여정 상기 (content-routine.md) */
+  /** 정복(루틴) 완료 단계 수 0~6 — 시작한 여정 상기 (content-routine.md) */
   routine_done: number;
 }
 

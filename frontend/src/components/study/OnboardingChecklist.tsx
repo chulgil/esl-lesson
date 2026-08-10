@@ -10,7 +10,7 @@ import { studyApi, type Stats } from "@/lib/study-api";
  *  (docs/proposal/effectiveness-audit-2026-08.md 구멍 4).
  *
  *  이전엔 첫 학습·친구 추가 2항목이었다 — 친구 추가는 학습 핵심이 아니라
- *  신규 사용자가 이 앱의 학습법(영상 갈아 넣기·리마인더)을 만나지 못했다.
+ *  신규 사용자가 이 앱의 학습법(영상 정복 루틴·리마인더)을 만나지 못했다.
  *  "영상 등록" 단계는 여전히 제외 (2026-07-28: 관리자 전용 사양이라 달성 불가).
  *  친구 추가는 학습 3단계를 끝낸 뒤에만 꺼낸다. */
 /** 레벨 확인 1탭 — 라이브러리 기본 필터·게임 추천이 이 값을 따른다
@@ -87,8 +87,8 @@ export function OnboardingChecklist({ stats }: { stats: Stats }) {
       done: totalCards > 0,
     },
     {
-      label: "영상 한 편 갈아 넣기 시작",
-      desc: "영상 한 편을 6단계로 갈아 넣는 게 이 앱의 학습법이에요",
+      label: "영상 한 편 정복 시작하기",
+      desc: "한 영상을 듣기→분석→따라 말하기·요약 6단계로 완전히 내 것으로 만들어요",
       href: "/library",
       done: routineStarted,
     },

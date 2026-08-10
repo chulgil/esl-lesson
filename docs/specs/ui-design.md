@@ -146,7 +146,7 @@
 | 단계 | 완료 판정 | 링크 |
 |---|---|---|
 | ① 첫 학습 시작하기 | `stats.levels` 의 `cards` 합 > 0 | `/study/session` |
-| ② 영상 한 편 갈아 넣기 시작 | `/api/study/decks` 의 덱 중 `routine_done > 0` | `/library` |
+| ② 영상 한 편 정복 시작하기 (구 '갈아 넣기' — 2026-08-10 사용자 피드백으로 개칭) | `/api/study/decks` 의 덱 중 `routine_done > 0` | `/library` |
 | ③ 복습 리마인더 시각 정하기 | `/api/settings` 의 `push_subscribed` (내 기기 구독 1개 이상 — 서버 파생) | `/settings` |
 
 - **③ 은 VAPID 미설정 환경에서 숨긴다** — `/api/push/config` 의 `enabled=false` 면 달성 불가능한 단계라 영구 미완료로 남는다 (관리자 전용이 된 "영상 등록" 단계를 2026-07-28 에 제거한 것과 같은 이유).

@@ -177,7 +177,7 @@ export function RoutineGuide({
   return (
     <section className="rounded-xl border-2 border-brick-blue/40 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-baseline gap-2">
-        <h2 className="font-hand text-2xl font-bold">이 영상 갈아 넣기</h2>
+        <h2 className="font-hand text-2xl font-bold">이 영상 완전 정복</h2>
         <span className="text-xs opacity-60">
           듣기 → 분석 → 체화, 한 편을 끝까지
         </span>

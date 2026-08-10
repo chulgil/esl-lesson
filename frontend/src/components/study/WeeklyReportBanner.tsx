@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { UsageBeacon } from "@/components/UsageBeacon";
 import { studyApi, type WeeklyReport } from "@/lib/study-api";
 
 /** 주간 성적표 홈 배너 — 새 성적표가 나온 주의 첫 방문에 1회
@@ -39,6 +40,7 @@ export function WeeklyReportBanner() {
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border-2 border-brick-yellow/60 bg-highlight/30 px-4 py-2.5 text-sm">
+      <UsageBeacon kind="weekly_report_view" meta={{ surface: "home_banner" }} />
       <span>
         지난주 성적표가 나왔어요 — 복습 <b>{report.reviews}개</b>
         {report.reviews_delta !== 0 && (

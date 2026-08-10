@@ -510,6 +510,7 @@ function ScrambleInner() {
             ))}
           <ReviewPanel
             items={review}
+            source="scramble"
             noun="문장"
             hint="추가한 문장은 학습 큐에 들어가요 — 문장 카드는 학습 레벨 '고급'에서 출제돼요"
           />

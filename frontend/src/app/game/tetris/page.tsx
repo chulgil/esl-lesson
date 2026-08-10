@@ -322,6 +322,7 @@ function TetrisInner() {
           />
           <ReviewPanel
             items={review}
+            source="tetris"
             hint="추가한 단어는 오늘의 학습 큐에 들어가요 — 복습할 때가 된 단어는 다음 대전에도 우선 나와요"
           />
         </div>

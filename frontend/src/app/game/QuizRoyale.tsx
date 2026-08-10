@@ -292,7 +292,7 @@ export function QuizRoyale({
               </li>
             ))}
           </ol>
-          <ReviewPanel items={review} />
+          <ReviewPanel items={review} source="quiz" />
           <div className="flex flex-wrap items-center gap-3">
             <Brick color="blue" onClick={onExit}>
               로비로

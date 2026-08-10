@@ -52,4 +52,4 @@ Anki 의 "덱별 학습 계획"을 담기(구독) 구조 위에 얹는다. **덱
 | 세션 `/study/session?content=ID` | 큐 API 에 `content_id` 전달, 헤더에 덱 이름 표기. 전체 학습이면 기존 그대로 |
 
 
-덱 응답 `routine_done`(0~6, 2026-08-06): 갈아 넣기 루틴 진행 — 학습 탭이 진행 브릭과 라이브러리 상세 링크로 표시 (content-routine.md).
+덱 응답 `routine_done`(0~6, 2026-08-06): 정복 루틴 진행 — 학습 탭이 진행 브릭과 라이브러리 상세 링크로 표시 (content-routine.md).
