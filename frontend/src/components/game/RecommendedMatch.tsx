@@ -18,6 +18,10 @@ export function RecommendedMatch() {
       .catch(() => undefined);
   }, []);
   if (!stats) return null;
+  // 카드 0장(신규)은 추천 숨김 — "오늘 복습 완료!" 거짓 카피 방지 + 게임 소재도
+  // 아직 부족한 상태 (2026-08-10 기획 감사)
+  const totalCards = stats.levels.reduce((sum, lv) => sum + lv.cards, 0);
+  if (totalCards === 0) return null;
 
   const rec =
     stats.weak_count >= 3

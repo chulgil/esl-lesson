@@ -181,9 +181,13 @@ class BingoManager:
     # --- 플레이 ---
 
     async def tap(self, user_id: int, no: int, item_id: int) -> None:
-        """보드 칸 탭 — 서버 권위 판정. 오답은 재시도 허용 (클라가 1초 잠금)."""
+        """보드 칸 탭 — 서버 권위 판정. 오답은 재시도 허용 (클라가 1초 잠금).
+
+        no < 0 가드 (2026-08-10 리뷰): round_no 는 카운트다운·정답 공개 동안 -1 —
+        기본값 no=-1 탭이 음수 인덱스로 마지막 호출 단어를 선채움하던 구멍.
+        """
         session = self._session_of(user_id)
-        if session is None or not session.started or no != session.round_no:
+        if session is None or not session.started or no < 0 or no != session.round_no:
             return
         player = next((p for p in session.players if p.user_id == user_id), None)
         if player is None or player.done_current:
@@ -282,6 +286,9 @@ class BingoManager:
                     p.done_current for p in session.players
                 ):
                     await asyncio.sleep(TICK)
+                # 라운드 마감 — 정답 공개(reveal) 동안의 탭이 정답 처리되던 구멍
+                # (2026-08-10 리뷰: 공개 후 1.5초간 공짜 크레딧 + missed/filled 이중 기록)
+                session.round_no = -1
                 for p in session.players:
                     if item_id not in p.filled:
                         p.missed.append(item_id)

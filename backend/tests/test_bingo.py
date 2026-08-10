@@ -84,6 +84,26 @@ async def test_tap_correct_fills_and_wrong_counts(wired_db):  # noqa: F811
     manager._cleanup(session)
 
 
+async def test_tap_rejected_outside_round_window(wired_db):  # noqa: F811
+    """카운트다운(no=-1)·정답 공개 중 탭 무효 (2026-08-10 리뷰).
+
+    round_no 는 카운트다운·reveal 동안 -1 — 기본값 no=-1 탭이 음수 인덱스로
+    마지막 호출 단어를 선채움하고, 공개된 정답이 공짜 크레딧이 되던 구멍.
+    """
+    user, manager, sender, session = await _start_solo(wired_db)
+    player = session.players[0]
+    last_word = session.call_order[-1]
+    assert session.round_no == -1  # 카운트다운 상태
+    await manager.tap(user.id, no=-1, item_id=last_word)
+    assert last_word not in player.filled  # 선채움 차단
+
+    current = session.call_order[0]
+    session.round_no = -1  # _run 이 reveal 직전 라운드를 마감한 상태
+    await manager.tap(user.id, no=0, item_id=current)
+    assert current not in player.filled  # 공개 후 크레딧 차단
+    manager._cleanup(session)
+
+
 async def test_finish_ranks_and_sends_missed_review(wired_db):  # noqa: F811
     user, manager, sender, session = await _start_solo(wired_db)
     player = session.players[0]
