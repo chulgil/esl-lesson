@@ -162,7 +162,7 @@ n/N" 요약 줄 하나만 남긴다(홈으로 유도).
 | 3 | 학습 탭 — 중복 CTA → 오늘 진행 요약 줄, 컬렉션 수용 | `app/study/page.tsx` | **코드 완료 · 빌드 미검증** |
 | 4 | 신규 사용자 CTA 분기(담은 콘텐츠 0 → 라이브러리) | `app/page.tsx` | **코드 완료 · 빌드 미검증** |
 | 5 | 라이브러리 "담은 것" 탭 + `/my` 흡수 | `app/library/page.tsx`, `app/my/page.tsx` | 미착수 (탭 하이라이트만 `/my` 포함) |
-| 6 | 게임 "오늘의 추천 한 판" | `app/game/page.tsx` | 미착수 |
+| 6 | 게임 "오늘의 추천 한 판" | `app/game/page.tsx` | 미착수 — **P0 격상** (effectiveness-audit 4차 2026-08-10, 게임-복습 편입 P0-A) |
 | 7 | 테마 체크리스트에 `NAV_LABEL_OF` 반영 | `.claude/rules/theme-addition.md` | **완료** |
 | 8 | 온보딩 체크리스트 조건부·축하 토스트화 | `OnboardingChecklist.tsx`, `StreakCelebration.tsx` | 미착수 |
 
