@@ -159,7 +159,7 @@ export default function StudyHubPage() {
                         </span>
                       )}
                     </p>
-                    {/* 갈아 넣기 진행 — 시작한 여정을 데일리 동선에서 상기
+                    {/* 정복 진행 — 시작한 여정을 데일리 동선에서 상기
                         (effectiveness-audit 2차: 상세에만 있으면 잊힌다) */}
                     <Link
                       href={`/library/${deck.content_id}`}
@@ -179,10 +179,10 @@ export default function StudyHubPage() {
                       </span>
                       <span className="font-bold">
                         {deck.routine_done === 0
-                          ? "갈아 넣기 시작 →"
+                          ? "정복 시작 →"
                           : deck.routine_done >= 6
-                            ? "갈아 넣기 완주!"
-                            : `갈아 넣는 중 ${deck.routine_done}/6 →`}
+                            ? "완전 정복!"
+                            : `정복 중 ${deck.routine_done}/6 →`}
                       </span>
                     </Link>
                   </div>

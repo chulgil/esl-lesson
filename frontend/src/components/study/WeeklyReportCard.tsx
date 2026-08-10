@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { UsageBeacon } from "@/components/UsageBeacon";
 import { studyApi, type WeeklyReport } from "@/lib/study-api";
 
 /** 주간 성적표 카드 — "지난주의 나 vs 그 전주의 나" (docs/specs/weekly-report.md).
@@ -16,7 +17,7 @@ function fmtDelta(delta: number): string | null {
 function nextWeekTip(r: WeeklyReport): string {
   if (r.reviews_delta < 0) return "이번 주엔 하루 1개부터 다시 시작해요";
   if (r.routine_steps === 0)
-    return "이번 주엔 영상 1편 갈아 넣기를 시작해보세요";
+    return "이번 주엔 영상 1편 정복을 시작해보세요";
   if (!r.listen)
     return "루틴 끝의 재청취 체크로 “들리게 됐다”는 증거를 남겨보세요";
   return "지난주 리듬 그대로 — 하루 15개면 충분해요";
@@ -68,6 +69,7 @@ export function WeeklyReportCard() {
 
   return (
     <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-yellow/60 bg-white p-5 shadow-sm">
+      <UsageBeacon kind="weekly_report_view" meta={{ surface: "study_tab" }} />
       <div className="flex flex-wrap items-baseline gap-2">
         <h2 className="font-hand text-2xl font-bold">지난주 성적표</h2>
         <span className="text-xs opacity-60">

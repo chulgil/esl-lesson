@@ -440,6 +440,7 @@ function BingoInner() {
           ))}
           <ReviewPanel
             items={review}
+            source="bingo"
             hint="놓친 단어예요 — 담으면 오늘의 학습 큐에 들어가고 다음 판에도 우선 나와요"
           />
           <div className="flex flex-wrap gap-3">

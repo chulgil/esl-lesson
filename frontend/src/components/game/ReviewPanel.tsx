@@ -3,16 +3,20 @@
 import { useState } from "react";
 import type { GameReviewItem } from "@/lib/game-ws";
 import { studyApi } from "@/lib/study-api";
+import { logUsage } from "@/lib/usage";
 
 /** 게임 오답 원탭 학습 패널 — *.review 개인 메시지의 items 표시 (quiz-royale.md) */
 export function ReviewPanel({
   items,
   noun = "단어",
   hint = "추가한 단어는 오늘의 학습 큐에 새 카드로 들어가요",
+  source = "unknown",
 }: {
   items: GameReviewItem[];
   noun?: string;
   hint?: string;
+  /** 어느 게임에서 담았는가 — 사용 이벤트 meta (P1-D) */
+  source?: string;
 }) {
   const [added, setAdded] = useState<Record<number, boolean>>({});
 
@@ -22,6 +26,7 @@ export function ReviewPanel({
     try {
       await studyApi.addCard(itemId);
       setAdded((prev) => ({ ...prev, [itemId]: true }));
+      logUsage("review_add", { game: source });
     } catch {
       // 실패 시 버튼 유지 — 다시 탭해 재시도
     }

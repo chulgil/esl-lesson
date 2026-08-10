@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
+import { UsageBeacon } from "@/components/UsageBeacon";
 
 export const metadata: Metadata = {
   title: "이 앱이 영어를 늘리는 방법 — ESL Lessonaza",
@@ -27,19 +28,20 @@ const RINGS: { no: string; ring: string; title: string; body: string }[] = [
     no: "3",
     ring: "아웃풋",
     title: "입으로 꺼내야 내 것이 돼요",
-    body: "영상 한 편을 6단계로 갈아 넣습니다 — 듣기(자막 없이·중심 찾기), 분석(문장 직해·카드 학습), 체화(섀도잉·한 문장 요약). 문장을 클릭하면 그 구간만 반복 재생되고, 내 발음을 녹음해 원어민 음성과 그 자리에서 비교할 수 있어요.",
+    body: "영상 한 편을 듣기(자막 없이·중심 찾기) → 분석(문장 직해·카드 학습) → 체화(섀도잉·한 문장 요약)의 6단계로 정복합니다. 문장을 클릭하면 그 구간만 반복 재생되고, 내 발음을 녹음해 원어민 음성과 그 자리에서 비교할 수 있어요.",
   },
   {
     no: "4",
     ring: "증거",
     title: "안 들리던 영상이 들리는 걸 확인해요",
-    body: "같은 영상을 처음 들었을 때와 갈아 넣은 뒤에 각각 얼마나 들렸는지 스스로 체크합니다. 점수·XP 같은 앱 안의 숫자가 아니라, 어제는 안 들리던 게 오늘 들린다는 본인의 감각이 남습니다.",
+    body: "같은 영상을 처음 들었을 때와 정복을 마친 뒤에 각각 얼마나 들렸는지 스스로 체크합니다. 점수·XP 같은 앱 안의 숫자가 아니라, 어제는 안 들리던 게 오늘 들린다는 본인의 감각이 남습니다.",
   },
 ];
 
 export default function MethodPage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
+      <UsageBeacon kind="method_view" />
       <header className="mb-6 flex flex-wrap items-center gap-4">
         <BackLink href="/" label="홈" />
         <h1 className="font-hand text-3xl font-bold sm:text-4xl">
@@ -82,7 +84,7 @@ export default function MethodPage() {
             첫 주엔 이만큼이면 돼요
           </h2>
           <p className="mt-2 text-sm leading-relaxed">
-            <b>하루 15개 복습 + 영상 1편 갈아 넣기</b>면 충분해요. 바쁜 날은
+            <b>하루 15개 복습 + 영상 1편 정복 시작</b>이면 충분해요. 바쁜 날은
             줄여도 됩니다 — <b>1개만 해도 스트릭은 이어져요.</b> 복습 리마인더
             시각을 정해두면 그 시각에 알림이 도착해요.
           </p>

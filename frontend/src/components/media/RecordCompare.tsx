@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { logUsage } from "@/lib/usage";
 
 /** 말하기 녹음 즉석 비교 — 내 발음 vs 원어민 (effectiveness-audit P2 격상분).
  *
@@ -58,6 +59,7 @@ export function RecordCompare({
       recorderRef.current = recorder;
       recorder.start();
       setState("recording");
+      logUsage("record_compare");
     } catch {
       setState("denied"); // 마이크 권한 거부
     }
