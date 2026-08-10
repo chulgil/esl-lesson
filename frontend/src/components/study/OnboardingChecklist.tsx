@@ -13,12 +13,26 @@ import { studyApi, type Stats } from "@/lib/study-api";
  *  신규 사용자가 이 앱의 학습법(영상 갈아 넣기·리마인더)을 만나지 못했다.
  *  "영상 등록" 단계는 여전히 제외 (2026-07-28: 관리자 전용 사양이라 달성 불가).
  *  친구 추가는 학습 3단계를 끝낸 뒤에만 꺼낸다. */
+/** 레벨 확인 1탭 — 라이브러리 기본 필터·게임 추천이 이 값을 따른다
+ *  (proposal/level-fit-library-2026-08.md P1). 입문(1)도 초급 밴드로 표시. */
+const LEVEL_CHOICES = [
+  { label: "초급", studyLevel: 2 },
+  { label: "중급", studyLevel: 3 },
+  { label: "고급", studyLevel: 4 },
+] as const;
+
+function levelBand(studyLevel: number): number {
+  if (studyLevel <= 2) return 2;
+  return studyLevel === 3 ? 3 : 4;
+}
+
 export function OnboardingChecklist({ stats }: { stats: Stats }) {
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [routineStarted, setRoutineStarted] = useState<boolean | null>(null);
   // null = 로딩 중. reminderReady=false 면 VAPID 미설정 환경 — 단계 자체를 숨긴다
   const [reminderDone, setReminderDone] = useState<boolean | null>(null);
   const [reminderReady, setReminderReady] = useState<boolean | null>(null);
+  const [studyLevel, setStudyLevel] = useState<number | null>(null);
 
   useEffect(() => {
     friendsApi
@@ -33,12 +47,26 @@ export function OnboardingChecklist({ stats }: { stats: Stats }) {
       .catch(() => setRoutineStarted(false));
     studyApi
       .getSettings()
-      .then((s) => setReminderDone(s.push_subscribed))
+      .then((s) => {
+        setReminderDone(s.push_subscribed);
+        setStudyLevel(s.study_level);
+      })
       .catch(() => setReminderDone(false));
     pushEnabled()
       .then(setReminderReady)
       .catch(() => setReminderReady(false));
   }, []);
+
+  async function pickLevel(next: number) {
+    if (studyLevel !== null && levelBand(studyLevel) === next) return;
+    const prev = studyLevel;
+    setStudyLevel(next); // 낙관적 반영 — 실패 시 원복
+    try {
+      await studyApi.patchSettings({ study_level: next });
+    } catch {
+      setStudyLevel(prev);
+    }
+  }
 
   if (
     friendCount === null ||
@@ -109,6 +137,29 @@ export function OnboardingChecklist({ stats }: { stats: Stats }) {
           이 앱이 영어를 늘리는 방법 →
         </Link>
       </div>
+      {/* 레벨 확인 1탭 — 첫 학습 전에 내 레벨을 정하면 라이브러리·게임이 그 레벨을 따라온다 */}
+      {studyLevel !== null && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="opacity-60">내 레벨:</span>
+          {LEVEL_CHOICES.map((choice) => (
+            <button
+              key={choice.studyLevel}
+              type="button"
+              onClick={() => pickLevel(choice.studyLevel)}
+              className={`min-h-8 rounded-full border-2 px-2.5 py-0.5 font-bold transition ${
+                levelBand(studyLevel) === choice.studyLevel
+                  ? "border-brick-blue bg-brick-blue/10 text-brick-blue"
+                  : "border-ink/15 bg-white hover:border-brick-blue/50"
+              }`}
+            >
+              {choice.label}
+            </button>
+          ))}
+          <span className="opacity-50">
+            라이브러리가 이 레벨 영상을 먼저 보여줘요
+          </span>
+        </div>
+      )}
       <ul className="mt-2 flex flex-col gap-1.5">
         {steps.map((step) => (
           <li key={step.label}>
