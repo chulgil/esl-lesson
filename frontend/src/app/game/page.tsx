@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MyBests } from "@/components/game/MyBests";
+import { RecommendedMatch } from "@/components/game/RecommendedMatch";
 import { WeeklyLeaderboardsCard } from "@/components/game/WeeklyLeaderboardsCard";
 
 /** 게임 허브 — 종류별 카테고리 메뉴 + 게임 설명 (2026-07-14 개편) */
@@ -72,6 +73,18 @@ const GAMES: {
     color: "border-ink/25",
   },
   {
+    href: "/game/bingo",
+    name: "리스닝 빙고",
+    tagline: "음성으로 불러주는 단어를 보드에서 찾는 듣기 빙고",
+    players: "1인(듣기 기록) · 2~4인(방 초대)",
+    how: [
+      "단어를 음성으로만 불러줘요 — 내 4x4 보드에서 찾아 탭",
+      "모두 같은 16단어, 배치만 달라요 — 한 줄을 먼저 만들면 빙고 승리",
+      "복습할 때가 된 단어가 우선 나와요 — 놓친 단어는 원탭으로 학습 담기",
+    ],
+    color: "border-brick-yellow/50",
+  },
+  {
     href: "/game/typing",
     name: "영문 타자연습",
     tagline: "같은 문장을 동시에 치는 타이핑 레이스",
@@ -97,6 +110,8 @@ export default function GameHubPage() {
         </p>
         <MyBests />
       </header>
+
+      <RecommendedMatch />
 
       <div className="mt-6 grid max-w-4xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {GAMES.map((game) => (

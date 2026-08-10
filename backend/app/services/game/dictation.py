@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 Sender = Callable[[dict], Awaitable[None]]
 
 SENTENCE_COUNT = 6
-SENTENCE_SECONDS = 45.0  # 듣기 반복 + 타이핑 시간
+SENTENCE_SECONDS = 60.0  # 듣기 반복 + 타이핑 시간 — 문장형 게임 공통 최대 1분 (2026-08-10)
 REVEAL_SECONDS = 4.0  # 라운드 사이 정답 공개 시간
 COUNTDOWN_SECONDS = 3.0
 TICK = 0.1

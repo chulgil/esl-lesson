@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 Sender = Callable[[dict], Awaitable[None]]
 
 SENTENCE_COUNT = 8
-SENTENCE_SECONDS = 40.0  # 어순 판단은 타이핑보다 사고 시간이 필요
+SENTENCE_SECONDS = 60.0  # 어순 판단 사고 시간 — 문장형 게임 공통 최대 1분 (2026-08-10)
 COUNTDOWN_SECONDS = 3.0
 TICK = 0.1
 MAX_PLAYERS = 4

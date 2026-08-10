@@ -180,6 +180,28 @@ def test_word_queue_seeded_shuffle_is_deterministic():
     assert q1 != q3 or len(WORDS) <= 1
 
 
+def test_word_queue_puts_priority_items_first():
+    """P0-A 게임-복습 편입: due·최근 오답 항목이 큐 앞으로 (effectiveness-audit 4차).
+
+    파티션 안에서는 셔플 순서 유지 — 공정성(양 플레이어 동일 큐)·결정성 불변.
+    """
+    words = [(i, f"word{i:02d}", f"뜻{i:02d}") for i in range(1, 21)]
+    priority = {3, 8, 15}
+    q1 = build_word_queue(words, seed=42, priority=priority)
+    q2 = build_word_queue(words, seed=42, priority=priority)
+    assert q1 == q2  # 결정적
+    assert {w[0] for w in q1[:3]} == priority  # 우선 항목이 맨 앞
+    plain = build_word_queue(words, seed=42)
+    assert sorted(q1) == sorted(plain)  # 구성은 동일, 순서만 당김
+
+
+def test_spawned_brick_carries_word_id():
+    """브릭이 학습 항목 id 를 보유 — 종료 시 못 지운 단어를 복습 항목으로 회수."""
+    board = make_board()
+    tick_until_spawn(board)
+    assert board.bricks[0].word_id == board.word_queue[0][0]
+
+
 def test_bot_eventually_clears_bricks():
     board = make_board()
     bot = Bot.create(level=3, seed=1)
@@ -265,51 +287,73 @@ def test_all_levels_are_tap_mode():
     assert snap["bricks"][0]["chip"] == brick.answer  # 탭 대상이므로 칩 노출
 
 
-def test_ko2en_chips_offer_multiple_english_options():
-    """한→영 구간에 영어 칩이 1개뿐이면 고를 게 없어 학습 효과가 없다 (2026-08-03 보고).
+def test_chip_groups_by_danger_order_sizes_3_3_2():
+    """학습카드式 보기 (2026-08-10 기획): 위험한 브릭 순 3개에 3+3+2 그룹, 총 8개 이하.
 
-    구간 전환 직후엔 이전 en2ko 브릭(한글 칩)이 남아 칩 총량이 4를 넘는데,
-    그 탓에 영어 칩 보충이 건너뛰어져 정답 1개만 노출됐다.
+    4번째 이후 브릭의 정답은 아직 안 나온다 — 앞 브릭을 지우면 차례가 온다.
     """
-    from app.services.game.engine import build_chips
+    board = bilingual_board()
+    for i in range(4):
+        board.bricks.append(
+            Brick(
+                brick_id=400 + i,
+                en=f"word{i:02d}",
+                ko=f"뜻{i:02d}",
+                y=float(BOARD_ROWS - i),
+                landed=True,
+            )
+        )
+    snap = board.snapshot()
+    groups = snap["chip_groups"]
+    assert [len(g) for g in groups] == [3, 3, 2]
+    assert len(snap["chips"]) <= 8
+    assert "뜻00" in groups[0]  # 가장 아래(위험) 브릭의 학습카드 보기
+    assert "뜻01" in groups[1]
+    assert "뜻02" in groups[2]
+    assert "뜻03" not in snap["chips"]  # 4번째 브릭 정답은 오답으로도 안 씀
 
-    chips = build_chips(["뜻01", "뜻02", "뜻03"], ["apple"])
-    en_chips = [c for c in chips if c.isascii()]
-    ko_chips = [c for c in chips if not c.isascii()]
-    assert len(en_chips) >= 4, f"영어 선택지가 부족: {en_chips}"
-    assert len(ko_chips) >= 4, f"한글 선택지가 부족: {ko_chips}"
-    assert "apple" in chips
+
+def test_chip_group_distractors_match_brick_language():
+    """그룹의 오답은 그 브릭 정답과 같은 언어 — ko2en 브릭엔 영어, en2ko 브릭엔 한글."""
+    board = bilingual_board()
+    board.bricks.append(
+        Brick(brick_id=500, en="word00", ko="뜻00", direction="ko2en", y=12.0, landed=True)
+    )
+    board.bricks.append(
+        Brick(brick_id=501, en="word01", ko="뜻01", direction="en2ko", y=11.0, landed=True)
+    )
+    groups = board.snapshot()["chip_groups"]
+    assert "word00" in groups[0] and all(c.isascii() for c in groups[0])
+    assert "뜻01" in groups[1] and all(not c.isascii() for c in groups[1])
 
 
-def test_ko2en_segment_snapshot_has_four_english_chips():
+def test_chip_groups_deterministic_across_snapshots():
+    """같은 보드 상태면 스냅샷마다 같은 보기 — 매 틱 흔들리면 탭할 수 없다."""
+    board = bilingual_board()
+    tick_until_spawn(board)
+    assert board.snapshot()["chip_groups"] == board.snapshot()["chip_groups"]
+
+
+def test_single_brick_gets_card_style_three_options():
+    """브릭 1개면 학습카드 1장과 동일 — 정답 1 + 오답 2 = 3지선다."""
+    board = bilingual_board()
+    tick_until_spawn(board)
+    brick = board.bricks[0]
+    snap = board.snapshot()
+    groups = snap["chip_groups"]
+    assert len(groups) == 1 and len(groups[0]) == 3
+    assert brick.answer in groups[0]
+    assert snap["chips"] == groups[0]  # 평탄화된 chips 는 그룹 순서 그대로
+
+
+def test_ko2en_segment_snapshot_offers_english_options():
     board = bilingual_board()
     board.elapsed = 65.0  # 레벨 2 → ko2en, tap
     tick_until_spawn(board)
     snap = board.snapshot()
     en_chips = [c for c in snap["chips"] if c.isascii()]
-    assert len(en_chips) >= 4
+    assert len(en_chips) >= 3  # 정답 + 오답 2 (학습카드式)
     assert board.bricks[0].en in en_chips
-
-
-def test_segment_switch_keeps_both_languages_choosable():
-    """구간 전환 직후 — 남은 한글 칩과 무관하게 영어 칩도 4개 이상 (실제 신고 시나리오)."""
-    board = bilingual_board()
-    board.elapsed = 30.0  # 레벨 1 → en2ko
-    for _ in range(3):
-        tick_until_spawn(board)
-        board.bricks[-1].y = 0.0  # 아직 살아있는 en2ko 브릭 유지
-        board.tick(0.1)
-    board.elapsed = 65.0  # 레벨 2 → ko2en 구간 진입 (이전 브릭 잔존)
-    before = len(board.bricks)
-    while len(board.bricks) == before:
-        board.tick(0.1)
-    snap = board.snapshot()
-    assert snap["direction"] == "ko2en"
-    ko_chips = [c for c in snap["chips"] if not c.isascii()]
-    en_chips = [c for c in snap["chips"] if c.isascii()]
-    assert len(ko_chips) >= 4 and len(en_chips) >= 4, snap["chips"]
-    ko2en_brick = next(b for b in board.bricks if b.direction == "ko2en")
-    assert ko2en_brick.en in en_chips
 
 
 def test_en2ko_snapshot_reveals_ko_chips():
@@ -317,7 +361,7 @@ def test_en2ko_snapshot_reveals_ko_chips():
     tick_until_spawn(board)
     snap = board.snapshot()
     assert snap["direction"] == "en2ko" and snap["input_mode"] == "tap"
-    assert len(snap["chips"]) >= 4  # 정답 뜻 + 오답 칩
+    assert len(snap["chips"]) >= 3  # 정답 뜻 + 오답 2 (학습카드式)
     assert board.bricks[0].ko in snap["chips"]
 
 

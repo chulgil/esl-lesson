@@ -30,6 +30,16 @@ def test_build_questions_choices_and_answer():
         assert q.item_id == int(q.en.removeprefix("word"))
 
 
+def test_build_questions_prefers_priority_items():
+    """P0-A 게임-복습 편입: due·최근 오답 항목이 출제에 우선 포함된다."""
+    rng = random.Random(7)
+    priority = {1, 5, 9, 13, 17}
+    questions = qr.build_questions(_pool(), rounds=10, rng=rng, priority=priority)
+    picked = {q.item_id for q in questions}
+    assert priority <= picked  # 우선 항목 전부 출제
+    assert len(questions) == 10  # 나머지는 일반 풀로 채움
+
+
 def test_score_for_speed_bonus():
     assert qr.score_for(0.0, limit=10.0) == 100
     assert qr.score_for(10.0, limit=10.0) == 50

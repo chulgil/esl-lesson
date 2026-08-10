@@ -198,6 +198,52 @@ async def test_pve_disconnect_forfeit_is_aborted_not_loss(wired_db, monkeypatch)
     assert row.status == "aborted"  # 패(finished+winner=bot)가 아니라 기록 제외
 
 
+async def test_pve_word_queue_prioritizes_due_cards(wired_db):
+    """P0-A 게임-복습 편입: due 도래 카드가 게임 큐 앞에 온다 (effectiveness-audit 4차)."""
+    from datetime import UTC, datetime, timedelta
+
+    user = await seed_user_and_words(wired_db)
+    cards = (
+        (await wired_db.execute(select(ReviewCard).where(ReviewCard.user_id == user.id)))
+        .scalars()
+        .all()
+    )
+    due_ids = {c.item_id for c in cards[:5]}
+    for card in cards:
+        if card.item_id not in due_ids:
+            card.due_at = datetime.now(UTC) + timedelta(days=3)  # 나머지는 미래 due
+    await wired_db.commit()
+
+    gm = GameManager()
+    session = await gm.join_pve(user.id, user.name, "en", bot_level=1, send=Collector())
+    session.task.cancel()
+    assert {w[0] for w in session.match.board1.word_queue[:5]} == due_ids
+    # 공정성: 봇 보드도 같은 큐
+    assert session.match.board1.word_queue == session.match.board2.word_queue
+    session.match.forfeit(1)
+
+
+async def test_match_review_returns_uncleared_words(wired_db):
+    """종료 시 못 지운 브릭이 match.review 로 온다 — 원탭 학습 추가 (P0-A)."""
+    user = await seed_user_and_words(wired_db)
+    gm = GameManager()
+    sender = Collector()
+    session = await gm.join_pve(user.id, user.name, "en", bot_level=1, send=sender)
+    session.task.cancel()
+    while len(session.match.board1.bricks) < 2:
+        session.match.tick(0.1)
+    remaining_ids = {b.word_id for b in session.match.board1.bricks if not b.is_garbage}
+    session.match.board2.add_garbage(12)  # 봇 KO → 종료
+    session.match.tick(0.1)
+    assert session.match.finished
+    await gm._finish(session)
+
+    review = next(m for m in sender.messages if m["t"] == "match.review")
+    assert {i["item_id"] for i in review["items"]} == remaining_ids
+    types = sender.types()
+    assert types.index("match.review") < types.index("match.end")  # 결과 화면에서 바로 담기
+
+
 async def test_use_item_via_manager(wired_db):
     user = await seed_user_and_words(wired_db)
     gm = GameManager()

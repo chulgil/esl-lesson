@@ -10,7 +10,7 @@ import secrets
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -22,6 +22,7 @@ from app.models import (
     ItemOccurrence,
     LearningItem,
     ReviewCard,
+    ReviewLog,
 )
 from app.services.game import records
 from app.services.game.bots import Bot
@@ -90,14 +91,20 @@ class GameManager:
     ) -> MatchSession:
         self._guard_not_in_match(user_id)
         words = await select_word_pool(user_id, content_ids)
+        priority = await safe_priority_items([user_id])
         seed = secrets.randbits(32)
         session = MatchSession(
             match_id=await self._create_match_row("pve", user_id, None, bot_level),
             mode="pve",
             quiz=quiz,
             match=Match(
-                board1=Board(word_queue=build_word_queue(words, seed), _rng_seed=seed),
-                board2=Board(word_queue=build_word_queue(words, seed), _rng_seed=seed + 1),
+                board1=Board(
+                    word_queue=build_word_queue(words, seed, priority=priority), _rng_seed=seed
+                ),
+                board2=Board(
+                    word_queue=build_word_queue(words, seed, priority=priority),
+                    _rng_seed=seed + 1,
+                ),
             ),
             players={1: PlayerSlot(user_id=user_id, name=name, send=send)},
             bot=Bot.create(bot_level, seed),
@@ -151,9 +158,11 @@ class GameManager:
             await send({"t": "error", "code": "room_not_found"})
             return
         words = await select_word_pool(session.players[1].user_id, session.content_ids)
+        # 두 플레이어 due·오답의 합집합 — 같은 큐를 쓰므로 공정성 유지 (P0-A)
+        priority = await safe_priority_items([session.players[1].user_id, user_id])
         seed = secrets.randbits(32)
-        session.match.board1.word_queue = build_word_queue(words, seed)
-        session.match.board2.word_queue = build_word_queue(words, seed)
+        session.match.board1.word_queue = build_word_queue(words, seed, priority=priority)
+        session.match.board2.word_queue = build_word_queue(words, seed, priority=priority)
         session.players[2] = PlayerSlot(user_id=user_id, name=name, send=send)
         self.by_user[user_id] = session.match_id
         del self.rooms[code.upper()]
@@ -164,14 +173,20 @@ class GameManager:
         self, uid1: int, name1: str, send1: Sender, uid2: int, name2: str, send2: Sender, quiz: str
     ) -> None:
         words = await load_public_word_pool()
+        priority = await safe_priority_items([uid1, uid2])
         seed = secrets.randbits(32)
         session = MatchSession(
             match_id=await self._create_match_row("pvp", uid1, uid2, None),
             mode="pvp",
             quiz=quiz,
             match=Match(
-                board1=Board(word_queue=build_word_queue(words, seed), _rng_seed=seed),
-                board2=Board(word_queue=build_word_queue(words, seed), _rng_seed=seed + 1),
+                board1=Board(
+                    word_queue=build_word_queue(words, seed, priority=priority), _rng_seed=seed
+                ),
+                board2=Board(
+                    word_queue=build_word_queue(words, seed, priority=priority),
+                    _rng_seed=seed + 1,
+                ),
             ),
             players={
                 1: PlayerSlot(user_id=uid1, name=name1, send=send1),
@@ -380,6 +395,18 @@ class GameManager:
         await self._save_result(session, winner_user_id, stats, aborted)
 
         for player_no, slot in session.players.items():
+            # 못 지운 브릭 = 복습이 필요한 단어 — 원탭 학습 추가용 (P0-A, 본인에게만)
+            if not aborted:
+                board = match.board1 if player_no == 1 else match.board2
+                items = review_items(
+                    [
+                        {"item_id": b.word_id, "en": b.en, "ko": b.ko}
+                        for b in board.bricks
+                        if not b.is_garbage and b.word_id
+                    ]
+                )
+                if items:
+                    await self._safe_send(slot, {"t": "match.review", "items": items})
             outcome = "draw"
             if winner_no is not None:
                 outcome = "win" if player_no == winner_no else "lose"
@@ -526,6 +553,47 @@ async def select_word_pool(
         # 빈 보드로 시작하는 크래시 방지 (2026-07-11 운영 실측) — 시작 전에 안내
         raise WordPoolError("words_insufficient")
     return pool
+
+
+async def priority_item_ids(user_ids: list[int]) -> set[int]:
+    """복습 우선 항목 — due 도래 카드 + 최근 7일 오답 카드의 item_id.
+
+    게임 단어 풀에서 이 항목들이 앞서 나온다 — 게임 한 판이 곧 복습
+    (P0-A 게임-복습 편입, effectiveness-audit 4차 2026-08-10).
+    """
+    now = datetime.now(UTC)
+    async with get_session_factory()() as db:
+        due = (
+            await db.execute(
+                select(ReviewCard.item_id).where(
+                    ReviewCard.user_id.in_(user_ids),
+                    ReviewCard.suspended.is_(False),
+                    ReviewCard.due_at <= now,
+                )
+            )
+        ).scalars()
+        wrong = (
+            await db.execute(
+                select(ReviewCard.item_id)
+                .join(ReviewLog, ReviewLog.card_id == ReviewCard.id)
+                .where(
+                    ReviewCard.user_id.in_(user_ids),
+                    ReviewCard.suspended.is_(False),
+                    ReviewLog.correct.is_(False),
+                    ReviewLog.reviewed_at >= now - timedelta(days=7),
+                )
+            )
+        ).scalars()
+    return set(due) | set(wrong)
+
+
+async def safe_priority_items(user_ids: list[int]) -> set[int]:
+    """우선 풀 조회 실패는 게임 시작을 막지 않는다 — 빈 셋 폴백."""
+    try:
+        return await priority_item_ids(user_ids)
+    except Exception:
+        logger.exception("priority pool lookup failed users=%s", user_ids)
+        return set()
 
 
 def review_items(entries: list[dict]) -> list[dict]:

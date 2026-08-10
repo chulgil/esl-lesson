@@ -25,12 +25,14 @@ logger = logging.getLogger(__name__)
 Sender = Callable[[dict], Awaitable[None]]
 
 SENTENCE_COUNT = 10
-SENTENCE_SECONDS = 30.0  # 문장당 제한 — 한 명이 멈춰도 레이스 진행
+SENTENCE_SECONDS = 60.0  # 문장당 제한 최대 1분 — 한 명이 멈춰도 레이스 진행 (2026-08-10 30→60)
 COUNTDOWN_SECONDS = 3.0
 TICK = 0.1
 MAX_PLAYERS = 4
 MIN_SENTENCES = 5
-MAX_SENTENCE_CHARS = 120
+MAX_SENTENCE_CHARS = (
+    80  # 긴 문장 금지 (2026-08-10 사용자) — 1분 안에 느린 타이피스트도 완주 가능한 길이
+)
 
 
 def wpm_for(chars: int, seconds: float) -> float:

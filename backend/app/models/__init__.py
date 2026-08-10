@@ -14,6 +14,7 @@ from app.models.content import (
 from app.models.exam import Exam, ExamAttempt, ExamQuestion
 from app.models.friend import Friendship
 from app.models.game import (
+    BingoMatch,
     DailyPuzzlePlay,
     DictationRace,
     GameMatch,
@@ -49,6 +50,7 @@ __all__ = [
     "GameMatch",
     "QuizRoyaleMatch",
     "QuizRoyalePlayer",
+    "BingoMatch",
     "ScrambleRace",
     "TypingRace",
     "ItemOccurrence",
