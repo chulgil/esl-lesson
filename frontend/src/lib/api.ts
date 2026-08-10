@@ -8,6 +8,8 @@ export interface Me {
   nickname: string;
   avatar_url: string | null;
   role: "admin" | "learner";
+  /** 가입일(ISO) — 온보딩 체크리스트 조건부 노출 판정 (ux-redesign #8) */
+  created_at: string | null;
 }
 
 export async function fetchMe(): Promise<Me | null> {

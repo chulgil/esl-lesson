@@ -135,8 +135,9 @@ function Dashboard({ me }: { me: Me }) {
       {/* 스트릭 마일스톤 축하 — 7·14·30일... 도달 첫 진입 1회 */}
       {stats && <StreakCelebration streakDays={stats.streak_days} />}
 
-      {/* 시작 체크리스트 — 오늘 할 일보다 아래 (기존 사용자의 첫 시선은 데일리 루프) */}
-      {stats && <OnboardingChecklist stats={stats} />}
+      {/* 시작 체크리스트 — 오늘 할 일보다 아래 (기존 사용자의 첫 시선은 데일리 루프).
+          조건부 노출: 카드 0장 또는 가입 3일 이내만 (ux-redesign #8) */}
+      {stats && <OnboardingChecklist stats={stats} joinedAt={me.created_at} />}
 
       {/* 누적 지표(카드 컬렉션·업적)는 학습 탭으로 이관 (2026-08-03 IA 정리) —
           홈은 "오늘 뭘 하지?" 한 질문만 답한다 */}

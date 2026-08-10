@@ -26,7 +26,17 @@ function levelBand(studyLevel: number): number {
   return studyLevel === 3 ? 3 : 4;
 }
 
-export function OnboardingChecklist({ stats }: { stats: Stats }) {
+/** 조건부 노출 (ux-redesign #8): 카드 0장(진짜 신규) 또는 가입 3일 이내만.
+ *  그 뒤엔 미완료 단계가 남아도 숨긴다 — 평상시 홈은 데일리 루프만. */
+const SHOW_DAYS_AFTER_JOIN = 3;
+
+export function OnboardingChecklist({
+  stats,
+  joinedAt,
+}: {
+  stats: Stats;
+  joinedAt: string | null;
+}) {
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [routineStarted, setRoutineStarted] = useState<boolean | null>(null);
   // null = 로딩 중. reminderReady=false 면 VAPID 미설정 환경 — 단계 자체를 숨긴다
@@ -78,6 +88,12 @@ export function OnboardingChecklist({ stats }: { stats: Stats }) {
   }
 
   const totalCards = stats.levels.reduce((sum, lv) => sum + lv.cards, 0);
+  // 조건부 노출 — 카드가 생겼고 가입 3일이 지나면 미완료 단계가 남아도 숨긴다
+  const joinedDaysAgo = joinedAt
+    ? (Date.now() - new Date(joinedAt).getTime()) / 86_400_000
+    : 0; // 가입일 미상(구 응답 캐시)은 신규 취급 — 숨겨서 잃는 쪽보다 안전
+  if (totalCards > 0 && joinedDaysAgo > SHOW_DAYS_AFTER_JOIN) return null;
+
   // 학습 핵심 3단계 — 이 순서가 곧 이 앱의 학습법이다
   const coreSteps = [
     {
