@@ -168,7 +168,10 @@ function BingoInner() {
   }, [phase]);
 
   function tapCell(itemId: number) {
-    if (phase !== "playing" || locked || round === null) return;
+    // reveal 중 잠금 (2026-08-10 리뷰) — 정답 공개를 보고 탭하는 공짜 크레딧 방지.
+    // 서버도 라운드를 마감해 거부하지만, 클라이언트가 잠가야 피드백 없는 탭이 없다
+    if (phase !== "playing" || locked || round === null || reveal !== null)
+      return;
     if (filled.has(itemId)) return;
     socketRef.current?.bgTap(round.no, itemId);
   }
@@ -371,7 +374,9 @@ function BingoInner() {
                 <button
                   key={cell.item_id}
                   type="button"
-                  disabled={done || locked || phase !== "playing"}
+                  disabled={
+                    done || locked || reveal !== null || phase !== "playing"
+                  }
                   onClick={() => tapCell(cell.item_id)}
                   className={`min-h-14 rounded-md border-2 px-1 py-2 text-xs font-bold break-all transition sm:min-h-16 sm:text-sm ${
                     done

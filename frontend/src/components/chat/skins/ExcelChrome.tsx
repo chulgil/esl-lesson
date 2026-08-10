@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { setChatPanelVisible } from "@/lib/chat-signals";
 
 /** 스프레드시트 창 크롬 — excelkospi 컨셉 (docs/specs/chat.md 위장 테마).
  *
@@ -46,6 +47,7 @@ export function ExcelChrome({
 }) {
   // 보스 긴급키 — Esc 2연타로 빈 시트 토글 (excelkospi 컨셉)
   const [bossMode, setBossMode] = useState(false);
+  const bossRef = useRef(false);
   const lastEsc = useRef(0);
 
   useEffect(() => {
@@ -53,14 +55,22 @@ export function ExcelChrome({
       if (e.key !== "Escape") return;
       const now = Date.now();
       if (now - lastEsc.current < BOSS_KEY_WINDOW_MS) {
-        setBossMode((v) => !v);
+        const next = !bossRef.current;
+        bossRef.current = next;
+        setBossMode(next);
+        // 보스 모드 = 접힘과 동일한 "안 보는 중" — 읽음 보류·알림 유지
+        // (2026-08-10 리뷰: 클릭 접기만 배선되고 보스키 경로 누락)
+        setChatPanelVisible(!next);
         lastEsc.current = 0;
       } else {
         lastEsc.current = now;
       }
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      setChatPanelVisible(true); // 화면 이탈 시 원복
+    };
   }, []);
 
   return (
