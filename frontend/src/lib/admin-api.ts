@@ -131,6 +131,11 @@ export const adminApi = {
       failed_contents: number;
       in_progress_contents: number;
       total_contents: number;
+      /** 공급 리듬 (P0-B) — 이번 주(월요일 KST) 등록 수 / 목표 주 2편 */
+      weekly_supply: number;
+      supply_goal: number;
+      /** ready 공용 콘텐츠의 레벨별 수 (파생 난이도 기준) */
+      levels: { beginner: number; intermediate: number; advanced: number };
     }>("/api/admin/dashboard"),
 
   listContents: (status?: string) =>
@@ -144,7 +149,12 @@ export const adminApi = {
   /** 사용자 콘텐츠 요청 — 등록 화면에서 수요 확인 (effectiveness-audit P0-3) */
   contentRequests: () =>
     request<{
-      items: { id: number; text: string; nickname: string; created_at: string }[];
+      items: {
+        id: number;
+        text: string;
+        nickname: string;
+        created_at: string;
+      }[];
     }>("/api/admin/contents/requests"),
 
   /** CC(creativeCommon)·자막 보유·영어 영상만 검색 — 등록 후보

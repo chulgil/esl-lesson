@@ -1,6 +1,6 @@
 """백오피스 콘텐츠/항목 API — 공용(public) 콘텐츠 전용 (docs/specs/backoffice.md)."""
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.models.user import User
 from app.services import youtube
+from app.services.content_difficulty import difficulty_by_content
 from app.services.content_service import (
     ContentCreate,
     content_detail,
@@ -357,9 +358,43 @@ async def dashboard(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
     total_contents = (
         await db.execute(select(func.count(Content.id)).where(Content.visibility == "public"))
     ).scalar_one()
+
+    # 공급 리듬 위젯 (P0-B, effectiveness-audit 4차): 약속(주 2편·초급 확보)이
+    # 4라운드 연속 미이행 — 사람 리마인더 대신 등록 화면이 현황을 상시 보여준다.
+    kst = timezone(timedelta(hours=9))
+    now_kst = datetime.now(kst)
+    monday_kst = (now_kst - timedelta(days=now_kst.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    weekly_supply = (
+        await db.execute(
+            select(func.count(Content.id)).where(
+                Content.visibility == "public",
+                Content.created_at >= monday_kst.astimezone(UTC),
+            )
+        )
+    ).scalar_one()
+    ready_ids = (
+        (
+            await db.execute(
+                select(Content.id).where(Content.visibility == "public", Content.status == "ready")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    difficulty = await difficulty_by_content(db, ready_ids)
+    levels = {"beginner": 0, "intermediate": 0, "advanced": 0}
+    for label in difficulty.values():
+        if label in levels:
+            levels[label] += 1
+
     return {
         "pending_items": pending_items,
         "failed_contents": failed_contents,
         "in_progress_contents": extracting,
         "total_contents": total_contents,
+        "weekly_supply": weekly_supply,
+        "supply_goal": 2,
+        "levels": levels,
     }

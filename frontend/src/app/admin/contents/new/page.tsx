@@ -99,13 +99,13 @@ export default function NewContentPage() {
       .catch(() => undefined);
   }, []);
 
-  async function searchCc(more = false) {
-    if (!ccQuery.trim()) return;
+  async function searchCc(more = false, query = ccQuery) {
+    if (!query.trim()) return;
     setCcSearching(true);
     setCcError(null);
     try {
       const res = await adminApi.ccSearch(
-        ccQuery.trim(),
+        query.trim(),
         more ? (ccNextToken ?? undefined) : undefined,
       );
       setCcItems((prev) =>
@@ -175,13 +175,39 @@ export default function NewContentPage() {
               {requests.length > 0 && (
                 <div className="mt-1 rounded bg-highlight/30 px-2 py-1.5 text-xs">
                   <span className="font-bold">사용자 요청:</span>{" "}
-                  {requests.map((r) => `"${r.text}"(${r.nickname})`).join(" · ")}
+                  {requests
+                    .map((r) => `"${r.text}"(${r.nickname})`)
+                    .join(" · ")}
                 </div>
               )}
               <p className="mb-2 text-xs opacity-60">
                 크리에이티브 커먼즈 + 자막 보유 영상만 검색돼요 — 선택하면 URL이
                 채워집니다
               </p>
+              {/* 초급 키워드 프리셋 (P0-B) — 검색어 고민 비용 제거, 초급 확보 가속 */}
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="font-bold opacity-60">초급 프리셋:</span>
+                {[
+                  "easy english conversation",
+                  "learn english slowly",
+                  "english podcast for beginners",
+                  "kids story in english",
+                  "beginner english lesson",
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    disabled={ccSearching}
+                    onClick={() => {
+                      setCcQuery(preset);
+                      searchCc(false, preset);
+                    }}
+                    className="rounded-full border-2 border-brick-green/40 bg-white px-2 py-0.5 transition hover:border-brick-green disabled:opacity-40"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
               <div className="flex gap-2">
                 <input
                   value={ccQuery}

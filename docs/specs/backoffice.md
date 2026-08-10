@@ -102,7 +102,7 @@
 | GET `/api/admin/items?type=&status=&q=&page=` | 전역 항목 검색 (50/페이지) |
 | PATCH `/api/admin/themes/{key}` | 테마 무료/제한 전환 — [theme-mall.md](theme-mall.md) |
 | GET `/api/admin/users` / PATCH `/api/admin/users/{id}` | 사용자 목록/역할 변경 |
-| GET `/api/admin/dashboard` | 대시보드 집계 |
+| GET `/api/admin/dashboard` | 대시보드 집계 — 공급 리듬 포함 (2026-08-10 P0-B): `weekly_supply`(이번 주 월요일 KST 기준 공용 등록 수)·`supply_goal`(2)·`levels`(ready 공용의 파생 난이도별 수). 대시보드 카드가 주 2편 미달·초급 5편 미달 시 빨간 강조, 등록 화면 CC 검색엔 초급 키워드 프리셋 5종 |
 | GET `/api/admin/youtube/cc-search?q=` | CC 영상 검색 (등록 후보) |
 | `/api/admin/themes*` | 테마 카탈로그·지급/회수 — [theme-mall.md](theme-mall.md) |
 

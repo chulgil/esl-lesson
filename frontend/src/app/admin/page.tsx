@@ -9,7 +9,13 @@ interface Stats {
   failed_contents: number;
   in_progress_contents: number;
   total_contents: number;
+  weekly_supply: number;
+  supply_goal: number;
+  levels: { beginner: number; intermediate: number; advanced: number };
 }
+
+/** 초급 확보 목표 — effectiveness-audit P0-3 (초급 5편) */
+const BEGINNER_GOAL = 5;
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -52,6 +58,19 @@ export default function AdminDashboardPage() {
             value={stats.total_contents}
             href="/admin/contents"
           />
+          {/* 공급 리듬 (P0-B) — 주 2편 약속을 사람 기억이 아니라 화면이 지킨다 */}
+          <StatCard
+            label="이번 주 공급 (목표 2편)"
+            value={`${stats.weekly_supply}/${stats.supply_goal}`}
+            href="/admin/contents/new"
+            alert={stats.weekly_supply < stats.supply_goal}
+          />
+          <StatCard
+            label={`초급 콘텐츠 (목표 ${BEGINNER_GOAL}편)`}
+            value={`${stats.levels.beginner} · 중 ${stats.levels.intermediate} · 고 ${stats.levels.advanced}`}
+            href="/admin/contents/new"
+            alert={stats.levels.beginner < BEGINNER_GOAL}
+          />
         </div>
       )}
     </section>
@@ -65,7 +84,7 @@ function StatCard({
   alert = false,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   href: string;
   alert?: boolean;
 }) {

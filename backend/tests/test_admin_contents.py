@@ -276,3 +276,19 @@ async def test_cc_search_requires_admin(client, db_session):
     client.cookies.set(SESSION_COOKIE, create_session_token(learner))
     res = await client.get("/api/admin/youtube/cc-search", params={"q": "x"})
     assert res.status_code == 403
+
+
+async def test_dashboard_supply_metrics(admin_client, db_session):
+    """공급 리듬 위젯 (P0-B): 이번 주 등록 수 + 레벨별 콘텐츠 수를 대시보드가 준다."""
+    from tests.test_contents_list_difficulty import add_segments, make_content
+
+    short = await make_content(db_session, "초급물", ["intermediate"] * 10)  # 힌트 1.0
+    await add_segments(db_session, short, ["Hi there.", "How are you?"])  # 짧은 문장 → 초급
+
+    res = await admin_client.get("/api/admin/dashboard")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["supply_goal"] == 2
+    assert body["weekly_supply"] >= 1  # 방금 등록분이 이번 주로 잡힘
+    assert body["levels"]["beginner"] >= 1
+    assert set(body["levels"]) == {"beginner", "intermediate", "advanced"}
