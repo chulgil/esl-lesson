@@ -21,6 +21,24 @@ export function getActiveChatRoom(): number | null {
   return activeRoomUserId;
 }
 
+// 위장 접기 상태 (2026-08-10 버그 픽스): 대화방에서 빈 종이/시트를 클릭해 패널을
+// 접으면 경로는 그대로라 "보는 중"으로 계산됐다 — 수신 즉시 읽음 처리되고 배지·
+// 알림이 전부 침묵. 접힌 동안은 "안 보는 중"으로 판정해야 한다.
+let chatPanelVisible = true;
+
+export function setChatPanelVisible(visible: boolean): void {
+  const wasHidden = !chatPanelVisible;
+  chatPanelVisible = visible;
+  if (visible && wasHidden) {
+    // 다시 펼치면 접힌 동안 밀린 메시지 재동기화 + 읽음 처리 (기존 재접속 경로 재사용)
+    dispatchChatEvent({ t: "chat.resync" });
+  }
+}
+
+export function isChatPanelVisible(): boolean {
+  return chatPanelVisible;
+}
+
 /** 채팅 입력창에 커서가 있는가 — "실제로 대화 중" 판정 (docs/specs/chat.md 알림).
  *  대화방이 열려 있어도 입력창 밖이면 자리 비움으로 보고 알림을 보낸다
  *  (2026-07-29 보고: 방만 켜두고 다른 일 하는 동안 알림 유실).
