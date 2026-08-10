@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  PendingMessage,
-  ReplyDraft,
-} from "@/components/chat/skins/types";
+import type { PendingMessage, ReplyDraft } from "@/components/chat/skins/types";
 import { fetchMe } from "@/lib/api";
 import {
   prepareImageForUpload,
@@ -18,6 +15,7 @@ import {
 } from "@/lib/chat-api";
 import {
   dispatchChatEvent,
+  isChatPanelVisible,
   onChatEvent,
   sendTyping,
   setActiveChatRoom,
@@ -165,7 +163,9 @@ export function useChatRoom(otherId: number) {
         setOnline(res.online);
         const reads = res.reads[String(otherId)];
         if (reads) setOtherRead(reads);
-        markReadAndSignal();
+        // 패널을 접어둔(위장) 동안은 읽음 처리 보류 — 배지·알림이 살아야 한다
+        // (2026-08-10 보고: 접힌 화면에서 알림이 전부 침묵)
+        if (isChatPanelVisible()) markReadAndSignal();
         if (stickBottom.current) requestAnimationFrame(scrollToBottom);
       })
       .catch(() => {});
@@ -205,7 +205,8 @@ export function useChatRoom(otherId: number) {
           prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
         );
         setTyping(false);
-        markReadAndSignal();
+        // 접힌(위장) 패널에서는 읽음 보류 — 다시 펼치면 chat.resync 가 처리
+        if (isChatPanelVisible()) markReadAndSignal();
         if (stickBottom.current) requestAnimationFrame(scrollToBottom);
       } else if (msg.t === "chat.read" && msg.user_id === otherId) {
         setOtherRead(msg.last_read_message_id);
@@ -336,7 +337,8 @@ export function useChatRoom(otherId: number) {
       const imageId = pendingEntry?.imageId ?? attachedImage?.imageId ?? null;
       const imageUrl = pendingEntry?.imageUrl ?? attachedImage?.url ?? null;
       const replyToId = pendingEntry?.replyToId ?? replyDraft?.id ?? null;
-      const replyPreview = pendingEntry?.replyPreview ?? replyDraft?.preview ?? null;
+      const replyPreview =
+        pendingEntry?.replyPreview ?? replyDraft?.preview ?? null;
       if (!body && !item && !imageId) return;
       if (!pendingEntry && attachedImage?.uploading) return; // 업로드 완료 대기
       const client_msg_id = pendingEntry?.client_msg_id ?? newClientMsgId();

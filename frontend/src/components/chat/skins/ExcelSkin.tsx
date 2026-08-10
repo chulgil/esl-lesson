@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
+import { setChatPanelVisible } from "@/lib/chat-signals";
 import { BlankSheet, ExcelChrome, fakeFilename } from "./ExcelChrome";
 import type { ChatSkinProps } from "./types";
 
@@ -23,6 +24,15 @@ export function ExcelSkin(p: ChatSkinProps) {
   const router = useRouter();
   // 빈 시트 클릭 = 채팅 레일 토글 (위장 강화, 2026-07-31)
   const [railHidden, setRailHidden] = useState(false);
+  // 접힘 = "안 보는 중" — 배지·알림 유지, 펼치면 읽음 (2026-08-10 버그 픽스)
+  function toggleRail() {
+    const next = !railHidden;
+    setRailHidden(next);
+    setChatPanelVisible(!next);
+  }
+  useEffect(() => {
+    return () => setChatPanelVisible(true); // 화면 이탈 시 원복
+  }, []);
   const rowBase = p.messages.length + p.pending.length;
 
   return (
@@ -49,7 +59,7 @@ export function ExcelSkin(p: ChatSkinProps) {
             클릭 = 채팅 레일 토글 — 빈 시트만 남겨 위장 강화 (2026-07-31) */}
         <div
           className="hidden flex-1 cursor-default overflow-y-auto border-r border-[#d8dde3] md:block"
-          onClick={() => setRailHidden((v) => !v)}
+          onClick={toggleRail}
         >
           <BlankSheet cols={COLS} />
         </div>

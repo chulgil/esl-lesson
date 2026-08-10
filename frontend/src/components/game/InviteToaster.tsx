@@ -8,6 +8,7 @@ import {
   dispatchChatEvent,
   getActiveChatRoom,
   isChatInputFocused,
+  isChatPanelVisible,
   setChatSocket,
 } from "@/lib/chat-signals";
 import {
@@ -69,9 +70,12 @@ export function InviteToaster() {
     if (msg.t === "chat.message") {
       // 이벤트 버스로 배급 (대화방·위젯·네비 배지가 구독)
       dispatchChatEvent(msg);
+      // 위장 접기(빈 종이/시트) 상태는 "안 보는 중" — 접힌 화면에서 알림이
+      // 전부 침묵하던 버그 (2026-08-10 보고)
       const viewing =
-        pathRef.current === `/chat/${msg.sender_id}` ||
-        getActiveChatRoom() === msg.sender_id;
+        (pathRef.current === `/chat/${msg.sender_id}` ||
+          getActiveChatRoom() === msg.sender_id) &&
+        isChatPanelVisible();
       // "실제로 대화 중"일 때만 알림 생략 = 그 방을 보는 중 + 탭 전면 + 창 포커스
       // + 입력창에 커서. 대화방을 켜두고 커서가 입력창 밖이면 자리 비움으로 보고
       // 알림을 보낸다 (2026-07-29 보고: 방만 켜둔 채 다른 일 하는 동안 유실).

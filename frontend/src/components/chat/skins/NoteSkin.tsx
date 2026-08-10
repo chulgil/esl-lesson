@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { BackLink } from "@/components/nav/BackLink";
+import { setChatPanelVisible } from "@/lib/chat-signals";
 import type { ChatSkinProps } from "./types";
 
 /** 교환 노트 스킨 — 종이 테마(노트·캔디·레고·헤냥이) 공용 위장.
@@ -16,12 +17,22 @@ export function NoteSkin(p: ChatSkinProps) {
   // 패널 밖(빈 종이) 클릭 = 채팅 패널 토글 — 힐끗 보일 때 빈 노트로 위장 (2026-07-31)
   const [panelHidden, setPanelHidden] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  // 접힘 상태를 전역 신호로 — 접힌 동안은 "안 보는 중"이라 배지·알림이 살아야
+  // 하고, 다시 펼치면 밀린 메시지를 읽음 처리한다 (2026-08-10 버그 픽스)
+  function togglePanel() {
+    const next = !panelHidden;
+    setPanelHidden(next);
+    setChatPanelVisible(!next);
+  }
+  useEffect(() => {
+    return () => setChatPanelVisible(true); // 화면 이탈 시 원복
+  }, []);
   return (
     <main
       className="notebook-lines notebook-margin h-dvh-nav-safe flex flex-col"
       onClick={(e) => {
         if (panelRef.current?.contains(e.target as Node)) return;
-        setPanelHidden((v) => !v);
+        togglePanel();
       }}
     >
       <div
