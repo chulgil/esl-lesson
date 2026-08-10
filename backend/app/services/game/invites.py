@@ -21,6 +21,7 @@ GAME_LABELS = {
     "typing": "영문 타자연습",
     "scramble": "어순 조립 레이스",
     "dictation": "받아쓰기 배틀",
+    "bingo": "리스닝 빙고",
 }
 GAMES = tuple(GAME_LABELS)
 

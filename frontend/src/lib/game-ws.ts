@@ -264,6 +264,53 @@ export type DtMsg =
       aborted: boolean;
     };
 
+/** 리스닝 빙고 — 원어민 음성/TTS 단어 빙고, 1~4인 (docs/specs/listening-bingo.md) */
+export interface BgCell {
+  item_id: number;
+  en: string;
+}
+
+export interface BgStartMsg {
+  t: "bg.start";
+  /** 내 배치의 16칸 (전원 같은 단어, 배치만 다름) */
+  board: BgCell[];
+  total: number;
+  round_seconds: number;
+  countdown: number;
+  players: string[];
+}
+
+export interface BgRoundMsg {
+  t: "bg.round";
+  no: number;
+  total: number;
+  /** 원어민 발화 구간 — 있으면 재생 버튼 노출, 자동 재생은 tts */
+  media: { video_id: string; start_ms: number; end_ms: number } | null;
+  tts: string;
+}
+
+export interface BgResult {
+  name: string;
+  filled: number;
+  wrong: number;
+  bingo_round: number | null;
+}
+
+export type BgMsg =
+  | BgStartMsg
+  | BgRoundMsg
+  | { t: "bg.room"; code: string | null; host: string; players: string[] }
+  | { t: "bg.tap_result"; ok: boolean; item_id: number }
+  | { t: "bg.mark"; name: string; filled: number }
+  | { t: "bg.reveal"; no: number; en: string; ko: string; bingo: string[] }
+  | { t: "bg.review"; items: GameReviewItem[] }
+  | {
+      t: "bg.end";
+      results: BgResult[];
+      winner: string | null;
+      aborted: boolean;
+    };
+
 /** 학습 관전 — 승인제 릴레이 (docs/specs/study-spectate.md) */
 export interface StEventPayload {
   phase: string;
@@ -297,7 +344,7 @@ export type IvMsg =
   | {
       t: "iv.invited";
       from: string;
-      game: "tetris" | "quiz" | "typing" | "scramble" | "dictation";
+      game: "tetris" | "quiz" | "typing" | "scramble" | "dictation" | "bingo";
       code: string;
       /** 초대자 테마 — 게스트 게임 화면에 적용, 종료 시 복원 (무효 값은 서버가 null) */
       theme?: string | null;
@@ -355,6 +402,7 @@ export type ServerMsg =
   | TpMsg
   | ScMsg
   | DtMsg
+  | BgMsg
   | StMsg
   | { t: "queue.waiting" }
   | { t: "room.created"; code: string }
@@ -545,6 +593,24 @@ export class GameSocket {
   }
   dtLeave(): void {
     this.send({ t: "dt.leave" });
+  }
+  bgSolo(): void {
+    this.send({ t: "bg.solo" });
+  }
+  bgCreate(): void {
+    this.send({ t: "bg.create" });
+  }
+  bgJoin(code: string): void {
+    this.send({ t: "bg.join", code });
+  }
+  bgBegin(): void {
+    this.send({ t: "bg.begin" });
+  }
+  bgTap(no: number, itemId: number): void {
+    this.send({ t: "bg.tap", no, item_id: itemId });
+  }
+  bgLeave(): void {
+    this.send({ t: "bg.leave" });
   }
   stChat(text: string): void {
     this.send({ t: "st.chat", text });

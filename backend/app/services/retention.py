@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    BingoMatch,
     DailyPuzzlePlay,
     DictationRace,
     GameMatch,
@@ -190,6 +191,11 @@ async def _quest_progress(
                 or_(DictationRace.player1_id == user_id, DictationRace.player2_id == user_id),
                 DictationRace.status == "finished",
                 DictationRace.created_at >= day_start,
+            ),
+            select(func.count(BingoMatch.id)).where(
+                or_(BingoMatch.player1_id == user_id, BingoMatch.player2_id == user_id),
+                BingoMatch.status == "finished",
+                BingoMatch.created_at >= day_start,
             ),
             select(func.count(QuizRoyalePlayer.id))
             .join(QuizRoyaleMatch, QuizRoyaleMatch.id == QuizRoyalePlayer.match_id)

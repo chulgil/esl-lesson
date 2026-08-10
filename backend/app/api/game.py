@@ -725,6 +725,33 @@ async def game_ws(websocket: WebSocket) -> None:
                 )
             elif t == "tp.leave":
                 racer.detach(user_id)
+            # --- 리스닝 빙고 (docs/specs/listening-bingo.md) ---
+            elif t == "bg.solo":
+                try:
+                    await caller.solo(user_id, user.nickname, send)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "bg.create":
+                try:
+                    await caller.create(user_id, user.nickname, send)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "bg.join":
+                try:
+                    await caller.join(user_id, user.nickname, send, str(msg.get("code", "")))
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "bg.begin":
+                try:
+                    await caller.begin(user_id)
+                except WordPoolError as exc:
+                    await send({"t": "error", "code": str(exc)})
+            elif t == "bg.tap":
+                await caller.tap(
+                    user_id, no=int(msg.get("no", -1)), item_id=int(msg.get("item_id", 0))
+                )
+            elif t == "bg.leave":
+                caller.detach(user_id)
             # --- 학습 관전 (승인제 릴레이 — docs/specs/study-spectate.md) ---
             elif t == "st.host":
                 await spectate_hub.host(user_id, user.nickname, send)
@@ -797,6 +824,7 @@ async def game_ws(websocket: WebSocket) -> None:
         racer.detach(user_id)
         scrambler.detach(user_id)
         dictator.detach(user_id)
+        caller.detach(user_id)
         await spectate_hub.detach(user_id)
     except Exception:
         logger.exception("ws error user=%s", user_id)
@@ -812,4 +840,5 @@ async def game_ws(websocket: WebSocket) -> None:
         racer.detach(user_id)
         scrambler.detach(user_id)
         dictator.detach(user_id)
+        caller.detach(user_id)
         await spectate_hub.detach(user_id)

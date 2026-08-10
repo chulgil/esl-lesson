@@ -156,6 +156,34 @@ class ScrambleRace(Base, PkMixin, CreatedAtMixin):
     ended_at: Mapped[datetime | None]
 
 
+class BingoMatch(Base, PkMixin, CreatedAtMixin):
+    """리스닝 빙고 — 원어민 음성/TTS 단어 빙고, 1~4인 (docs/specs/listening-bingo.md)."""
+
+    __tablename__ = "bingo_matches"
+    __table_args__ = (
+        CheckConstraint("mode IN ('solo','room')", name="ck_bingo_mode"),
+        CheckConstraint(
+            "status IN ('waiting','playing','finished','aborted')",
+            name="ck_bingo_status",
+        ),
+    )
+
+    mode: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, default="waiting", server_default="waiting")
+    player1_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    player2_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    winner_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # {"p1": {name, filled, wrong, bingo_round}, "p2": {...}} — 최대 4인
+    stats: Mapped[dict] = mapped_column(JsonDict, default=dict)
+    ended_at: Mapped[datetime | None]
+
+
 class QuizRoyaleMatch(Base, PkMixin, CreatedAtMixin):
     """스피드 퀴즈 로얄 — 최대 4인, 1:1 전용 game_matches 와 분리 (proposal/quiz-royale.md)."""
 

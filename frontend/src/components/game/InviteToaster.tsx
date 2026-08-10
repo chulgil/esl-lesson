@@ -26,6 +26,7 @@ const GAME_LABELS: Record<string, string> = {
   typing: "영문 타자연습",
   scramble: "어순 조립 레이스",
   dictation: "받아쓰기 배틀",
+  bingo: "리스닝 빙고",
 };
 
 /** 전역 수신기 — 로그인 시 상시 연결(프레즌스 겸용).
