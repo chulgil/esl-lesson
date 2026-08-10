@@ -87,27 +87,41 @@ export function PlayArea({
     />
   );
 
+  // 학습카드式 보기 그룹 (3+3+2, 최대 8) — 첫 그룹 = 가장 급한 브릭의 보기.
+  // chip_groups 미지원 서버(배포 스큐)면 평탄 chips 를 한 그룹으로 폴백.
+  const chipGroups = me?.chip_groups ?? (me?.chips?.length ? [me.chips] : []);
+
   const tapRow = (
-    <div className="flex flex-wrap justify-center gap-2">
-      {(me?.chips ?? []).map((chip) => (
-        <button
-          key={chip}
-          type="button"
-          disabled={disabled}
-          onClick={() => onTap(chip)}
-          className={`min-h-11 rounded-full border-2 px-4 py-2 font-bold shadow-sm transition hover:-translate-y-0.5 active:translate-y-0 active:scale-95 disabled:opacity-50 ${
-            hint === chip
-              ? "border-brick-yellow bg-highlight/60"
-              : "border-brick-blue/40 bg-white hover:border-brick-blue"
-          }`}
-        >
-          {chip}
-        </button>
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+      {chipGroups.map((group, gi) => (
+        <div key={gi} className="flex flex-wrap justify-center gap-1.5">
+          {group.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              disabled={disabled}
+              onClick={() => onTap(chip)}
+              className={`rounded-full border-2 font-bold shadow-sm transition hover:-translate-y-0.5 active:translate-y-0 active:scale-95 disabled:opacity-50 ${
+                gi === 0
+                  ? "min-h-10 px-3 py-1.5 text-sm sm:min-h-11 sm:px-4 sm:py-2 sm:text-base"
+                  : "min-h-9 px-2.5 py-1 text-xs sm:min-h-10 sm:px-3 sm:py-1.5 sm:text-sm"
+              } ${
+                hint === chip
+                  ? "border-brick-yellow bg-highlight/60"
+                  : gi === 0
+                    ? "border-brick-blue/50 bg-white hover:border-brick-blue"
+                    : "border-ink/20 bg-white hover:border-brick-blue/60"
+              }`}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   );
 
-  // 입력 영역: 보드에 남은 브릭들의 정답 칩 (오답 칩 포함) — 탭으로만 클리어
+  // 입력 영역: 급한 브릭 순 학습카드式 보기 그룹 (정답 + 오답) — 탭으로만 클리어
   const interact = (
     <div className={`flex flex-col gap-2 ${missFlash ? "miss-shake" : ""}`}>
       {missFlash && (
@@ -169,34 +183,30 @@ export function PlayArea({
   }
 
   return (
-    <section className="flex flex-col gap-3 pb-40">
-      <div className="sticky top-14 z-20 flex items-center gap-3 rounded-lg border-2 border-ink/10 bg-paper/95 p-2 backdrop-blur">
-        <BoardCanvas
-          state={op}
-          width={90}
-          height={128}
-          mirror
-          theme={boardTheme}
-        />
-        <div className="flex-1">
-          <p className="text-xs font-bold opacity-70">vs {opponentName}</p>
-          <p className="text-sm">점수 {op?.score ?? 0}</p>
-          {op?.danger && (
-            <p className="text-xs font-bold text-brick-red">상대 위기!</p>
-          )}
-        </div>
-        <div className="text-right">
-          <p className="font-hand text-2xl font-bold">{timeLeft}</p>
-          <p className="text-[10px] opacity-50">초</p>
-        </div>
-      </div>
-
+    <section className="flex flex-col gap-3 pb-44">
       <div className="flex items-center justify-between">
-        <ScoreHud label="나" board={me} timeLeft={timeLeft} hideTime />
+        <ScoreHud label="나" board={me} timeLeft={timeLeft} />
       </div>
       <DirectionBadge direction={direction} />
       <div className="flex justify-center">
-        <BoardCanvas state={me} width={340} height={486} theme={boardTheme} />
+        {/* 상대 화면은 내 보드 우상단 반투명 PiP — 상단 스트립을 없애 내 보드가
+            화면을 넓게 쓴다 (2026-08-10 모바일 기획) */}
+        <div className="relative">
+          <BoardCanvas state={me} width={340} height={486} theme={boardTheme} />
+          <div className="pointer-events-none absolute right-1.5 top-1.5 flex flex-col items-end gap-0.5 opacity-70">
+            <BoardCanvas
+              state={op}
+              width={90}
+              height={128}
+              mirror
+              theme={boardTheme}
+            />
+            <p className="rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-ink">
+              {opponentName} {op?.score ?? 0}점
+              {op?.danger && <span className="ml-1 text-brick-red">위기!</span>}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t-2 border-ink/15 bg-white/95 p-3 backdrop-blur">
@@ -273,13 +283,11 @@ function ScoreHud({
   board,
   timeLeft,
   big = false,
-  hideTime = false,
 }: {
   label: string;
   board: BoardState | null;
   timeLeft?: number;
   big?: boolean;
-  hideTime?: boolean;
 }) {
   const combo = board?.combo ?? 0;
   return (
@@ -306,7 +314,7 @@ function ScoreHud({
       >
         콤보 {combo}
       </span>
-      {!hideTime && timeLeft !== undefined && (
+      {timeLeft !== undefined && (
         <span className="ml-auto font-hand text-xl font-bold">{timeLeft}s</span>
       )}
     </div>

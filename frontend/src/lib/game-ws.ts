@@ -15,6 +15,8 @@ export interface BrickState {
 export interface BoardState {
   bricks: BrickState[];
   chips: string[];
+  /** 학습카드式 보기 그룹 (3+3+2) — 첫 그룹이 가장 급한 브릭의 보기 (2026-08-10) */
+  chip_groups?: string[][];
   direction: "en2ko" | "ko2en";
   input_mode: "tap" | "type";
   combo: number;

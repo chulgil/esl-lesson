@@ -35,7 +35,7 @@ ITEM_SPAWN_EVERY = 7  # 일반 스폰 N회당 1회 아이템(별) 브릭
 COMBO_ITEM_EVERY = 5  # 5콤보마다 아이템 1개
 MAX_ITEMS = 3
 FREEZE_SECONDS = 3.0
-TAP_DECOY_CHIPS = 3  # en2ko 탭 오답 칩 수
+CHIP_GROUP_SIZES = (3, 3, 2)  # 학습카드式 보기 — 위험한 브릭 순 3+3+2, 최대 8 (2026-08-10 기획)
 
 
 def direction_for_level(level: int) -> str:
@@ -384,16 +384,7 @@ class Board:
 
     def snapshot(self) -> dict:
         """tap 브릭은 정답 칩을 노출(선다형이라 안전, 양방향). type 브릭은 정답 미노출."""
-        ko_answers: list[str] = []
-        en_answers: list[str] = []
-        # 아이템(★) 브릭도 포함 — 칩이 없으면 탭 구간에서 클리어 수단이 없음
-        for b in self.bricks:
-            if b.is_garbage or b.mode != "tap":
-                continue
-            if b.direction == "en2ko" and b.ko not in ko_answers:
-                ko_answers.append(b.ko)
-            elif b.direction == "ko2en" and b.en not in en_answers:
-                en_answers.append(b.en)
+        chip_groups = build_chip_groups(self.bricks, self.word_queue)
         return {
             "bricks": [
                 {
@@ -408,7 +399,8 @@ class Board:
                 }
                 for b in self.bricks
             ],
-            "chips": build_chips(ko_answers, en_answers, self.word_queue),
+            "chips": [c for g in chip_groups for c in g],
+            "chip_groups": chip_groups,
             "direction": self.direction,
             "input_mode": self.input_mode,
             "combo": self.combo,
@@ -426,39 +418,57 @@ class Board:
 DECOY_KO = ["회복력 있는", "효율적인", "명백한", "우연한", "지속하다", "모호한", "확장 가능한"]
 DECOY_EN = ["resilient", "efficient", "evident", "accidental", "obscure", "sustain"]
 
-CHIP_MIN_OPTIONS = 4  # 언어군당 최소 칩 수 — 정답 1개만 뜨면 고를 게 없다
 
-
-def _pad_chips(answers: list[str], pool: list[str], decoys: list[str]) -> list[str]:
-    """정답 칩을 매치 단어 풀 → 고정 오답 순으로 최소 개수까지 채운다 (풀 단어가 더 학습적)."""
-    chips = list(dict.fromkeys(answers))
-    if not chips:
-        return []
-    for cand in (*pool, *decoys):
-        if len(chips) >= CHIP_MIN_OPTIONS:
-            break
-        if cand not in chips:
-            chips.append(cand)
-    return chips
-
-
-def build_chips(
-    ko_answers: list[str],
-    en_answers: list[str],
-    pool: list[tuple[int, str, str]] | None = None,
+def _chip_group(
+    brick: Brick,
+    size: int,
+    pool_values: list[str],
+    decoys: list[str],
+    exclude: set[str],
+    used: set[str],
 ) -> list[str]:
-    """탭 칩: 정답 언어군마다 최소 4개 보장. 결정적(매 틱 안 흔들림).
+    """브릭 1개의 보기 그룹 — 정답 1 + 같은 언어 오답. 브릭별 고정 시드로 결정적."""
+    rng = random.Random(f"chips:{brick.brick_id}:{brick.en}:{brick.ko}")
+    candidates = [v for v in dict.fromkeys(pool_values) if v]
+    rng.shuffle(candidates)
+    group = [brick.answer] if brick.answer not in used else []
+    for cand in (*candidates, *decoys):
+        if len(group) >= size:
+            break
+        if cand in used or cand in group or cand in exclude:
+            continue
+        group.append(cand)
+    rng.shuffle(group)
+    return group
 
-    두 언어를 한 묶음으로 세면 구간 전환 직후 남은 한글 칩이 정족수를 채워
-    영어 칩이 정답 1개만 남는다 — 사실상 선택지가 없다 (2026-08-03 수정).
+
+def build_chip_groups(
+    bricks: list[Brick], pool: list[tuple[int, str, str]] | None = None
+) -> list[list[str]]:
+    """학습카드式 탭 보기 — 위험한 브릭 순 3개에 3+3+2 그룹, 최대 8개 (2026-08-10 기획).
+
+    가장 위험한(착지 우선, 아래쪽 우선) 브릭부터 그룹을 만든다. 각 그룹은
+    그 브릭의 정답 1 + 같은 언어 오답(매치 단어 풀 우선, 고정 오답 폴백).
+    다른 보드 브릭의 정답은 오답으로 쓰지 않는다 — 오답인 줄 알았는데
+    클리어되는 혼란 방지. 4번째 이후 브릭의 보기는 앞 브릭을 지우면 나온다.
+    그룹 구성·순서는 브릭별 고정 시드 셔플 — 매 틱 흔들리지 않는다.
     """
+    playable = [b for b in bricks if not b.is_garbage and b.mode == "tap" and b.answer]
+    ordered = sorted(playable, key=lambda b: (b.landed, b.y), reverse=True)
+    board_answers = {b.answer for b in playable}
     words = pool or []
-    return sorted(
-        [
-            *_pad_chips(ko_answers, [ko for _, _, ko in words], DECOY_KO),
-            *_pad_chips(en_answers, [en for _, en, _ in words], DECOY_EN),
-        ]
-    )
+    used: set[str] = set()
+    groups: list[list[str]] = []
+    for brick, size in zip(ordered, CHIP_GROUP_SIZES):
+        if brick.direction == "en2ko":
+            pool_values, decoys = [ko for _, _, ko in words], DECOY_KO
+        else:
+            pool_values, decoys = [en for _, en, _ in words], DECOY_EN
+        group = _chip_group(brick, size, pool_values, decoys, board_answers - {brick.answer}, used)
+        used.update(group)
+        if group:
+            groups.append(group)
+    return groups
 
 
 def build_word_queue(
