@@ -29,6 +29,7 @@ from app.services import daily_puzzle
 from app.services import push as push_service
 from app.services.friends import are_friends
 from app.services.game import records
+from app.services.game.bingo import caller
 from app.services.game.dictation import dictator
 from app.services.game.invites import GAMES, invite_hub, invite_push_payload, safe_theme
 from app.services.game.manager import WordPoolError, manager

@@ -52,7 +52,7 @@ async def _start_solo(db):
     return user, manager, sender, session
 
 
-async def test_solo_start_board_and_words(wired_db):
+async def test_solo_start_board_and_words(wired_db):  # noqa: F811
     user, manager, sender, session = await _start_solo(wired_db)
     start = next(m for m in sender.messages if m["t"] == "bg.start")
     assert len(start["board"]) == bg.BOARD_CELLS
@@ -65,7 +65,7 @@ async def test_solo_start_board_and_words(wired_db):
     manager._cleanup(session)
 
 
-async def test_tap_correct_fills_and_wrong_counts(wired_db):
+async def test_tap_correct_fills_and_wrong_counts(wired_db):  # noqa: F811
     user, manager, sender, session = await _start_solo(wired_db)
     session.round_no = 0
     player = session.players[0]
@@ -84,7 +84,7 @@ async def test_tap_correct_fills_and_wrong_counts(wired_db):
     manager._cleanup(session)
 
 
-async def test_finish_ranks_and_sends_missed_review(wired_db):
+async def test_finish_ranks_and_sends_missed_review(wired_db):  # noqa: F811
     user, manager, sender, session = await _start_solo(wired_db)
     player = session.players[0]
     # 첫 행 4개를 채워 빙고, 2개는 놓침 처리
@@ -110,7 +110,7 @@ async def test_finish_ranks_and_sends_missed_review(wired_db):
     assert row.stats["p1"]["filled"] == 4
 
 
-async def test_winner_by_bingo_round_then_filled(wired_db):
+async def test_winner_by_bingo_round_then_filled(wired_db):  # noqa: F811
     user, manager, sender, session = await _start_solo(wired_db)
     p1 = session.players[0]
     p2 = bg.BingoPlayer(user_id=99999, name="P2", send=Collector())
@@ -125,7 +125,7 @@ async def test_winner_by_bingo_round_then_filled(wired_db):
     assert end["winner"] == user.name  # 같은 빙고 라운드 → 채운 칸 多 승
 
 
-async def test_room_create_join_and_full(wired_db):
+async def test_room_create_join_and_full(wired_db):  # noqa: F811
     user = await seed_user_and_words(wired_db)
     from app.models import User
 
@@ -148,7 +148,7 @@ async def test_room_create_join_and_full(wired_db):
     assert len(session.players) == bg.MAX_PLAYERS
 
 
-async def test_solo_requires_16_words(wired_db):
+async def test_solo_requires_16_words(wired_db):  # noqa: F811
     from app.models import User
 
     user = User(google_sub="g-bg-few", email="few@example.com", name="F")
@@ -159,7 +159,7 @@ async def test_solo_requires_16_words(wired_db):
         await manager.solo(user.id, user.name, Collector())
 
 
-async def test_run_loop_round_and_reveal(wired_db, monkeypatch):
+async def test_run_loop_round_and_reveal(wired_db, monkeypatch):  # noqa: F811
     """루프 1라운드 실기 — bg.round(음성 페이로드) → 정답 탭 → bg.reveal."""
     monkeypatch.setattr(bg, "COUNTDOWN_SECONDS", 0.0)
     monkeypatch.setattr(bg, "ROUND_SECONDS", 0.5)

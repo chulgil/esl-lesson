@@ -461,7 +461,8 @@ def build_chip_groups(
     words = pool or []
     used: set[str] = set()
     groups: list[list[str]] = []
-    for brick, size in zip(ordered, CHIP_GROUP_SIZES):
+    # 브릭이 3개 미만이면 그룹도 그만큼만 — 길이 불일치가 정상이라 strict=False
+    for brick, size in zip(ordered, CHIP_GROUP_SIZES, strict=False):
         if brick.direction == "en2ko":
             pool_values, decoys = [ko for _, _, ko in words], DECOY_KO
         else:
