@@ -193,6 +193,8 @@ def _me_dict(user: User) -> dict:
         "nickname": user.nickname,
         "avatar_url": user.avatar_url,
         "role": user.role,
+        # 가입일 — 온보딩 체크리스트 조건부 노출(가입 3일 이내) 판정 (ux-redesign #8)
+        "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
 

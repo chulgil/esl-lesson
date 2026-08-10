@@ -164,7 +164,7 @@ n/N" 요약 줄 하나만 남긴다(홈으로 유도).
 | 5 | 라이브러리 "담은 것" 탭 + `/my` 흡수 | `app/library/page.tsx`, `app/my/page.tsx` | **완료** (2026-08-10 — 담은 것 탭은 상태 배지 포함 구 /my 목록, /my 는 `?tab=mine` 리다이렉트, /my/[id] 상세는 유지) |
 | 6 | 게임 "오늘의 추천 한 판" | `app/game/page.tsx`, `components/game/RecommendedMatch.tsx` | **완료** (2026-08-10 — P0 격상분, 게임-복습 편입 P0-A 와 함께) |
 | 7 | 테마 체크리스트에 `NAV_LABEL_OF` 반영 | `.claude/rules/theme-addition.md` | **완료** |
-| 8 | 온보딩 체크리스트 조건부·축하 토스트화 | `OnboardingChecklist.tsx`, `StreakCelebration.tsx` | 미착수 |
+| 8 | 온보딩 체크리스트 조건부·축하 토스트화 | `OnboardingChecklist.tsx`, `StreakCelebration.tsx` | **완료** (2026-08-10 — 체크리스트는 카드 0장 또는 가입 3일 이내만, 스트릭 축하는 하단 토스트 10초 자동 소멸) |
 
 > 1~4는 **폴더 rename 으로 세션 훅이 깨져 빌드·린트·테스트를 돌리지 못한 상태**로
 > 작성됐다. 새 세션에서 `npm run build` + 아래 스윕을 먼저 통과시킨 뒤 커밋할 것.

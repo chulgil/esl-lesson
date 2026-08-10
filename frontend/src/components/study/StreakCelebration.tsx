@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 
 /** 스트릭 마일스톤 축하 — 7·14·30·50·100·200·365일 도달 첫 진입에 1회 (retention-plan.md).
- *  축하 순간을 만들어 스트릭을 감정 자산으로 — 공유 카드는 게임 결과와 동일 캔버스 재사용. */
+ *  축하 순간을 만들어 스트릭을 감정 자산으로 — 공유 카드는 게임 결과와 동일 캔버스 재사용.
+ *  모달 → 토스트 (2026-08-10 ux-redesign #8): 홈 진입 흐름을 막지 않고 아래에서 축하한다. */
+
+const TOAST_SECONDS = 10;
 
 const MILESTONES = [7, 14, 30, 50, 100, 200, 365];
 const SEEN_KEY = "esl:streak:milestone-seen";
@@ -23,38 +26,49 @@ export function StreakCelebration({ streakDays }: { streakDays: number }) {
     }
   }, [streakDays]);
 
+  // 토스트 자동 소멸 — 축하가 홈 사용을 막지 않는다
   useEffect(() => {
     if (milestone == null) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setMilestone(null);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const timer = setTimeout(() => setMilestone(null), TOAST_SECONDS * 1000);
+    return () => clearTimeout(timer);
   }, [milestone]);
 
   if (milestone == null) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-6"
-      onClick={() => setMilestone(null)}
-      role="dialog"
-      aria-modal="true"
+      className="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4"
+      role="status"
       aria-label={`${milestone}일 연속 학습 달성`}
     >
-      <div
-        className="relative w-full max-w-sm rounded-xl border-2 border-ink/15 bg-paper p-6 text-center shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border-2 border-brick-yellow bg-paper px-4 py-3 shadow-lg">
+        <p className="font-hand text-2xl font-bold">
+          <span className="hl">{milestone}일</span> 연속 학습!
+        </p>
+        <p className="text-xs opacity-70">
+          {milestone >= 30
+            ? "습관이 실력이 되는 구간이에요"
+            : "꾸준함이 쌓이고 있어요"}
+        </p>
+        <ShareResultButton
+          data={{
+            game: "연속 학습",
+            headline: `${milestone}일 달성!`,
+            lines: [
+              { label: "다음 목표", value: nextMilestoneLabel(milestone) },
+            ],
+            tone: "win",
+          }}
+        />
         <button
           type="button"
           aria-label="닫기"
           onClick={() => setMilestone(null)}
-          className="absolute top-2 right-2 flex h-11 w-11 items-center justify-center rounded-md text-ink/50 hover:text-ink"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-ink/50 hover:text-ink"
         >
           <svg
-            width="20"
-            height="20"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -65,29 +79,6 @@ export function StreakCelebration({ streakDays }: { streakDays: number }) {
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
         </button>
-
-        <p className="text-sm font-bold opacity-70">연속 학습</p>
-        <p className="mt-2 font-hand text-5xl font-bold">
-          <span className="hl">{milestone}일</span>
-        </p>
-        <p className="mt-3 text-sm opacity-80">
-          {milestone >= 30
-            ? "습관이 실력이 되는 구간이에요 — 정말 대단해요!"
-            : "꾸준함이 쌓이고 있어요 — 이 흐름 그대로!"}
-        </p>
-
-        <div className="mt-5 flex flex-col items-center gap-2">
-          <ShareResultButton
-            data={{
-              game: "연속 학습",
-              headline: `${milestone}일 달성!`,
-              lines: [
-                { label: "다음 목표", value: nextMilestoneLabel(milestone) },
-              ],
-              tone: "win",
-            }}
-          />
-        </div>
       </div>
     </div>
   );
