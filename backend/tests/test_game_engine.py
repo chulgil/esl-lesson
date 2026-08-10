@@ -180,6 +180,28 @@ def test_word_queue_seeded_shuffle_is_deterministic():
     assert q1 != q3 or len(WORDS) <= 1
 
 
+def test_word_queue_puts_priority_items_first():
+    """P0-A 게임-복습 편입: due·최근 오답 항목이 큐 앞으로 (effectiveness-audit 4차).
+
+    파티션 안에서는 셔플 순서 유지 — 공정성(양 플레이어 동일 큐)·결정성 불변.
+    """
+    words = [(i, f"word{i:02d}", f"뜻{i:02d}") for i in range(1, 21)]
+    priority = {3, 8, 15}
+    q1 = build_word_queue(words, seed=42, priority=priority)
+    q2 = build_word_queue(words, seed=42, priority=priority)
+    assert q1 == q2  # 결정적
+    assert {w[0] for w in q1[:3]} == priority  # 우선 항목이 맨 앞
+    plain = build_word_queue(words, seed=42)
+    assert sorted(q1) == sorted(plain)  # 구성은 동일, 순서만 당김
+
+
+def test_spawned_brick_carries_word_id():
+    """브릭이 학습 항목 id 를 보유 — 종료 시 못 지운 단어를 복습 항목으로 회수."""
+    board = make_board()
+    tick_until_spawn(board)
+    assert board.bricks[0].word_id == board.word_queue[0][0]
+
+
 def test_bot_eventually_clears_bricks():
     board = make_board()
     bot = Bot.create(level=3, seed=1)

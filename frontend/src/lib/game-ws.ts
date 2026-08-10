@@ -359,6 +359,8 @@ export type ServerMsg =
   | { t: "queue.waiting" }
   | { t: "room.created"; code: string }
   | { t: "attack.recv"; count: number }
+  // 테트리스 종료 시 못 지운 단어 — 원탭 학습 추가 (P0-A 게임-복습 편입)
+  | { t: "match.review"; items: GameReviewItem[] }
   | { t: "item.gained"; item: string }
   | {
       t: "item.result";

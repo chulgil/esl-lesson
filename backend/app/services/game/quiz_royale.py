@@ -19,7 +19,7 @@ from sqlalchemy import select
 from app.core.db import get_session_factory
 from app.models import LearningItem, QuizRoyaleMatch, QuizRoyalePlayer
 from app.services import embeddings
-from app.services.game.manager import WordPoolError, select_word_pool
+from app.services.game.manager import WordPoolError, safe_priority_items, select_word_pool
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -76,10 +76,25 @@ class QuizSession:
 
 
 def build_questions(
-    pool: list[tuple[int, str, str]], rounds: int, rng: random.Random
+    pool: list[tuple[int, str, str]],
+    rounds: int,
+    rng: random.Random,
+    priority: set[int] | frozenset[int] = frozenset(),
 ) -> list[Question]:
-    """(id, en, ko) 풀에서 4지선다 생성 — 방향 랜덤, 오답은 같은 풀의 같은 언어."""
-    picks = rng.sample(pool, min(rounds, len(pool)))
+    """(id, en, ko) 풀에서 4지선다 생성 — 방향 랜덤, 오답은 같은 풀의 같은 언어.
+
+    priority(복습 due·최근 오답 item_id)가 있으면 그 항목을 먼저 뽑는다 —
+    게임 한 판이 곧 복습 (P0-A, effectiveness-audit 4차). 출제 순서는 다시 섞어
+    우선 항목이 몰려 보이지 않게 한다.
+    """
+    preferred = [p for p in pool if p[0] in priority]
+    rest = [p for p in pool if p[0] not in priority]
+    rng.shuffle(preferred)
+    picks = preferred[: min(rounds, len(preferred))]
+    remaining = min(rounds, len(pool)) - len(picks)
+    if remaining > 0:
+        picks += rng.sample(rest, min(remaining, len(rest)))
+    rng.shuffle(picks)
     questions = []
     for item_id, en, ko in picks:
         en2ko = rng.random() < 0.5
@@ -323,7 +338,10 @@ class QuizRoyaleManager:
                     db, session.host_id, ROUNDS, session.rng
                 )
         else:
-            session.questions = build_questions(pool, ROUNDS, session.rng)
+            # 참가 인원(사람)의 due·최근 오답 합집합 우선 출제 (P0-A 게임-복습 편입)
+            user_ids = [p.user_id for p in session.players if p.user_id is not None]
+            priority = await safe_priority_items(user_ids) if user_ids else set()
+            session.questions = build_questions(pool, ROUNDS, session.rng, priority=priority)
         session.started = True
         await self._save(session, status="playing")
         session.task = asyncio.create_task(self._run(session))

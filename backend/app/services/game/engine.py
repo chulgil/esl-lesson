@@ -78,6 +78,7 @@ class Brick:
     brick_id: int
     en: str
     ko: str
+    word_id: int = 0  # 학습 항목 id — 종료 시 못 지운 단어 복습 회수 (P0-A, 0=garbage)
     direction: str = "en2ko"  # 스폰 시 고정
     mode: str = "tap"  # tap(칩 선택) | type(타이핑) — 스폰 시 고정
     y: float = 0.0
@@ -223,6 +224,7 @@ class Board:
                 brick_id=self._next_brick_id,
                 en=en,
                 ko=ko,
+                word_id=word_id,
                 direction=self.direction,
                 mode=self.input_mode,
                 is_item=is_item,
@@ -472,12 +474,21 @@ def build_chip_groups(
 
 
 def build_word_queue(
-    words: list[tuple[int, str, str]], seed: int, size: int = 100
+    words: list[tuple[int, str, str]],
+    seed: int,
+    size: int = 100,
+    priority: set[int] | frozenset[int] = frozenset(),
 ) -> list[tuple[int, str, str]]:
-    """시드 고정 셔플 — 양 플레이어 동일 순서 (공정성)."""
+    """시드 고정 셔플 — 양 플레이어 동일 순서 (공정성).
+
+    priority(복습 due·최근 오답 item_id)가 있으면 셔플 순서를 유지한 채 앞으로
+    당긴다 — 게임 한 판이 곧 복습이 되게 (P0-A, effectiveness-audit 4차).
+    """
     rng = random.Random(seed)
     pool = list(words)
     rng.shuffle(pool)
+    if priority:
+        pool.sort(key=lambda w: w[0] not in priority)  # stable — 파티션 내 셔플 순서 유지
     return pool[:size] if len(pool) >= size else pool
 
 

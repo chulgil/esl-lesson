@@ -14,12 +14,14 @@ import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { PlayArea } from "@/app/game/PlayArea";
 import { ContentPicker } from "@/components/game/ContentPicker";
+import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { InviteFriends } from "@/components/game/InviteFriends";
 import { ItemIcon } from "@/components/game/ItemIcon";
 import { ModeButton } from "@/components/game/ModeButton";
 import {
   GameSocket,
+  type GameReviewItem,
   type MatchEndMsg,
   type MatchFoundMsg,
   type ServerMsg,
@@ -54,6 +56,8 @@ function TetrisInner() {
   const [matchInfo, setMatchInfo] = useState<MatchFoundMsg | null>(null);
   const [gameState, setGameState] = useState<StateMsg | null>(null);
   const [endResult, setEndResult] = useState<MatchEndMsg | null>(null);
+  // 못 지운 단어 — 결과 화면 원탭 학습 추가 (P0-A 게임-복습 편입)
+  const [review, setReview] = useState<GameReviewItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [missSignal, setMissSignal] = useState(0);
@@ -83,6 +87,7 @@ function TetrisInner() {
       case "match.found":
         setMatchInfo(msg);
         setEndResult(null);
+        setReview([]);
         garbageTipShown.current = false;
         prevGarbageCount.current = 0;
         setPhase(msg.countdown > 0 ? "countdown" : "playing");
@@ -102,6 +107,9 @@ function TetrisInner() {
       case "item.gained":
         setItemToast(msg.item);
         setTimeout(() => setItemToast(null), 2500);
+        break;
+      case "match.review":
+        setReview(msg.items);
         break;
       case "match.end":
         setEndResult(msg);
@@ -189,6 +197,7 @@ function TetrisInner() {
     const wasPve = matchInfo?.mode === "pve";
     setGameState(null);
     setEndResult(null);
+    setReview([]);
     setMatchInfo(null);
     setHint(null);
     setItemToast(null);
@@ -304,12 +313,16 @@ function TetrisInner() {
       )}
 
       {phase === "ended" && endResult && (
-        <div ref={resultRef}>
+        <div ref={resultRef} className="flex max-w-md flex-col gap-4">
           <ResultPanel
             result={endResult}
             you={matchInfo?.you ?? 1}
             opponent={matchInfo?.opponent ?? "상대"}
             onAgain={playAgain}
+          />
+          <ReviewPanel
+            items={review}
+            hint="추가한 단어는 오늘의 학습 큐에 들어가요 — 복습할 때가 된 단어는 다음 대전에도 우선 나와요"
           />
         </div>
       )}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MyBests } from "@/components/game/MyBests";
+import { RecommendedMatch } from "@/components/game/RecommendedMatch";
 import { WeeklyLeaderboardsCard } from "@/components/game/WeeklyLeaderboardsCard";
 
 /** 게임 허브 — 종류별 카테고리 메뉴 + 게임 설명 (2026-07-14 개편) */
@@ -97,6 +98,8 @@ export default function GameHubPage() {
         </p>
         <MyBests />
       </header>
+
+      <RecommendedMatch />
 
       <div className="mt-6 grid max-w-4xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {GAMES.map((game) => (
