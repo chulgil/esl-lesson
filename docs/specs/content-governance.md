@@ -117,13 +117,32 @@ license != creativeCommon 또는 미확인 → content_permissions 필수, 없�
 
 | 필드 | 산출 | 값 |
 |---|---|---|
-| `difficulty` | 콘텐츠 항목의 `difficulty_hint` 가중 평균 (basic=0, intermediate=1, advanced=2) | 평균 >= 1.35 `advanced` / <= 0.6 `beginner` / 그 외 `intermediate` / 항목 0개면 `null` |
+| `difficulty` | 콘텐츠 항목의 `difficulty_hint` 가중 평균 (basic=0, intermediate=1, advanced=2) **+ 문장 길이 보정** (아래) | 항목 0개면 `null` |
 | `known_ratio` | 항목 중 내 `review_cards` 가 이미 있는 항목의 비율 (반올림 정수) | 0~100 / 항목 0개면 `null` |
+
+**문장 길이 보정 (2026-08-10 — P0-2 보류분 착수)**: 추출 힌트에 `basic` 이
+사실상 없어(프로드 전 항목 0건) 힌트 평균이 [1.0, 1.4] 로 압축된다 — 힌트만으로는
+초급이 절대 안 나와 Easy English 류 초급 회화가 중급으로 오분류됐다 (사용자 보고).
+콘텐츠 평균 문장 단어 수(`transcript_segments`, 공백 수+1 근사)를 함께 본다:
+
+- 세그먼트 있음: 평균 >= 1.35 **또는** 문장당 >= 17단어 → `advanced` /
+  평균 <= 1.12 **그리고** 문장당 <= 8단어 → `beginner` / 그 외 `intermediate`
+- 세그먼트 없음(수기): 기존 힌트-단독 기준 (>= 1.35 / <= 0.6)
+- 경계값은 프로드 11개 콘텐츠 실측으로 캘리브레이션 — 초급 회화(3.4~6.9단어/문장,
+  힌트 1.00~1.10) vs 강연(15~18단어, 1.25~1.40)이 깨끗이 갈린다
 
 - DB 의 `basic` 은 노출 라벨 `beginner`(초급) 로 맞춘다 — 업적 티어(beginner/intermediate/advanced) 와 같은 어휘를 쓴다.
 - 두 값 모두 목록 전체를 `GROUP BY` 한 번으로 집계한다 (콘텐츠당 N+1 금지).
 - `known_ratio` 의 분모는 카드에 표시되는 `item_count` 와 동일하다 (사용자가 두 수를 대조할 수 있게).
 - 프론트: `/library` 카드에 난이도 배지(초급 green / 중급 blue / 고급 red) + "아는 표현 n%" 칩.
+
+**레벨 필터·맞춤 정렬 (2026-08-10 — proposal/level-fit-library-2026-08.md MVP)**:
+
+- 필터 칩 `[전체][초급][중급][고급]` — 기본 선택 = 내 레벨 (`study_level` 1~2=초급,
+  3=중급, 4=고급), 딥링크 `?level=beginner|intermediate|advanced`
+- 기본 정렬 = 맞음(fit) 점수 내림차순 — 난이도 거리(같음 2/±1단 1) + 아는 표현
+  (60~85% 2 / 40%+ 또는 85%+ 1). fit 4 카드는 "지금 내 수준" 하이라이트
+- 레벨 필터 결과 0 = 공급 신호 — 빈 상태 문구가 콘텐츠 요청 폼으로 안내
 
 ## 남는 리스크 (이 스펙 범위 밖)
 

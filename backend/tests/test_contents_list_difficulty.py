@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from app.models import Content, ItemOccurrence, LearningItem, ReviewCard
+from app.models import Content, ItemOccurrence, LearningItem, ReviewCard, TranscriptSegment
 from tests.test_study import login
 
 _word_counter = 0
@@ -86,6 +86,61 @@ async def test_difficulty_boundaries(client, db_session):
     assert items["경계중급"]["difficulty"] == "intermediate"
     assert items["경계중급2"]["difficulty"] == "intermediate"
     assert items["확실초급"]["difficulty"] == "beginner"
+
+
+async def add_segments(db, content: Content, sentences: list[str]) -> None:
+    for i, s in enumerate(sentences):
+        db.add(TranscriptSegment(content_id=content.id, seq=i, en_text=s))
+    await db.commit()
+
+
+async def test_short_sentences_make_beginner(client, db_session):
+    """문장 길이 보정 (2026-08-10): 추출 힌트에 basic 이 사실상 없어(프로드 0건)
+    힌트 평균만으로는 초급이 절대 안 나온다 — Easy English 류가 중급으로 오분류.
+    짧은 문장(문장당 <=8단어) + 낮은 힌트 평균(<=1.12)이면 초급.
+    """
+    hints = ["intermediate"] * 9 + ["advanced"]  # 평균 1.1
+    short = await make_content(db_session, "초급회화", list(hints))
+    await add_segments(
+        db_session,
+        short,
+        ["Hi, how are you?", "I am fine.", "A cup of coffee please."],  # 평균 4단어
+    )
+    # 같은 힌트 분포라도 문장이 길면 중급 유지
+    mid = await make_content(db_session, "중급토크", list(hints))
+    await add_segments(
+        db_session,
+        mid,
+        ["We should think about how this actually works in practice today."],  # 11단어
+    )
+    await login(client, db_session)
+
+    items = await list_by_title(client)
+    assert items["초급회화"]["difficulty"] == "beginner"
+    assert items["중급토크"]["difficulty"] == "intermediate"
+
+
+async def test_long_sentences_make_advanced(client, db_session):
+    """문장당 17단어 이상(긴 원어민 발화)은 힌트 평균이 1.35 미만이어도 고급."""
+    hints = ["intermediate"] * 7 + ["advanced"] * 3  # 평균 1.3 (< 1.35)
+    content = await make_content(db_session, "긴발화물", hints)
+    await add_segments(
+        db_session,
+        content,
+        [
+            "He risked absolutely everything he had in order to warn people about "
+            "the dangers that nobody else was willing to talk about openly."  # 23단어
+        ],
+    )
+    await login(client, db_session)
+    assert (await list_by_title(client))["긴발화물"]["difficulty"] == "advanced"
+
+
+async def test_no_segments_falls_back_to_hint_only(client, db_session):
+    """세그먼트 없는 수기 콘텐츠는 기존 힌트-단독 기준 유지 (회귀 방지)."""
+    await make_content(db_session, "수기중급", ["intermediate", "intermediate"])  # 1.0
+    await login(client, db_session)
+    assert (await list_by_title(client))["수기중급"]["difficulty"] == "intermediate"
 
 
 async def test_known_ratio_counts_my_cards(client, db_session):

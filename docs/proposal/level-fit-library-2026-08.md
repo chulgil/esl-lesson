@@ -1,6 +1,6 @@
 # 기획: 레벨 맞춤 라이브러리 — 초급/중급/고급 필터·추천 UX
 
-> 작성: 2026-08-10 · 상태: 기획 (구현 대기) · 배경: [effectiveness-audit-2026-08.md](effectiveness-audit-2026-08.md) 구멍 2(난이도 사다리)
+> 작성: 2026-08-10 · 상태: **MVP 구현 완료 (2026-08-10)** — 정본: [specs/content-governance.md](../specs/content-governance.md) §레벨 필터 · 배경: [effectiveness-audit-2026-08.md](effectiveness-audit-2026-08.md) 구멍 2(난이도 사다리)
 > 요구: "콘텐츠를 초중고 카테고리/태그로 나눠 사용자가 레벨에 맞게 담고, 적절히 추천하는 UX" (2026-08-10 사용자)
 
 **한 줄**: 새 카테고리·태그 필드를 만들지 않는다 — 이미 파생되는 난이도 3단
