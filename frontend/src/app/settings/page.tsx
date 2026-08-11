@@ -4,10 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChatModeCard } from "@/components/settings/ChatModeCard";
 import { DailyGoalSetting } from "@/components/settings/DailyGoalSetting";
-import { MascotShopSection } from "@/components/settings/MascotShopSection";
 import { NicknameCard } from "@/components/settings/NicknameCard";
 import { NotificationCard } from "@/components/settings/NotificationCard";
-import { XpWallet } from "@/components/settings/XpWallet";
 import { deleteMe } from "@/lib/api";
 import { studyApi } from "@/lib/study-api";
 import { APP_THEMES, setAppTheme, useAppTheme } from "@/lib/theme";
@@ -25,9 +23,33 @@ export default function SettingsPage() {
       <NotificationCard />
       <ChatModeCard />
       <ThemeSection />
-      <MascotShopSection />
+      <ShopLinkCard />
       <DangerZone />
     </main>
+  );
+}
+
+/** 상점 바로가기 — 구매 UI 는 /shop 으로 분리 (2026-08-11 요구) */
+function ShopLinkCard() {
+  return (
+    <section className="mt-10 max-w-lg">
+      <p className="mb-1 text-sm font-bold">상점</p>
+      <Link
+        href="/shop"
+        className="flex min-h-14 items-center gap-4 rounded-lg border-2 border-ink/15 bg-white px-4 py-3 shadow-sm transition hover:-translate-y-0.5"
+      >
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brick-yellow text-[10px] font-black text-brick-label">
+          XP
+        </span>
+        <span className="flex-1">
+          <span className="block font-bold">테마·캐릭터 상점</span>
+          <span className="block text-xs opacity-60">
+            모은 XP로 테마와 캐릭터를 열고, 구매 내역도 볼 수 있어요
+          </span>
+        </span>
+        <span className="text-xs font-bold opacity-40">&gt;</span>
+      </Link>
+    </section>
   );
 }
 
@@ -46,11 +68,8 @@ function ThemeSection() {
     Record<string, { current: number; target: number }>
   >({});
   const [reverted, setReverted] = useState(false);
-  // XP 상점 — 잠긴 테마의 가격 + 내 가용 XP (theme-mall.md XP 상점)
+  // 판매 중 테마 표시 — 구매 자체는 /shop 으로 분리 (2026-08-11)
   const [prices, setPrices] = useState<Record<string, number>>({});
-  const [availableXp, setAvailableXp] = useState<number | null>(null);
-  const [buying, setBuying] = useState<string | null>(null);
-  const [buyError, setBuyError] = useState<string | null>(null);
 
   useEffect(() => {
     themeApi
@@ -73,7 +92,6 @@ function ThemeSection() {
               .map((i) => [i.key, i.price_xp!]),
           ),
         );
-        setAvailableXp(res.available_xp);
       })
       .catch(() => {});
     // 해금 업적 진행률 — "얼마나 남았는지" 가 보여야 행동으로 이어진다
@@ -100,42 +118,15 @@ function ThemeSection() {
     }
   }, [allowed, theme]);
 
-  // XP 구매 — 성공 시 즉시 해금 + 그 테마로 전환 (구매의 보상을 바로 체감)
-  async function buyTheme(key: string) {
-    if (buying) return;
-    setBuying(key);
-    setBuyError(null);
-    try {
-      const res = await themeApi.purchase(key);
-      setAllowed((prev) => new Set([...(prev ?? new Set()), key]));
-      setAvailableXp(res.available_xp);
-      setAppTheme(key as Parameters<typeof setAppTheme>[0]);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "구매 실패";
-      setBuyError(
-        {
-          insufficient_xp: "XP가 부족해요 — 복습·게임으로 더 모을 수 있어요",
-          already_owned: "이미 보유한 테마예요",
-          theme_not_for_sale: "지금은 판매하지 않는 테마예요",
-        }[message] ?? message,
-      );
-    }
-    setBuying(null);
-  }
-
   return (
     <section className="mt-10 max-w-lg">
       <p className="mb-1 text-sm font-bold">테마</p>
       <p className="mb-2 text-xs opacity-60">
         앱 전체(배경·버튼·게임 보드)의 디자인 컨셉이 함께 바뀝니다.
         <span className="block">
-          새 테마는 업적 달성·이벤트, 또는 XP 로 열 수 있어요.
+          새 테마는 업적 달성·이벤트, 또는 상점에서 XP 로 열 수 있어요.
         </span>
       </p>
-      {availableXp !== null && <XpWallet amount={availableXp} />}
-      {buyError && (
-        <p className="mb-3 text-xs font-bold text-brick-red">{buyError}</p>
-      )}
       {reverted && (
         <p className="mb-3 text-xs font-bold text-brick-red">
           사용 권한이 없는 테마라 기본으로 되돌렸어요
@@ -151,7 +142,11 @@ function ThemeSection() {
               type="button"
               // 잠긴 테마는 선택 시도 무시 — 실제 차단은 서버 카탈로그가 근거
               onClick={() => {
-                if (!locked) setAppTheme(t.key);
+                if (!locked) {
+                  setAppTheme(t.key);
+                  // 정상 전환했으면 "되돌렸어요" 배너 해제 (버그 헌트 2026-08-11)
+                  setReverted(false);
+                }
               }}
               aria-pressed={active}
               aria-disabled={locked}
@@ -188,32 +183,25 @@ function ThemeSection() {
                       </span>
                     )
                   )}
-                  {/* XP 구매 — 업적 해금과 동시 제공 가능 (theme-mall.md).
-                      중첩 button 금지라 span[role=button] + 전파 차단 */}
+                  {/* 구매는 /shop 으로 분리 (2026-08-11) — 중첩 button 금지라 span 클릭 이동 */}
                   {prices[t.key] != null && (
                     <span
-                      role="button"
+                      role="link"
                       tabIndex={0}
                       onClick={(e) => {
                         e.stopPropagation();
-                        buyTheme(t.key);
+                        window.location.href = "/shop";
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
                           e.stopPropagation();
-                          buyTheme(t.key);
+                          window.location.href = "/shop";
                         }
                       }}
-                      className={`cursor-pointer rounded-full border-2 px-3 py-1 text-xs font-bold transition ${
-                        availableXp !== null && availableXp >= prices[t.key]
-                          ? "border-brick-blue bg-brick-blue/10 text-brick-blue hover:-translate-y-0.5"
-                          : "border-ink/15 opacity-50"
-                      }`}
+                      className="cursor-pointer rounded-full border-2 border-brick-blue bg-brick-blue/10 px-3 py-1 text-xs font-bold text-brick-blue transition hover:-translate-y-0.5"
                     >
-                      {buying === t.key
-                        ? "구매 중..."
-                        : `${prices[t.key]} XP로 열기`}
+                      상점에서 {prices[t.key].toLocaleString()} XP로 열기
                     </span>
                   )}
                   {/* 진행률 — 얼마나 남았는지 보여야 "해볼까" 로 이어진다 */}

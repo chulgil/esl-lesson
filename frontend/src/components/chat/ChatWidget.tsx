@@ -9,11 +9,13 @@ import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
 import { useChatRoom } from "@/components/chat/useChatRoom";
+import { MascotSvg } from "@/components/theme/mascots";
 import { fetchMe } from "@/lib/api";
 import { chatApi, type ChatConversation } from "@/lib/chat-api";
 import { onChatEvent, setActiveChatRoom } from "@/lib/chat-signals";
 import { useChatFloating } from "@/lib/chat-mode";
 import { setFaviconBadge } from "@/lib/favicon-badge";
+import { SHOP_EVENT, shopApi } from "@/lib/shop-api";
 import { useAppTheme } from "@/lib/theme";
 
 /** 채팅 위젯 — excelkospi 우하단 버튼 컨셉 (docs/specs/chat.md 위장 테마).
@@ -71,6 +73,39 @@ export function ChatWidget() {
 
   useEffect(() => {
     fetchMe().then((me) => setLoggedIn(Boolean(me)));
+  }, []);
+
+  // 활성 마스코트 — 있으면 연필 아이콘 대신 캐릭터가 런처가 된다 (2026-08-11 요구.
+  // 원래 헤냥이가 우하단이었다가 연필 아이콘에 밀렸던 자리를 되찾는 구성)
+  const [mascot, setMascot] = useState<{
+    kind: string;
+    outfits: string[];
+  } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      shopApi
+        .catalog()
+        .then((s) => {
+          if (!alive) return;
+          setMascot(
+            s.active_mascot
+              ? {
+                  kind: s.active_mascot,
+                  outfits: s.outfits.filter((o) => o.owned).map((o) => o.key),
+                }
+              : null,
+          );
+        })
+        .catch(() => {
+          if (alive) setMascot(null);
+        });
+    load();
+    window.addEventListener(SHOP_EVENT, load);
+    return () => {
+      alive = false;
+      window.removeEventListener(SHOP_EVENT, load);
+    };
   }, []);
 
   // 저장된 플로팅 위치 복원 + 창 크기 변화 시 화면 안으로 재클램프
@@ -162,6 +197,15 @@ export function ChatWidget() {
   const effFloating = floating || !isDesktop;
   // 도킹 모드는 항상 열려있음(닫기 없음) — 플로팅일 때만 open 상태를 따른다
   const panelOpen = effFloating ? open : true;
+
+  // 마스코트가 런처를 차지하면 좌하단 상시 노출(MascotPeek)은 숨긴다 — 같은
+  // 캐릭터 중복 방지. excel 위장은 "메모" pill 유지(캐릭터가 위장을 깬다)라 제외
+  const mascotLauncher =
+    Boolean(mascot) && effFloating && theme !== "excel" && loggedIn;
+  useEffect(() => {
+    document.body.classList.toggle("mascot-launcher", mascotLauncher);
+    return () => document.body.classList.remove("mascot-launcher");
+  }, [mascotLauncher]);
 
   // Esc 한 번으로 즉시 닫기 — 플로팅 전용 (빠른 숨김)
   useEffect(() => {
@@ -329,10 +373,24 @@ export function ChatWidget() {
           className={
             excel
               ? "fixed right-4 bottom-20 z-50 flex min-h-10 items-center gap-1.5 rounded-full bg-[#185c37] px-4 font-sans text-xs font-bold text-white shadow-lg hover:bg-[#217346] sm:bottom-4"
-              : "fixed right-4 bottom-20 z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5 sm:bottom-4"
+              : mascotLauncher
+                ? // 캐릭터 런처 — 산 마스코트가 버튼 자체가 된다 (연필 대체).
+                  // idle 애니메이션은 새 메시지가 있을 때만 (없으면 정지, 2026-08-11)
+                  `fixed right-1 bottom-16 z-50 origin-bottom-right scale-75 transition hover:-translate-y-0.5 sm:right-3 sm:bottom-2 sm:scale-100 ${
+                    unread > 0 ? "mascot-launcher-attn" : ""
+                  }`
+                : `fixed right-4 bottom-20 z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5 sm:bottom-4 ${
+                    unread > 0 ? "launcher-attn" : ""
+                  }`
           }
         >
-          {excel ? <span>메모</span> : <PencilNoteIcon />}
+          {excel ? (
+            <span>메모</span>
+          ) : mascotLauncher && mascot ? (
+            <MascotSvg kind={mascot.kind} outfits={mascot.outfits} />
+          ) : (
+            <PencilNoteIcon />
+          )}
           {unread > 0 && (
             <span
               className={

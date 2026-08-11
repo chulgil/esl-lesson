@@ -484,8 +484,47 @@ html[data-theme="cat"] .brick-studs::before {
 .henyang-peek svg.mascot-anim-float {
   animation: mascot-float 4s ease-in-out infinite;
 }
+/* 마스코트 채팅 런처 — 새 메시지가 있을 때만 idle 동작, 없으면 정지 (2026-08-11) */
+.mascot-launcher-attn svg {
+  animation: henyang-giggle 3.2s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+.mascot-launcher-attn svg.mascot-anim-bounce {
+  animation: mascot-bounce 2.6s ease-in-out infinite;
+}
+.mascot-launcher-attn svg.mascot-anim-float {
+  animation: mascot-float 4s ease-in-out infinite;
+}
+/* 연필 런처 — 새 메시지 있을 때 흔들림으로 주의 환기 */
+@keyframes launcher-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10% {
+    transform: rotate(-8deg);
+  }
+  20% {
+    transform: rotate(7deg);
+  }
+  30% {
+    transform: rotate(-5deg);
+  }
+  40% {
+    transform: rotate(3deg);
+  }
+  50% {
+    transform: rotate(0deg);
+  }
+}
+.launcher-attn {
+  animation: launcher-wiggle 2.4s ease-in-out infinite;
+}
 body.game-focus .henyang-peek {
   display: none; /* 대전 중에는 입력바 시야 확보 */
+}
+body.mascot-launcher .henyang-peek {
+  display: none; /* 캐릭터가 우하단 채팅 런처가 됨 — 좌하단 중복 노출 방지 */
 }
 @media (max-width: 639px) {
   /* 모바일 하단 탭바(로그인 시) 위로 올려 겹침 방지 */

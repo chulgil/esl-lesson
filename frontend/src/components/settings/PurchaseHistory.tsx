@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MASCOT_LABELS, OUTFIT_LABELS } from "@/components/theme/mascots";
 import { APP_THEMES } from "@/lib/theme";
-import { type PurchaseRow, shopApi } from "@/lib/shop-api";
+import { SHOP_EVENT, type PurchaseRow, shopApi } from "@/lib/shop-api";
 
 const THEME_LABELS: Record<string, string> = Object.fromEntries(
   APP_THEMES.map((t) => [t.key, t.label]),
@@ -28,8 +28,8 @@ function itemLabel(itemKey: string): string {
 }
 
 /** 내 구매 내역 — 품목·결제수단·금액·날짜 (mascot-shop.md 구매 이력).
- *  펼칠 때만 로드 — 대부분의 설정 방문에서는 네트워크 비용 0. */
-export function PurchaseHistory() {
+ *  기본은 접힘(펼칠 때만 로드), 상점 페이지는 open 으로 항상 펼침. */
+export function PurchaseHistory({ open = false }: { open?: boolean }) {
   const [items, setItems] = useState<PurchaseRow[] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -41,8 +41,31 @@ export function PurchaseHistory() {
       .catch(() => setFailed(true));
   }
 
+  useEffect(() => {
+    if (open) load();
+    // 구매 직후 목록에 즉시 반영 — 캐시(items) 때문에 재펼침해도 안 갱신되던
+    // 버그 픽스 (버그 헌트 2026-08-11). 이미 로드된 경우에만 재조회
+    const refresh = () => {
+      setItems((prev) => {
+        if (prev !== null)
+          shopApi
+            .purchases()
+            .then((res) => setItems(res.items))
+            .catch(() => {});
+        return prev;
+      });
+    };
+    window.addEventListener(SHOP_EVENT, refresh);
+    return () => window.removeEventListener(SHOP_EVENT, refresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 최초 펼침 로드만
+  }, [open]);
+
   return (
-    <details className="mt-4" onToggle={(e) => e.currentTarget.open && load()}>
+    <details
+      className="mt-4"
+      open={open}
+      onToggle={(e) => e.currentTarget.open && load()}
+    >
       <summary className="cursor-pointer text-xs font-bold opacity-70">
         구매 내역
       </summary>
