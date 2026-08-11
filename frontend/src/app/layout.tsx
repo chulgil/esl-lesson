@@ -7,7 +7,7 @@ import { ImageLightbox } from "@/components/chat/ImageLightbox";
 import { BuildRefreshWatcher } from "@/components/nav/BuildRefreshWatcher";
 import { NotificationSetupGuide } from "@/components/chat/NotificationSetupGuide";
 import { InviteToaster } from "@/components/game/InviteToaster";
-import { HenyangPeek } from "@/components/theme/HenyangPeek";
+import { MascotPeek } from "@/components/theme/MascotPeek";
 import { THEME_KEYS } from "@/lib/theme-keys";
 
 const gaegu = Gaegu({
@@ -84,7 +84,7 @@ export default function RootLayout({
         <ImageLightbox />
         <BuildRefreshWatcher />
         <NotificationSetupGuide />
-        <HenyangPeek />
+        <MascotPeek />
         {children}
       </body>
     </html>

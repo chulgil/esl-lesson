@@ -452,6 +452,38 @@ html[data-theme="cat"] .brick-studs::before {
   animation: henyang-giggle 3.2s ease-in-out infinite;
   transform-origin: 50% 100%;
 }
+/* 마스코트별 idle 동작 (mascot-shop.md) — 캐릭터 성격에 맞는 미세 움직임.
+ * 브리키(브릭 로봇)=통통 바운스, 몽이(문어)=물에 뜬 듯 부유 */
+@keyframes mascot-bounce {
+  0%,
+  100% {
+    transform: translateY(12px);
+  }
+  40% {
+    transform: translateY(4px);
+  }
+  55% {
+    transform: translateY(7px) scaleY(0.96);
+  }
+  70% {
+    transform: translateY(4px);
+  }
+}
+@keyframes mascot-float {
+  0%,
+  100% {
+    transform: translateY(10px) rotate(-1.5deg);
+  }
+  50% {
+    transform: translateY(2px) rotate(1.5deg);
+  }
+}
+.henyang-peek svg.mascot-anim-bounce {
+  animation: mascot-bounce 2.6s ease-in-out infinite;
+}
+.henyang-peek svg.mascot-anim-float {
+  animation: mascot-float 4s ease-in-out infinite;
+}
 body.game-focus .henyang-peek {
   display: none; /* 대전 중에는 입력바 시야 확보 */
 }

@@ -208,7 +208,7 @@
 | 슬롯 | 용도 | 컴포넌트 |
 |---|---|---|
 | 우하단 | **액션 전용** — 채팅 런처(bottom-20 모바일 / bottom-4 데스크톱) | ChatWidget 런처 |
-| 좌하단 | 장식·일시 — 테마 마스코트(HenyangPeek, 좌우 반전 등장), 새 버전 배너(BuildRefreshWatcher) | HenyangPeek·BuildRefreshWatcher |
+| 좌하단 | 장식·일시 — 테마 마스코트(MascotPeek(구 MascotPeek — 2026-08-11 캐릭터 상점으로 일반화), 좌우 반전 등장), 새 버전 배너(BuildRefreshWatcher) | MascotPeek·BuildRefreshWatcher |
 | 상단 중앙 | 토스트(초대·테마 축하·채팅) | InviteToaster |
 
 장식은 pointer-events-none — 어떤 슬롯에서도 클릭을 막지 않는다. 새 플로팅 요소는 이 표에 먼저 배치를 정한다 (겹침 재발 방지 — 런처가 헤냥이를 가리던 2026-07-31 보고).

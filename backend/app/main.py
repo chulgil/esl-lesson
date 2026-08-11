@@ -26,6 +26,7 @@ from app.api.my_contents import router as my_contents_router
 from app.api.notifications import router as notifications_router
 from app.api.push import router as push_router
 from app.api.routine import router as routine_router
+from app.api.shop import router as shop_router
 from app.api.study import cards_router, settings_router
 from app.api.study import router as study_router
 from app.api.themes import router as themes_router
@@ -79,6 +80,7 @@ app.include_router(agent_router, prefix="/api")
 app.include_router(study_router, prefix="/api")
 app.include_router(cards_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(shop_router, prefix="/api")
 app.include_router(themes_router, prefix="/api")
 app.include_router(friends_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
