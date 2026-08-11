@@ -23,6 +23,7 @@ from app.services.game.manager import (
     review_items,
     safe_priority_items,
 )
+from app.services.game.profiles import safe_player_badges
 
 logger = logging.getLogger(__name__)
 
@@ -422,8 +423,14 @@ class BingoManager:
                 "code": session.code,
                 "host": session.players[0].name if session.players else "",
                 "players": [p.name for p in session.players],
+                "profiles": await self._profiles(session),
             },
         )
+
+    async def _profiles(self, session) -> dict:
+        """이름 -> {mascot, title} — 대기실·결과의 플레이어 배지 (mascot-shop.md)."""
+        badges = await safe_player_badges([p.user_id for p in session.players])
+        return {p.name: badges[p.user_id] for p in session.players if p.user_id in badges}
 
     async def _broadcast(
         self, session: BingoSession, message: dict, exclude: int | None = None

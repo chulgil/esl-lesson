@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { useInviteTheme } from "@/lib/use-invite-theme";
@@ -135,8 +136,11 @@ export function QuizRoyale({
                     : "border-brick-blue/40 bg-white"
                 }`}
               >
-                {p.name}
-                {p.name === room.host && " (방장)"}
+                <PlayerBadge
+                  name={p.name}
+                  profile={p}
+                  suffix={p.name === room.host ? " (방장)" : undefined}
+                />
               </span>
             ))}
             {room.code &&

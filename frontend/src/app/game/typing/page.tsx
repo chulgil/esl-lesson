@@ -5,13 +5,16 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { fetchMe } from "@/lib/api";
+import { gameApi, type TypingHistoryItem } from "@/lib/game-api";
 import { useInviteTheme } from "@/lib/use-invite-theme";
 import {
   GameSocket,
   type GameReviewItem,
+  type PlayerProfile,
   type ServerMsg,
   type TpResult,
   type TpStartMsg,
@@ -95,6 +98,10 @@ function TypingRaceInner() {
     winner: string | null;
   } | null>(null);
   const [review, setReview] = useState<GameReviewItem[]>([]);
+  // 플레이어 배지 (이름 -> 마스코트·칭호) — 대기실·결과에 표시
+  const [profiles, setProfiles] = useState<Record<string, PlayerProfile>>({});
+  // 지난 기록 리스트 — "지난번의 나"를 이기는 동기 (2026-08-11 요청)
+  const [history, setHistory] = useState<TypingHistoryItem[]>([]);
   const [myName, setMyName] = useState("나");
   const socketRef = useRef<GameSocket | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -116,14 +123,24 @@ function TypingRaceInner() {
     });
   }, []);
 
+  useEffect(() => {
+    if (phase !== "lobby" && phase !== "ended") return;
+    gameApi
+      .typingHistory()
+      .then((res) => setHistory(res.items))
+      .catch(() => undefined);
+  }, [phase]);
+
   const handleMessage = useCallback((msg: ServerMsg) => {
     switch (msg.t) {
       case "tp.room":
         setRoom({ code: msg.code, host: msg.host, players: msg.players });
+        if (msg.profiles) setProfiles(msg.profiles);
         setPhase("waiting");
         break;
       case "tp.start": {
         setStart(msg);
+        if (msg.profiles) setProfiles(msg.profiles);
         secondsRef.current = msg.sentence_seconds;
         setEnd(null);
         setReview([]);
@@ -336,6 +353,47 @@ function TypingRaceInner() {
             </ul>
           </div>
 
+          {history.length > 0 && (
+            <div className="rounded-lg border-2 border-ink/10 bg-white p-4">
+              <p className="mb-2 text-sm font-bold">
+                내 기록
+                <span className="ml-2 text-xs font-normal opacity-60">
+                  최근 {history.length}판 — 지난번의 나를 이겨보세요
+                </span>
+              </p>
+              <ul className="flex flex-col gap-1 text-sm">
+                {history.map((h, i) => (
+                  <li
+                    key={`${h.played_at}-${i}`}
+                    className="flex flex-wrap items-center gap-x-2 border-b border-ink/5 py-1 last:border-b-0"
+                  >
+                    <span className="text-xs opacity-50">
+                      {h.played_at
+                        ? `${new Date(h.played_at).getMonth() + 1}/${new Date(h.played_at).getDate()}`
+                        : "-"}
+                    </span>
+                    <span className="font-bold">평균 {h.cpm}타</span>
+                    <span className="opacity-70">최고 {h.peak_cpm}타</span>
+                    <span className="text-xs opacity-60">
+                      정확도 {Math.round(h.accuracy * 100)}%
+                    </span>
+                    <span className="ml-auto text-xs">
+                      {h.mode === "solo" ? (
+                        <span className="opacity-50">혼자</span>
+                      ) : h.outcome === "win" ? (
+                        <span className="font-bold text-brick-green">승리</span>
+                      ) : h.outcome === "lose" ? (
+                        <span className="text-brick-red">패배</span>
+                      ) : (
+                        <span className="opacity-50">무승부</span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="rounded-lg border-2 border-ink/10 bg-white p-4">
             <p className="mb-3 text-sm font-bold">혼자 연습 (기록 도전)</p>
             <Brick
@@ -399,8 +457,11 @@ function TypingRaceInner() {
                 key={p}
                 className="rounded-full border-2 border-brick-blue/40 bg-white px-3 py-1.5 text-sm font-bold"
               >
-                {p}
-                {p === room.host && " (방장)"}
+                <PlayerBadge
+                  name={p}
+                  profile={profiles[p]}
+                  suffix={p === room.host ? " (방장)" : undefined}
+                />
               </span>
             ))}
             {Array.from({ length: 4 - room.players.length }, (_, i) => (
@@ -589,7 +650,9 @@ function TypingRaceInner() {
                   : "border-ink/10"
               }`}
             >
-              <p className="font-bold">{r.name}</p>
+              <p className="font-bold">
+                <PlayerBadge name={r.name} profile={profiles[r.name]} />
+              </p>
               <p className="mt-1 text-sm opacity-80">
                 평균 <b>{r.cpm}타</b> · 최고 <b>{r.peak_cpm}타</b> · {r.wpm}
                 WPM
@@ -603,6 +666,7 @@ function TypingRaceInner() {
           <ReviewPanel
             items={review}
             source="typing"
+            heading="복습하면 좋을"
             noun="문장"
             hint="추가한 문장은 학습 큐에 들어가요 — 문장 카드는 학습 레벨 '고급'에서 출제돼요"
           />

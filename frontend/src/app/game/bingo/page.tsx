@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { SegmentPlayer } from "@/components/media/SegmentPlayer";
@@ -17,6 +18,7 @@ import {
   type BgRoundMsg,
   type BgStartMsg,
   type GameReviewItem,
+  type PlayerProfile,
   type ServerMsg,
 } from "@/lib/game-ws";
 
@@ -65,6 +67,7 @@ function BingoInner() {
     winner: string | null;
   } | null>(null);
   const [review, setReview] = useState<GameReviewItem[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, PlayerProfile>>({});
   const [myName, setMyName] = useState("나");
   const [timeLeft, setTimeLeft] = useState(0);
   const socketRef = useRef<GameSocket | null>(null);
@@ -81,6 +84,7 @@ function BingoInner() {
     switch (msg.t) {
       case "bg.room":
         setRoom({ code: msg.code, host: msg.host, players: msg.players });
+        if (msg.profiles) setProfiles(msg.profiles);
         setPhase("waiting");
         break;
       case "bg.start":
@@ -284,8 +288,11 @@ function BingoInner() {
                 key={p}
                 className="rounded-full border-2 border-brick-blue/40 bg-white px-3 py-1.5 text-sm font-bold"
               >
-                {p}
-                {p === room.host && " (방장)"}
+                <PlayerBadge
+                  name={p}
+                  profile={profiles[p]}
+                  suffix={p === room.host ? " (방장)" : undefined}
+                />
               </span>
             ))}
             {Array.from({ length: 4 - room.players.length }, (_, i) => (

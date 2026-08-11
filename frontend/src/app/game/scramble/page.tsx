@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
 import { InviteFriends } from "@/components/game/InviteFriends";
+import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
 import { BackLink } from "@/components/nav/BackLink";
@@ -13,6 +14,7 @@ import { useSurfaceSkin } from "@/lib/theme-surfaces";
 import {
   GameSocket,
   type GameReviewItem,
+  type PlayerProfile,
   type ScResult,
   type ScRound,
   type ServerMsg,
@@ -83,6 +85,7 @@ function ScrambleInner() {
     winner: string | null;
   } | null>(null);
   const [review, setReview] = useState<GameReviewItem[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, PlayerProfile>>({});
 
   const socketRef = useRef<GameSocket | null>(null);
   const roundsRef = useRef<ScRound[]>([]);
@@ -127,6 +130,7 @@ function ScrambleInner() {
       switch (msg.t) {
         case "sc.room":
           setRoom({ code: msg.code, host: msg.host, players: msg.players });
+          if (msg.profiles) setProfiles(msg.profiles);
           setPhase("waiting");
           break;
         case "sc.start":
@@ -317,8 +321,11 @@ function ScrambleInner() {
                   key={p}
                   className="rounded-full bg-ink/5 px-3 py-1 text-sm font-bold"
                 >
-                  {p}
-                  {p === room.host && " (방장)"}
+                  <PlayerBadge
+                    name={p}
+                    profile={profiles[p]}
+                    suffix={p === room.host ? " (방장)" : undefined}
+                  />
                 </span>
               ))}
             </div>

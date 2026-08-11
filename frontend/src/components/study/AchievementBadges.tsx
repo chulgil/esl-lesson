@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { studyApi } from "@/lib/study-api";
 import type { Achievement, AchievementTier } from "@/lib/study-api";
 import { APP_THEMES } from "@/lib/theme";
 
@@ -46,12 +47,44 @@ const THEME_LABELS: Record<string, string> = Object.fromEntries(
 const VISIBLE_COUNT = 4;
 
 export function AchievementBadges({ items }: { items: Achievement[] }) {
+  // 대표 업적 — 달성 스티커를 탭해 지정하면 대전·리더보드 프로필 밑 칭호로
+  // 표시된다 (mascot-shop.md 플레이어 배지, 2026-08-11)
+  const [featured, setFeatured] = useState<string | null>(null);
+  useEffect(() => {
+    studyApi
+      .getSettings()
+      .then((s) => setFeatured(s.featured_achievement))
+      .catch(() => undefined);
+  }, []);
+
+  async function toggleFeatured(key: string) {
+    const next = featured === key ? "" : key;
+    try {
+      const res = await studyApi.patchSettings({ featured_achievement: next });
+      setFeatured(res.featured_achievement ?? null);
+    } catch {
+      // 미달성 등 — 무시 (달성 스티커만 클릭 가능하므로 드묾)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
+      <p className="-mb-2 text-xs opacity-60">
+        달성한 스티커를 탭하면 <b>대표 업적</b>이 돼요 — 대전·순위표에서 내 이름
+        아래 칭호로 보여요
+      </p>
       {FAMILY_ORDER.map((family) => {
         const group = items.filter((a) => a.family === family);
         if (group.length === 0) return null;
-        return <FamilySection key={family} family={family} group={group} />;
+        return (
+          <FamilySection
+            key={family}
+            family={family}
+            group={group}
+            featured={featured}
+            onToggle={toggleFeatured}
+          />
+        );
       })}
     </div>
   );
@@ -60,9 +93,13 @@ export function AchievementBadges({ items }: { items: Achievement[] }) {
 function FamilySection({
   family,
   group,
+  featured,
+  onToggle,
 }: {
   family: string;
   group: Achievement[];
+  featured: string | null;
+  onToggle: (key: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const achieved = group.filter((a) => a.achieved).length;
@@ -79,7 +116,12 @@ function FamilySection({
       {/* 모바일도 4열(컴팩트 타일) — 기본 노출 4개가 항상 꽉 찬 한 줄이 된다 */}
       <ul className="grid grid-cols-4 gap-2 sm:gap-3">
         {visible.map((a) => (
-          <StickerCard key={a.key} a={a} />
+          <StickerCard
+            key={a.key}
+            a={a}
+            featured={featured === a.key}
+            onToggle={onToggle}
+          />
         ))}
       </ul>
       {hidden > 0 && (
@@ -96,7 +138,15 @@ function FamilySection({
   );
 }
 
-function StickerCard({ a }: { a: Achievement }) {
+function StickerCard({
+  a,
+  featured,
+  onToggle,
+}: {
+  a: Achievement;
+  featured: boolean;
+  onToggle: (key: string) => void;
+}) {
   const ring = a.achieved
     ? a.tier
       ? TIER_RING[a.tier]
@@ -104,13 +154,23 @@ function StickerCard({ a }: { a: Achievement }) {
     : "border-ink/20 bg-ink/5 text-ink/40";
   return (
     <li
-      title={`${a.title} — ${a.desc}`}
+      title={
+        a.achieved
+          ? `${a.title} — ${a.desc} (탭: 대표 업적 ${featured ? "해제" : "설정"})`
+          : `${a.title} — ${a.desc}`
+      }
+      onClick={a.achieved ? () => onToggle(a.key) : undefined}
       className={`relative flex flex-col items-center gap-1 rounded-lg border-2 p-2 text-center sm:gap-1.5 sm:p-3 ${
         a.achieved
-          ? "border-brick-yellow bg-highlight/30"
+          ? "cursor-pointer border-brick-yellow bg-highlight/30 transition hover:-translate-y-0.5"
           : "border-dashed border-ink/20 bg-white opacity-70"
-      }`}
+      } ${featured ? "ring-2 ring-brick-blue" : ""}`}
     >
+      {featured && (
+        <span className="absolute top-1 left-1 rounded-full bg-brick-blue px-1.5 py-0.5 text-[9px] font-bold text-brick-label">
+          대표
+        </span>
+      )}
       {/* 티어 칩 — 카드 안쪽 모서리 (밖으로 튀어나오면 이웃 카드와 겹쳐 깨져 보임) */}
       {a.tier && (
         <span

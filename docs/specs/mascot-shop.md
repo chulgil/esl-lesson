@@ -49,6 +49,20 @@ school/academy 800, ocean/excel 1200, cat 2000 (백오피스 기입 가격은 �
 ③ idle 애니메이션 3종 작동(시간차 좌표 측정). 2026-08-11 초도 검증 4회에서
 말풍선 반전·브리키/몽이 목도리 입 가림·리본 부유를 발견해 수정했다.
 
+## 플레이어 배지 (2026-08-11 — 경쟁 동기)
+
+마스코트와 **대표 업적 칭호**가 대전·대기실·리더보드에서 프로필로 보인다:
+
+- 대표 업적: 학습 탭 업적 스티커(달성분)를 탭해 지정 — `user_settings.
+  featured_achievement`, PATCH `/api/settings` (미달성 422, "" = 해제).
+  칭호 = 업적 제목 (`profiles.ACHIEVEMENT_TITLES`)
+- 서버 부착: `services/game/profiles.safe_player_badges` — 방 브로드캐스트
+  (`tp/sc/dt/bg.room` `profiles`, `qr.room` players 인라인), `tp.start`,
+  테트리스 `match.found.opponent_profile`, 리더보드 2종(`/game/leaderboard`,
+  `/game/leaderboards`). 조회 실패는 빈 dict 폴백 — 게임을 막지 않는다
+- 프론트: `PlayerBadge`(아바타 `MascotSvg avatar` + 이름 + 칭호) — 대기실
+  칩·결과 행·테트리스 헤더/PiP/결과·주간 명예의 전당 공용
+
 ## 설정 화면
 
 테마 섹션 아래 "캐릭터 상점"(`MascotShopSection`): 보유 XP 배지, 마스코트 카드

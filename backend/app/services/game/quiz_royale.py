@@ -20,6 +20,7 @@ from app.core.db import get_session_factory
 from app.models import LearningItem, QuizRoyaleMatch, QuizRoyalePlayer
 from app.services import embeddings
 from app.services.game.manager import WordPoolError, safe_priority_items, select_word_pool
+from app.services.game.profiles import safe_player_badges
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -501,6 +502,7 @@ class QuizRoyaleManager:
             logger.exception("failed to save quiz royale %s", session.match_id)
 
     async def _broadcast_room(self, session: QuizSession) -> None:
+        badges = await safe_player_badges([p.user_id for p in session.players])
         await self._broadcast(
             session,
             {
@@ -508,7 +510,14 @@ class QuizRoyaleManager:
                 "code": session.code,
                 "mode": session.mode,
                 "host": session.players[0].name if session.players else "",
-                "players": [{"name": p.name, "is_bot": p.user_id is None} for p in session.players],
+                "players": [
+                    {
+                        "name": p.name,
+                        "is_bot": p.user_id is None,
+                        **(badges.get(p.user_id) or {}),
+                    }
+                    for p in session.players
+                ],
             },
         )
 

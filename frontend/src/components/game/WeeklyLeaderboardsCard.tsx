@@ -1,5 +1,6 @@
 "use client";
 
+import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { useEffect, useState } from "react";
 import {
   gameApi,
@@ -76,8 +77,12 @@ function Ranking({
           }`}
         >
           <span className="truncate">
-            {i + 1}위 {r.name}
-            {r.me && " (나)"}
+            {i + 1}위{" "}
+            <PlayerBadge
+              name={r.name}
+              profile={r}
+              suffix={r.me ? " (나)" : undefined}
+            />
           </span>
           <b className="ml-2 shrink-0">{unit(r.value)}</b>
         </li>

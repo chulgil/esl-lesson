@@ -27,6 +27,7 @@ from app.models import (
 from app.services.game import records
 from app.services.game.bots import Bot
 from app.services.game.engine import Board, Match, build_word_queue
+from app.services.game.profiles import safe_player_badges
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -203,6 +204,7 @@ class GameManager:
 
     async def _start(self, session: MatchSession, opponent_name: str | None = None) -> None:
         session.started = True
+        badges = await safe_player_badges([s.user_id for s in session.players.values()])
         for player_no, slot in session.players.items():
             other = session.players.get(3 - player_no)
             await self._safe_send(
@@ -214,6 +216,8 @@ class GameManager:
                     "quiz": session.quiz,
                     "you": player_no,
                     "opponent": other.name if other else (opponent_name or "봇"),
+                    # 상대 배지 — 마스코트·칭호로 경쟁 동기 (mascot-shop.md 플레이어 배지)
+                    "opponent_profile": badges.get(other.user_id) if other else None,
                     "countdown": int(COUNTDOWN_SECONDS),
                 },
             )
@@ -329,6 +333,7 @@ class GameManager:
         slot.send = send
         slot.disconnected_at = None
         other = session.players.get(3 - player_no)
+        badges = await safe_player_badges([other.user_id] if other else [])
         await self._safe_send(
             slot,
             {
@@ -340,6 +345,7 @@ class GameManager:
                 "opponent": other.name
                 if other
                 else f"봇 Lv.{session.bot.level if session.bot else '?'}",
+                "opponent_profile": badges.get(other.user_id) if other else None,
                 "countdown": 0,
                 "rejoined": True,
             },
