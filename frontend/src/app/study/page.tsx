@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Brick } from "@/components/brick/Brick";
+import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { AchievementBadges } from "@/components/study/AchievementBadges";
 import { CardCollection } from "@/components/study/CardCollection";
 import { LongTermMemoryCard } from "@/components/study/LongTermMemoryCard";
@@ -339,9 +340,14 @@ export default function StudyHubPage() {
                     : "border-ink/10"
                 }`}
               >
-                <span>
-                  {r.rank}위 {r.name}
-                  {r.me && " (나)"}
+                <span className="flex items-center gap-1.5">
+                  <span className="shrink-0">{r.rank}위</span>
+                  {/* 마스코트·칭호 배지 — 게임 리더보드와 동일 (2026-08-11 누락 보고) */}
+                  <PlayerBadge
+                    name={r.name}
+                    profile={r}
+                    suffix={r.me ? " (나)" : undefined}
+                  />
                 </span>
                 <b>{r.reviews}회</b>
               </li>
