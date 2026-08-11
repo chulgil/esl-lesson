@@ -69,6 +69,29 @@ async def test_study_leaderboard_ranks_me_and_friends(client, db_session):
     assert rows[0]["rank"] == 1 and rows[1]["rank"] == 2
 
 
+async def test_study_leaderboard_includes_player_badges(client, db_session):
+    """학습 랭킹에도 마스코트·대표 업적 칭호 — 게임 리더보드와 동일 (2026-08-11 보고)."""
+    from app.models.user import UserSettings
+
+    me = await login(client, db_session)
+    friend = User(google_sub="g-lb3", email="lb3@example.com", name="F", nickname="배지친구")
+    db_session.add(friend)
+    await db_session.flush()
+    db_session.add(Friendship(requester_id=me.id, addressee_id=friend.id, status="accepted"))
+    db_session.add(
+        UserSettings(user_id=friend.id, mascot_key="mongi", featured_achievement="first_review")
+    )
+    await _log_reviews(db_session, friend.id, 3)
+    await db_session.commit()
+
+    rows = (await client.get("/api/study/leaderboard")).json()["items"]
+    friend_row = next(r for r in rows if r["name"] == "배지친구")
+    assert friend_row["mascot"] == "mongi"
+    assert friend_row["title"] == "첫 걸음"  # first_review 칭호
+    my_row = next(r for r in rows if r["me"])
+    assert "mascot" not in my_row or my_row.get("mascot") is None  # 미설정은 배지 없음
+
+
 async def test_game_bests_across_three_games(client, db_session):
     """게임별 내 최고 기록 — 테트리스 점수 / 퀴즈 점수 / 타자 최고 타."""
     me = await login(client, db_session)

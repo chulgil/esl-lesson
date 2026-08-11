@@ -198,10 +198,20 @@ export function ChatWidget() {
   // 도킹 모드는 항상 열려있음(닫기 없음) — 플로팅일 때만 open 상태를 따른다
   const panelOpen = effFloating ? open : true;
 
+  // 위젯 자체가 안 그려지는 화면 — 아래 early return 과 동일 조건.
+  // mascotLauncher 판정에도 반영해야 한다: 런처가 없는 화면에서 바디 클래스만
+  // 남으면 좌하단 마스코트까지 숨어 캐릭터가 어디에도 안 보인다
+  // (2026-08-11 보고 — PC /chat 등에서 마스코트 실종)
+  const widgetHidden =
+    !loggedIn ||
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/admin") ||
+    pathname === "/login";
+
   // 마스코트가 런처를 차지하면 좌하단 상시 노출(MascotPeek)은 숨긴다 — 같은
   // 캐릭터 중복 방지. excel 위장은 "메모" pill 유지(캐릭터가 위장을 깬다)라 제외
   const mascotLauncher =
-    Boolean(mascot) && effFloating && theme !== "excel" && loggedIn;
+    Boolean(mascot) && effFloating && theme !== "excel" && !widgetHidden;
   useEffect(() => {
     document.body.classList.toggle("mascot-launcher", mascotLauncher);
     return () => document.body.classList.remove("mascot-launcher");
@@ -250,13 +260,8 @@ export function ChatWidget() {
     }
   }, [isDesktop, panelOpen]);
 
-  // 채팅 전체 페이지·관리자·로그인 화면에서는 숨김
-  if (
-    !loggedIn ||
-    pathname.startsWith("/chat") ||
-    pathname.startsWith("/admin") ||
-    pathname === "/login"
-  ) {
+  // 채팅 전체 페이지·관리자·로그인 화면에서는 숨김 (조건 정의는 widgetHidden — 위)
+  if (widgetHidden) {
     return null;
   }
 

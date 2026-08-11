@@ -222,7 +222,7 @@ async def leaderboard(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
             .limit(10)
         )
     ).all()
-    badges = await safe_player_badges([uid for uid, _, _ in rows])
+    badges = await safe_player_badges([uid for uid, _, _ in rows], db=db)
     return {
         "items": [
             {"name": name, "score": int(total), **(badges.get(uid) or {})}
@@ -387,7 +387,7 @@ async def weekly_leaderboards(
             (await db.execute(select(User.id, User.nickname).where(User.id.in_(all_ids)))).all()
         )
         # 마스코트·칭호 — 순위표에서도 배지가 보여야 수집·경쟁 동기가 된다
-        badges = await safe_player_badges(list(all_ids))
+        badges = await safe_player_badges(list(all_ids), db=db)
 
     def top(best: dict[int, int]) -> list[dict]:
         ranked = sorted(best.items(), key=lambda kv: (-kv[1], names.get(kv[0], "")))

@@ -86,7 +86,8 @@ school/academy 800, ocean/excel 1200, cat 2000 (백오피스 기입 가격은 �
   테트리스 `match.found.opponent_profile`, 리더보드 2종(`/game/leaderboard`,
   `/game/leaderboards`). 조회 실패는 빈 dict 폴백 — 게임을 막지 않는다
 - 프론트: `PlayerBadge`(아바타 `MascotSvg avatar` + 이름 + 칭호) — 대기실
-  칩·결과 행·테트리스 헤더/PiP/결과·주간 명예의 전당 공용
+  칩·결과 행·테트리스 헤더/PiP/결과·주간 명예의 전당·**학습 탭 주간 학습
+  랭킹**(2026-08-11 누락 보고로 추가 — `/api/study/leaderboard` 에 배지 부착) 공용
 
 ## 상점 페이지 (`/shop`, 2026-08-11 분리)
 

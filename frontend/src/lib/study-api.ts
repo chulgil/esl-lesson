@@ -111,6 +111,9 @@ export interface StudyRank {
   reviews: number;
   rank: number;
   me: boolean;
+  /** 플레이어 배지 — 마스코트·대표 업적 칭호 (게임 리더보드와 동일) */
+  mascot?: string | null;
+  title?: string | null;
 }
 
 /** 장기 기억 — stability 7일+ 카드 수와 주별 도달 누적 (learning.md 장기 기억 지표) */

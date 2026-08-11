@@ -855,6 +855,11 @@ async def study_leaderboard(
         )
     ).all()
 
+    # 마스코트·대표 업적 칭호 — 게임 리더보드와 동일한 배지 (2026-08-11 보고: 누락)
+    from app.services.game.profiles import safe_player_badges
+
+    badges = await safe_player_badges([uid for uid, _, _ in rows], db=db)
+
     items = []
     prev_count: int | None = None
     prev_rank = 0
@@ -867,6 +872,7 @@ async def study_leaderboard(
                 "reviews": count,
                 "rank": rank,
                 "me": uid == user.id,
+                **(badges.get(uid) or {}),
             }
         )
         prev_count, prev_rank = count, rank
@@ -1079,9 +1085,7 @@ async def update_settings(
             if body.featured_achievement not in ACHIEVEMENT_TITLES:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "achievement_not_found")
             earned = {
-                a["key"]
-                for a in await achievements_service.compute(db, user.id)
-                if a["achieved"]
+                a["key"] for a in await achievements_service.compute(db, user.id) if a["achieved"]
             }
             if body.featured_achievement not in earned:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "not_achieved")
