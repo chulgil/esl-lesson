@@ -212,7 +212,7 @@
 | GET `/api/study/queue` | 오늘의 큐 + 문항 (`?content_id=` 덱 한정 — study-decks.md, `?mode=weak` 오답 정리) |
 | POST `/api/study/answer` | `{card_id, quiz_mode, answer, duration_ms}` → 채점 결과 + FSRS 갱신 + 다음 due |
 | POST `/api/study/rate` | 자기평가 보정 `{card_id, rating}` |
-| GET `/api/study/stats` | 대시보드: due/신규 수, 레벨별 현황, 일별 히트맵, 연속 학습일, 오답 정리 수(`weak_count`), 장기 기억(`long_term`) |
+| GET `/api/study/stats` | 대시보드: due/신규 수, 레벨별 현황(타입별 `enabled` — 학습 난이도로 잠긴 타입 표시, 2026-08-11: 컬렉션 빈 칸이 "콘텐츠 미완성"으로 오해되던 문제), 일별 히트맵, 연속 학습일, 오답 정리 수(`weak_count`), 장기 기억(`long_term`) |
 | GET `/api/study/decks` | 덱(담은 콘텐츠)별 due/new 카운트 — study-decks.md |
 | GET `/api/study/network` | 어휘망 그래프 (임베딩 유사도) — word-insight.md |
 | GET `/api/study/items/{id}/insight` | 단어 인사이트 카드 (가시성 게이트) — word-insight.md |
