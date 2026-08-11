@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.models import ThemeGrant, ThemeRewardRule, ThemeSetting, User, XpSpend
+from app.models import Purchase, ThemeGrant, ThemeRewardRule, ThemeSetting, User, XpSpend
 from app.services import progress
 from app.services.achievements import DEFINITIONS
 from app.services.theme_rewards import sync_theme_rewards
@@ -98,6 +98,7 @@ async def purchase_theme(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
 
     db.add(XpSpend(user_id=user.id, amount=price, reason=f"theme:{theme_key}"))
+    db.add(Purchase(user_id=user.id, item_key=f"theme:{theme_key}", method="xp", amount=price))
     db.add(ThemeGrant(user_id=user.id, theme_key=theme_key, note="XP 구매", granted_by=None))
     try:
         await db.commit()

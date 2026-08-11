@@ -23,10 +23,35 @@ school/academy 800, ocean/excel 1200, cat 2000 (백오피스 기입 가격은 �
 
 | 메서드/경로 | 역할 |
 |---|---|
-| GET `/api/shop` | 지갑(available_xp)+활성 마스코트+마스코트/악세 목록(owned)+책갈피 상태 |
-| POST `/api/shop/purchase` | `{item_key: "mascot:x"\|"outfit:x"}` — 404 미존재 / 409 보유 / 422 잔액 부족. 마스코트는 구매 시 자동 활성 |
+| GET `/api/shop` | 지갑(available_xp)+활성 마스코트+마스코트/악세 목록(owned·유효가·sale)+책갈피 상태 |
+| POST `/api/shop/purchase` | `{item_key: "mascot:x"\|"outfit:x"}` — 404 미존재 / 409 보유 / 422 잔액 부족·`event_only_item`. 마스코트는 구매 시 자동 활성 |
 | PATCH `/api/shop/mascot` | `{key\|null}` 활성 변경 — 403 미보유, null=끄기("쉬게 하기") |
 | POST `/api/shop/streak-saver/purchase` | 422 `saver_full`(최대 2)/`insufficient_xp` |
+| GET `/api/shop/purchases` | 내 구매 이력 최신 50건 — 품목·결제수단·금액·시각 |
+
+## 구매 이력 (2026-08-11)
+
+`purchases` 원장 — 사용자별 무엇을 언제 어떤 결제수단으로 얼마에 샀는가.
+`xp_spends` 는 지갑(가용 XP 차감) 원장, `purchases` 는 구매 내역 원장으로 분리 —
+`method`("xp", 현금·카드 도입 대비)·`currency` 컬럼 보유. 테마·마스코트·악세·
+책갈피 구매 3경로 모두 기록하며, 기존 `xp_spends` 전량을 XP 결제로 백필했다
+(마이그레이션 7107c0984dc7). **어드민 지급은 구매가 아니므로 기록하지 않는다.**
+설정 화면 "구매 내역" 접기에서 조회 (`PurchaseHistory`, 펼칠 때 로드).
+
+## 백오피스 관리 (`/admin/shop`, 2026-08-11)
+
+테마 몰과 같은 관리 모델 — `item_settings` 오버라이드 (행 없음 = 카탈로그 기본):
+
+| 메서드/경로 | 역할 |
+|---|---|
+| GET `/api/admin/shop` | 카탈로그+유효가+판매 방식+보유자 수 |
+| PATCH `/api/admin/shop/{item_key}` | `{price_xp?}` 가격 오버라이드(null=기본가 복귀) / `{sale?}` "xp"\|"event" |
+| GET·POST `/api/admin/shop/{item_key}/grants` | 보유자 목록 / 이메일 지급 (409 중복, `item_granted` 벨 알림) |
+| DELETE `/api/admin/shop/grants/{id}` | 회수 — 다음 조회부터 미보유 |
+
+`sale="event"` = 이벤트 한정: 잔액과 무관하게 XP 구매 422, 상점 카드는
+"이벤트 한정" 배지(구매 버튼 없음). 유효 정책은 `services/mascots.item_policies`
+가 단일 근거 — 카탈로그 조회와 구매 검증이 같은 값을 본다.
 
 ## 렌더링 계약
 
@@ -65,6 +90,8 @@ school/academy 800, ocean/excel 1200, cat 2000 (백오피스 기입 가격은 �
 
 ## 설정 화면
 
-테마 섹션 아래 "캐릭터 상점"(`MascotShopSection`): 보유 XP 배지, 마스코트 카드
-(미리보기 SVG — 미보유는 흑백+실루엣 느낌, 수집 도감식), 데려오기/쉬게 하기,
-악세 칩(사면 "착용 중"), 책갈피 충전. 구매 실패 카피: XP 부족/이미 보유/책갈피 최대.
+테마 섹션 아래 "캐릭터 상점"(`MascotShopSection`): **XpWallet 지갑 카드**(테마
+섹션과 공용 — "보유 XP 가 안 보인다" 2026-08-11 보고로 강조 배치, 부족 시 버튼에
+부족분 표기), 마스코트 카드(미리보기 SVG — 미보유는 흑백+실루엣 느낌, 수집
+도감식), 데려오기/쉬게 하기, 악세 칩(사면 "착용 중"), 책갈피 충전, 구매 내역
+접기. 구매 실패 카피: XP 부족/이미 보유/책갈피 최대.

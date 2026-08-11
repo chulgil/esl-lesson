@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MASCOT_LABELS, OUTFIT_LABELS } from "@/components/theme/mascots";
 import { chatApi } from "@/lib/chat-api";
 import { onChatEvent } from "@/lib/chat-signals";
 import {
@@ -201,6 +202,21 @@ function notifText(n: NotificationItem): string {
     const note = n.payload.note ? ` (${String(n.payload.note)})` : "";
     return `'${label}' 테마가 열렸어요${note} — 설정에서 바꿔보세요`;
   }
+  if (n.type === "item_granted") {
+    // 이벤트 지급 — 캐릭터/악세사리 (mascot-shop.md 백오피스 지급)
+    const itemKey = String(n.payload.item_key ?? "");
+    const [kind, key] = [
+      itemKey.slice(0, itemKey.indexOf(":")),
+      itemKey.slice(itemKey.indexOf(":") + 1),
+    ];
+    const label =
+      kind === "mascot"
+        ? (MASCOT_LABELS[key] ?? key)
+        : (OUTFIT_LABELS[key] ?? key);
+    const noun = kind === "mascot" ? "캐릭터" : "악세사리";
+    const note = n.payload.note ? ` (${String(n.payload.note)})` : "";
+    return `'${label}' ${noun}를 받았어요${note} — 설정에서 확인해 보세요`;
+  }
   if (n.type === "exam_dethroned") {
     const by = String(n.payload.by_name ?? "누군가");
     const title = String(n.payload.content_title ?? "시험");
@@ -216,7 +232,8 @@ function notifTarget(n: NotificationItem): string {
     const theme = n.payload.theme ? `&theme=${String(n.payload.theme)}` : "";
     return `/game/${String(n.payload.game ?? "")}?join=${String(n.payload.code ?? "")}${theme}`;
   }
-  if (n.type === "theme_granted") return "/settings";
+  if (n.type === "theme_granted" || n.type === "item_granted")
+    return "/settings";
   if (n.type === "exam_dethroned")
     return `/exam/${String(n.payload.content_id ?? "")}`;
   return "/friends";

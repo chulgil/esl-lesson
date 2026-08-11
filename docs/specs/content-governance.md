@@ -99,8 +99,8 @@ license != creativeCommon 또는 미확인 → content_permissions 필수, 없�
 | POST `/api/my/contents/{id}/subscribe` | **신규** — 담기. `ready` 콘텐츠만, 멱등 |
 | DELETE `/api/my/contents/{id}` | 유지 (빼기). 개인 콘텐츠는 마지막 구독자 이탈 시 본체 삭제 |
 | POST `/api/my/contents/{id}/retry` | **개인(private) 콘텐츠로 제한** — 담기가 열리면서 사용자가 관리자 콘텐츠의 재추출(AI 비용)을 트리거할 수 있게 되는 구멍을 막는다 |
-| POST `/api/admin/contents` | `allow_non_cc` 제거, `permission` 객체 추가 |
-| GET `/api/admin/youtube/cc-search?q=` | **신규 (2026-07-29)** — Data API `search.list`(`videoLicense=creativeCommon` + `videoCaption=closedCaption`)로 CC·자막 보유 영상만 검색. 등록 화면 "CC 영상 찾기" — 선택 시 URL 자동 채움. 검색 필터는 후보용이고 등록 시 `fetch_license` 재확인(이중 게이트). 키 없으면 503, 구글 오류 502. search.list 쿼터 100단위/호출(관리자 전용이라 무해) |
+| POST `/api/admin/contents` | `allow_non_cc` 제거, `permission` 객체 추가. **2026-08-11**: 같은 영상이 이미 public 이면 409 `already_registered` (연속 등록 시 이중 클릭/재선택 방지 — 기존엔 private→public 승격만 처리하고 public 중복은 새 행이 생겼다) |
+| GET `/api/admin/youtube/cc-search?q=` | **신규 (2026-07-29)** — Data API `search.list`(`videoLicense=creativeCommon` + `videoCaption=closedCaption`)로 CC·자막 보유 영상만 검색. 등록 화면 "CC 영상 찾기" — 선택 시 URL 자동 채움. 검색 필터는 후보용이고 등록 시 `fetch_license` 재확인(이중 게이트). 키 없으면 503, 구글 오류 502. search.list 쿼터 100단위/호출(관리자 전용이라 무해). **2026-08-11**: 각 결과에 `registered`(이미 등록된 영상) 플래그 — 화면이 "등록됨" 배지+선택 차단 |
 | GET `/api/admin/contents/{id}` | 응답에 `permission` 포함 (검수 화면 표시용) |
 | GET `/api/contents` | 항목에 `subscribed` 플래그 추가 (담기 버튼 상태). 2026-08-05 `difficulty`·`known_ratio` 추가 (아래 절) |
 
@@ -108,7 +108,7 @@ license != creativeCommon 또는 미확인 → content_permissions 필수, 없�
 
 - `/my` — 등록 폼 제거. "라이브러리에서 담은 콘텐츠" 목록으로 성격 변경
 - `/library`, `/library/{id}` — 담기/빼기 토글
-- `/admin/contents/new` — CC 차단 시 허락 증빙 폼(권리자·날짜·범위 체크·증빙) 노출, 입력해야 등록
+- `/admin/contents/new` — CC 차단 시 허락 증빙 폼(권리자·날짜·범위 체크·증빙) 노출, 입력해야 등록. **연속 등록 (2026-08-11)**: 유튜브 탭은 등록 성공 후 목록으로 이동하지 않고 화면 잔류 — 검색 결과·검색어 유지, URL 만 비움, 성공 배너("다음 영상을 이어서 등록"), 등록분은 "등록됨" 배지로 재선택 차단 (수기 입력 탭은 기존대로 목록 이동)
 - `/copyright` — 큐레이션·허락 모델로 문구 갱신
 
 ## 난이도 배지·아는 표현 비율 (2026-08-05)

@@ -25,7 +25,7 @@ STREAK_SAVER_PRICE_XP = 500
 
 
 def item_price(item_key: str) -> int | None:
-    """ "mascot:henyang" / "outfit:ribbon" 형식 키의 가격. 모르는 키는 None."""
+    """ "mascot:henyang" / "outfit:ribbon" 형식 키의 카탈로그 기본가. 모르는 키는 None."""
     kind, _, key = item_key.partition(":")
     if kind == "mascot":
         entry = MASCOTS.get(key)
@@ -34,3 +34,28 @@ def item_price(item_key: str) -> int | None:
     else:
         return None
     return entry["price_xp"] if entry else None
+
+
+async def item_policies(db) -> dict[str, dict]:
+    """전 아이템의 유효 판매 정책 — 백오피스 오버라이드(item_settings) 병합.
+
+    {item_key: {"price_xp": 유효가, "sale": "xp"|"event"}} — 행 없음 = 기본가·XP 판매.
+    카탈로그 조회와 구매 검증이 같은 값을 보도록 단일 헬퍼로 묶는다.
+    """
+    from sqlalchemy import select
+
+    from app.models import ItemSetting
+
+    overrides = {s.item_key: s for s in (await db.execute(select(ItemSetting))).scalars()}
+    policies: dict[str, dict] = {}
+    for kind, catalog in (("mascot", MASCOTS), ("outfit", OUTFITS)):
+        for key, meta in catalog.items():
+            item_key = f"{kind}:{key}"
+            setting = overrides.get(item_key)
+            policies[item_key] = {
+                "price_xp": setting.price_xp
+                if setting and setting.price_xp is not None
+                else meta["price_xp"],
+                "sale": setting.sale if setting else "xp",
+            }
+    return policies

@@ -28,7 +28,7 @@ from app.models.notification import Notification
 from app.models.push import PushSubscription
 from app.models.retention import QuestCompletion, StreakSaverUse, XpSpend
 from app.models.routine import ContentRoutineProgress, ContentSummary, ListenCheck
-from app.models.shop import ItemGrant
+from app.models.shop import ItemGrant, ItemSetting, Purchase
 from app.models.theme import ThemeGrant, ThemeRewardRule, ThemeSetting
 from app.models.tts import TtsAudio
 from app.models.usage import UsageEvent
@@ -57,9 +57,11 @@ __all__ = [
     "TypingRace",
     "ItemGrant",
     "ItemOccurrence",
+    "ItemSetting",
     "LearningItem",
     "ListenCheck",
     "Notification",
+    "Purchase",
     "PushSubscription",
     "QuestCompletion",
     "ContentRequest",

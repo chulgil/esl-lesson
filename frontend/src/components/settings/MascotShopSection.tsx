@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PurchaseHistory } from "@/components/settings/PurchaseHistory";
+import { XpWallet } from "@/components/settings/XpWallet";
 import { MascotSvg } from "@/components/theme/mascots";
 import { dispatchShopUpdated, shopApi, type ShopCatalog } from "@/lib/shop-api";
 
@@ -79,13 +81,11 @@ export function MascotShopSection() {
   return (
     <section className="mt-8">
       <p className="mb-1 text-sm font-bold">캐릭터 상점</p>
-      <p className="mb-3 text-xs opacity-60">
+      <p className="mb-2 text-xs opacity-60">
         복습·게임으로 모은 XP로 캐릭터를 데려와요 — 화면 왼쪽 아래에서 함께
-        공부해요. 보유 XP{" "}
-        <b className="rounded bg-brick-blue/10 px-1.5 text-brick-blue">
-          {shop.available_xp} XP
-        </b>
+        공부해요.
       </p>
+      <XpWallet amount={shop.available_xp} />
       {notice && <p className="mb-2 text-xs text-brick-red">{notice}</p>}
 
       {/* 마스코트 — 미리보기 + 구매/활성. 수집 도감식: 보유/미보유가 한눈에 */}
@@ -118,6 +118,10 @@ export function MascotShopSection() {
                 >
                   {active ? "쉬게 하기" : "데려오기"}
                 </button>
+              ) : m.sale === "event" ? (
+                <span className="grid min-h-9 w-full place-items-center rounded-full border-2 border-brick-yellow/60 bg-highlight/40 text-xs font-bold">
+                  이벤트 한정
+                </span>
               ) : (
                 <button
                   type="button"
@@ -131,7 +135,9 @@ export function MascotShopSection() {
                 >
                   {busy === `mascot:${m.key}`
                     ? "구매 중..."
-                    : `${m.price_xp} XP`}
+                    : shop.available_xp >= m.price_xp
+                      ? `${m.price_xp.toLocaleString()} XP`
+                      : `${m.price_xp.toLocaleString()} XP · ${(m.price_xp - shop.available_xp).toLocaleString()} 부족`}
                 </button>
               )}
             </div>
@@ -148,22 +154,26 @@ export function MascotShopSection() {
           <button
             key={o.key}
             type="button"
-            disabled={o.owned || busy !== null}
+            disabled={o.owned || busy !== null || o.sale === "event"}
             onClick={() => buy(`outfit:${o.key}`)}
             className={`min-h-9 rounded-full border-2 px-3 text-xs font-bold transition ${
               o.owned
                 ? "border-brick-green/50 bg-brick-green/10 text-brick-green"
-                : shop.available_xp >= o.price_xp
-                  ? "border-brick-blue/50 bg-white text-brick-blue hover:-translate-y-0.5"
-                  : "border-ink/15 opacity-50"
+                : o.sale === "event"
+                  ? "border-brick-yellow/60 bg-highlight/40"
+                  : shop.available_xp >= o.price_xp
+                    ? "border-brick-blue/50 bg-white text-brick-blue hover:-translate-y-0.5"
+                    : "border-ink/15 opacity-50"
             }`}
           >
             {o.label}{" "}
             {o.owned
               ? "착용 중"
-              : busy === `outfit:${o.key}`
-                ? "구매 중..."
-                : `${o.price_xp} XP`}
+              : o.sale === "event"
+                ? "이벤트 한정"
+                : busy === `outfit:${o.key}`
+                  ? "구매 중..."
+                  : `${o.price_xp.toLocaleString()} XP`}
           </button>
         ))}
       </div>
@@ -194,6 +204,9 @@ export function MascotShopSection() {
             : `${shop.streak_saver.price_xp} XP로 1개 충전`}
         </button>
       </div>
+
+      {/* 구매 내역 — 각 사용자별 이력 (2026-08-11 요구) */}
+      <PurchaseHistory />
     </section>
   );
 }

@@ -208,6 +208,70 @@ async def test_approve_all_skips_hintless_sentences(admin_client, db_session):
     assert res.json() == {"approved": 1, "skipped": 1}
 
 
+async def test_public_duplicate_registration_rejected(admin_client, db_session):
+    """이미 공용으로 등록된 영상 재등록 → 409 (연속 등록 시 중복 방지, 2026-08-11)."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.api import admin_contents as admin_mod
+    from app.models import Content
+
+    db_session.add(
+        Content(
+            source="youtube",
+            visibility="public",
+            youtube_video_id="pubvid00001",
+            url="https://youtu.be/pubvid00001",
+            title="공용 영상",
+            status="ready",
+        )
+    )
+    await db_session.commit()
+
+    with patch.object(
+        admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="creativeCommon")
+    ):
+        res = await admin_client.post(
+            "/api/admin/contents",
+            json={"source": "youtube", "url": "https://youtu.be/pubvid00001"},
+        )
+    assert res.status_code == 409
+    assert res.json()["detail"] == "already_registered"
+
+
+async def test_cc_search_marks_registered_videos(admin_client, db_session, monkeypatch):
+    """검색 결과에 이미 등록된 영상 표시 — 연속 등록 시 중복 후보 제거."""
+    from app.api import admin_contents
+    from app.models import Content
+
+    db_session.add(
+        Content(
+            source="youtube",
+            visibility="public",
+            youtube_video_id="regvid00001",
+            url="https://youtu.be/regvid00001",
+            title="등록된 영상",
+            status="ready",
+        )
+    )
+    await db_session.commit()
+
+    async def fake_search(query, page_token=None):
+        return {
+            "items": [
+                {"video_id": "regvid00001", "title": "Registered"},
+                {"video_id": "newvid00001", "title": "Fresh"},
+            ],
+            "next_page_token": None,
+        }
+
+    monkeypatch.setattr(admin_contents.youtube, "search_cc_videos", fake_search)
+    res = await admin_client.get("/api/admin/youtube/cc-search", params={"q": "x"})
+    assert res.status_code == 200
+    by_id = {i["video_id"]: i for i in res.json()["items"]}
+    assert by_id["regvid00001"]["registered"] is True
+    assert by_id["newvid00001"]["registered"] is False
+
+
 async def test_cc_search_returns_mapped_items_with_paging(admin_client, monkeypatch):
     """CC 검색 — Data API 응답 매핑 + page_token 전달 + next_page_token 반환."""
     from app.api import admin_contents
