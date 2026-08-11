@@ -101,6 +101,10 @@ export async function drawShareCard(
     y += 70;
   }
 
+  // 내 마스코트 — 화면 좌하단의 그 캐릭터(악세 포함)를 카드 우하단에도
+  // (2026-08-11 요청: 공유에도 내 캐릭터·테마가 함께). 마스코트 미설정이면 생략
+  await drawMascot(ctx);
+
   // 우상단 브릭 장식 (본문/스탯과 겹치지 않는 유일한 여백) + 하단 URL
   drawBrick(ctx, SIZE - 330, 100, green, ink);
   ctx.fillStyle = ink;
@@ -111,6 +115,28 @@ export async function drawShareCard(
   ctx.fillText("유튜브로 배우고, 잊기 전에 다시 만나는 영어", 160, SIZE - 44);
   ctx.globalAlpha = 1;
   return canvas;
+}
+
+/** 좌하단에 떠 있는 활성 마스코트(악세 착용 상태)를 카드에 복사 — DOM svg 캡처.
+ *  폰트·애니메이션 클래스는 데이터 URL 에서 빠지므로 정지 포즈·기본체로 그려진다. */
+async function drawMascot(ctx: CanvasRenderingContext2D): Promise<void> {
+  const svg = document.querySelector<SVGSVGElement>(".henyang-peek svg");
+  if (!svg) return; // 마스코트 미설정 — 카드 구성은 그대로
+  let markup = svg.outerHTML;
+  if (!markup.includes("xmlns=")) {
+    markup = markup.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+  }
+  try {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("mascot render failed"));
+      img.src = `data:image/svg+xml;utf8,${encodeURIComponent(markup)}`;
+    });
+    ctx.drawImage(img, 620, 590, 104 * 3.2, 88 * 3.2);
+  } catch {
+    // 마스코트 렌더 실패는 카드 생성을 막지 않는다
+  }
 }
 
 function drawBrick(

@@ -13,6 +13,7 @@ import { useInviteTheme } from "@/lib/use-invite-theme";
 import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { PlayArea } from "@/app/game/PlayArea";
+import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { ContentPicker } from "@/components/game/ContentPicker";
 import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
@@ -24,6 +25,7 @@ import {
   type GameReviewItem,
   type MatchEndMsg,
   type MatchFoundMsg,
+  type PlayerProfile,
   type ServerMsg,
   type StateMsg,
 } from "@/lib/game-ws";
@@ -224,7 +226,13 @@ function TetrisInner() {
           <span className="hl">워드 테트리스</span>
         </h1>
         {matchInfo && phase !== "lobby" && (
-          <span className="text-sm opacity-60">vs {matchInfo.opponent}</span>
+          <span className="text-sm opacity-60">
+            vs{" "}
+            <PlayerBadge
+              name={matchInfo.opponent}
+              profile={matchInfo.opponent_profile}
+            />
+          </span>
         )}
       </header>
 
@@ -301,6 +309,7 @@ function TetrisInner() {
           op={gameState?.op ?? null}
           elapsed={gameState?.elapsed ?? 0}
           opponentName={matchInfo?.opponent ?? "상대"}
+          opponentProfile={matchInfo?.opponent_profile}
           disabled={phase !== "playing"}
           hint={hint}
           missSignal={missSignal}
@@ -318,6 +327,7 @@ function TetrisInner() {
             result={endResult}
             you={matchInfo?.you ?? 1}
             opponent={matchInfo?.opponent ?? "상대"}
+            opponentProfile={matchInfo?.opponent_profile}
             onAgain={playAgain}
           />
           <ReviewPanel
@@ -438,7 +448,7 @@ function Lobby({
                 {leaders.slice(0, 5).map((l, i) => (
                   <li key={`${l.name}-${i}`} className="flex justify-between">
                     <span>
-                      {i + 1}. {l.name}
+                      {i + 1}. <PlayerBadge name={l.name} profile={l} />
                     </span>
                     <b>{l.score}</b>
                   </li>
@@ -508,11 +518,13 @@ function ResultPanel({
   result,
   you,
   opponent,
+  opponentProfile,
   onAgain,
 }: {
   result: MatchEndMsg;
   you: number;
   opponent: string;
+  opponentProfile?: PlayerProfile | null;
   onAgain: () => void;
 }) {
   const my = you === 1 ? result.stats.p1 : result.stats.p2;
@@ -552,7 +564,8 @@ function ResultPanel({
         </span>
       </p>
       <p className="text-xs opacity-60">
-        나 vs {opponent} — 최종 점수가 높은 쪽이 승리해요
+        나 vs <PlayerBadge name={opponent} profile={opponentProfile} /> — 최종
+        점수가 높은 쪽이 승리해요
       </p>
       {records.length > 0 && (
         // 개인 기록 경신 — "지난번의 나"를 이기는 순간을 크게 (P3 리텐션)

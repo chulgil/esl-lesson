@@ -44,6 +44,8 @@ export interface MatchFoundMsg {
   quiz: string;
   you: number;
   opponent: string;
+  /** 상대 배지 — 마스코트·칭호 (봇/미설정은 null) */
+  opponent_profile?: PlayerProfile | null;
   countdown: number;
   rejoined?: boolean;
 }
@@ -86,7 +88,7 @@ export interface QrRoomMsg {
   code: string | null;
   mode: "solo" | "room";
   host: string;
-  players: { name: string; is_bot: boolean }[];
+  players: ({ name: string; is_bot: boolean } & PlayerProfile)[];
 }
 
 export interface QrRoundMsg {
@@ -120,6 +122,12 @@ export interface QrEndMsg {
   aborted: boolean;
 }
 
+/** 플레이어 배지 — 마스코트 + 대표 업적 칭호 (mascot-shop.md 플레이어 배지) */
+export interface PlayerProfile {
+  mascot?: string | null;
+  title?: string | null;
+}
+
 /** 오답·미제출 문항의 학습 항목 — 본인에게만 전달 (원탭 학습 추가, 전 게임 공용) */
 export interface GameReviewItem {
   item_id: number;
@@ -149,6 +157,7 @@ export interface TpStartMsg {
   sentence_seconds: number;
   countdown: number;
   players: string[];
+  profiles?: Record<string, PlayerProfile>;
 }
 
 export interface TpResult {
@@ -165,7 +174,13 @@ export interface TpResult {
 
 export type TpMsg =
   | TpStartMsg
-  | { t: "tp.room"; code: string | null; host: string; players: string[] }
+  | {
+      t: "tp.room";
+      code: string | null;
+      host: string;
+      players: string[];
+      profiles?: Record<string, PlayerProfile>;
+    }
   | { t: "tp.sentence"; idx: number }
   | { t: "tp.typing"; name: string; chars: number; wpm: number }
   | { t: "tp.done_mark"; name: string; idx: number; wpm: number }
@@ -204,7 +219,13 @@ export interface ScResult {
 
 export type ScMsg =
   | ScStartMsg
-  | { t: "sc.room"; code: string | null; host: string; players: string[] }
+  | {
+      t: "sc.room";
+      code: string | null;
+      host: string;
+      players: string[];
+      profiles?: Record<string, PlayerProfile>;
+    }
   | { t: "sc.sentence"; idx: number }
   | { t: "sc.progress"; name: string; placed: number; total: number }
   | {
@@ -245,7 +266,13 @@ export type DtMsg =
       countdown: number;
       players: string[];
     }
-  | { t: "dt.room"; code: string | null; host: string; players: string[] }
+  | {
+      t: "dt.room";
+      code: string | null;
+      host: string;
+      players: string[];
+      profiles?: Record<string, PlayerProfile>;
+    }
   | { t: "dt.sentence"; idx: number }
   | {
       t: "dt.done_mark";
@@ -299,7 +326,13 @@ export interface BgResult {
 export type BgMsg =
   | BgStartMsg
   | BgRoundMsg
-  | { t: "bg.room"; code: string | null; host: string; players: string[] }
+  | {
+      t: "bg.room";
+      code: string | null;
+      host: string;
+      players: string[];
+      profiles?: Record<string, PlayerProfile>;
+    }
   | { t: "bg.tap_result"; ok: boolean; item_id: number }
   | { t: "bg.mark"; name: string; filled: number }
   | { t: "bg.reveal"; no: number; en: string; ko: string; bingo: string[] }

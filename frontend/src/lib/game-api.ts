@@ -12,6 +12,9 @@ export interface GameProfile {
 export interface LeaderboardEntry {
   name: string;
   score: number;
+  /** 플레이어 배지 — 마스코트·대표 업적 칭호 (mascot-shop.md) */
+  mascot?: string | null;
+  title?: string | null;
 }
 
 async function request<T>(path: string): Promise<T> {
@@ -33,6 +36,8 @@ export interface WeeklyRank {
   name: string;
   value: number;
   me: boolean;
+  mascot?: string | null;
+  title?: string | null;
 }
 
 export interface WeeklyLeaderboards {
@@ -43,10 +48,22 @@ export interface WeeklyLeaderboards {
   dictation: WeeklyRank[];
 }
 
+export interface TypingHistoryItem {
+  played_at: string | null;
+  mode: "solo" | "race";
+  cpm: number;
+  peak_cpm: number;
+  accuracy: number;
+  sentences: number;
+  outcome: "win" | "lose" | "draw" | null;
+}
+
 export const gameApi = {
   profile: () => request<GameProfile>("/api/game/profile"),
   leaderboard: () =>
     request<{ items: LeaderboardEntry[] }>("/api/game/leaderboard"),
+  typingHistory: () =>
+    request<{ items: TypingHistoryItem[] }>("/api/game/typing/history"),
   leaderboards: () => request<WeeklyLeaderboards>("/api/game/leaderboards"),
   bests: () => request<GameBests>("/api/game/bests"),
 };

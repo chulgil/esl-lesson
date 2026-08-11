@@ -41,6 +41,10 @@ export default function MascotQaPage() {
                   <div className="henyang-peek scale-x-[-1]">
                     <MascotSvg kind={kind} outfits={combo.outfits} flip />
                   </div>
+                  {/* 아바타(플레이어 배지) 변형 — 말풍선 없이 크롭 */}
+                  <span className="rounded border border-ink/20 p-0.5">
+                    <MascotSvg kind={kind} outfits={combo.outfits} avatar />
+                  </span>
                 </div>
                 <p className="text-xs opacity-60">{combo.name}</p>
               </div>

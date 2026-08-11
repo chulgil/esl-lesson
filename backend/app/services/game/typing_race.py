@@ -18,6 +18,7 @@ from sqlalchemy import select
 from app.core.db import get_session_factory
 from app.models import Content, ItemOccurrence, LearningItem, TypingRace
 from app.services.game.manager import WordPoolError, review_items
+from app.services.game.profiles import safe_player_badges
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,16 @@ MIN_SENTENCES = 5
 MAX_SENTENCE_CHARS = (
     80  # 긴 문장 금지 (2026-08-10 사용자) — 1분 안에 느린 타이피스트도 완주 가능한 길이
 )
+
+
+def wrong_threshold(sentence_len: int) -> int:
+    """복습 추천 기준 오타 수 — 문장 길이의 5% (최소 2).
+
+    오타 1개(수정 후 완성)도 "틀린 문장"으로 분류돼 문장 전체가 틀린 것처럼
+    보였다 (2026-08-11 보고 — 학습 동기 저하). 한둘 실수는 완성으로 인정하고,
+    오타가 잦았던 문장만 복습으로 회수한다. 시간 초과는 기존대로 회수.
+    """
+    return max(2, round(sentence_len * 0.05))
 
 
 def wpm_for(chars: int, seconds: float) -> float:
@@ -218,7 +229,7 @@ class TypingRaceManager:
         racer.live_chars = sentence_len
         racer.chars += min(max(chars, 0), sentence_len)
         racer.errors += max(errors, 0)
-        if errors > 0:
+        if errors >= wrong_threshold(sentence_len):
             racer.wrong.append(idx)
         racer.sentences += 1
         racer.total_ms += int((time.monotonic() - session.round_started) * 1000)
@@ -269,6 +280,7 @@ class TypingRaceManager:
                 "sentence_seconds": SENTENCE_SECONDS,
                 "countdown": COUNTDOWN_SECONDS,
                 "players": [p.name for p in session.players],
+                "profiles": await self._profiles(session),
             },
         )
         session.task = asyncio.create_task(self._run(session))
@@ -304,16 +316,21 @@ class TypingRaceManager:
             await self._finish(session, aborted=True)
 
     async def _finish(self, session: RaceSession, aborted: bool) -> None:
-        results = [
-            {
-                "name": p.name,
-                "chars": p.chars,
-                "sentences": p.sentences,
-                "wpm": wpm_for(p.chars, max(0.1, p.total_ms / 1000)) if p.total_ms else 0.0,
-                "accuracy": accuracy_for(p.chars, p.errors),
-            }
-            for p in session.players
-        ]
+        results = []
+        for p in session.players:
+            wpm = wpm_for(p.chars, max(0.1, p.total_ms / 1000)) if p.total_ms else 0.0
+            results.append(
+                {
+                    "name": p.name,
+                    "chars": p.chars,
+                    "sentences": p.sentences,
+                    "wpm": wpm,
+                    # 한국 사용자 준거는 "타"(타/분) — 결과 화면·히스토리 공용 (TpResult 계약)
+                    "cpm": round(wpm * 5),
+                    "peak_cpm": round(p.peak_cpm),
+                    "accuracy": accuracy_for(p.chars, p.errors),
+                }
+            )
         winner, winner_id = rank_players(session.players)
         await self._save(session, "aborted" if aborted else "finished", winner_id, results)
         if not aborted:
@@ -394,8 +411,14 @@ class TypingRaceManager:
                 "code": session.code,
                 "host": session.players[0].name if session.players else "",
                 "players": [p.name for p in session.players],
+                "profiles": await self._profiles(session),
             },
         )
+
+    async def _profiles(self, session: "RaceSession") -> dict:
+        """이름 -> {mascot, title} — 대기실·결과에서 마스코트·칭호 표시 (플레이어 배지)."""
+        badges = await safe_player_badges([p.user_id for p in session.players])
+        return {p.name: badges[p.user_id] for p in session.players if p.user_id in badges}
 
     async def _broadcast(
         self, session: RaceSession, message: dict, exclude: int | None = None

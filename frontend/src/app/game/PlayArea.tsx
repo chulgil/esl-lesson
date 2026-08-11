@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { BoardCanvas, type BoardTheme } from "@/components/game/BoardCanvas";
 import { ItemIcon } from "@/components/game/ItemIcon";
-import type { BoardState } from "@/lib/game-ws";
+import { PlayerBadge } from "@/components/game/PlayerBadge";
+import type { BoardState, PlayerProfile } from "@/lib/game-ws";
 
 function useIsDesktop(): boolean {
   const [desktop, setDesktop] = useState(false);
@@ -40,6 +41,7 @@ export function PlayArea({
   op,
   elapsed,
   opponentName,
+  opponentProfile,
   disabled,
   hint,
   missSignal,
@@ -53,6 +55,7 @@ export function PlayArea({
   op: BoardState | null;
   elapsed: number;
   opponentName: string;
+  opponentProfile?: PlayerProfile | null;
   disabled: boolean;
   hint: string | null;
   missSignal: number;
@@ -165,7 +168,7 @@ export function PlayArea({
         <aside className="mt-9 flex w-64 flex-col gap-4">
           <div>
             <p className="mb-1 text-sm font-bold opacity-70">
-              vs {opponentName}
+              vs <PlayerBadge name={opponentName} profile={opponentProfile} />
             </p>
             <BoardCanvas
               state={op}
@@ -202,14 +205,20 @@ export function PlayArea({
               theme={boardTheme}
             />
             <p className="rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-ink">
-              {opponentName} {op?.score ?? 0}점
+              <PlayerBadge name={opponentName} profile={opponentProfile} />{" "}
+              {op?.score ?? 0}점
               {op?.danger && <span className="ml-1 text-brick-red">위기!</span>}
             </p>
           </div>
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t-2 border-ink/15 bg-white/95 p-3 backdrop-blur">
+      <div
+        className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2.5 border-t-2 border-ink/15 bg-white/95 px-3 pt-3 backdrop-blur"
+        // 홈 인디케이터/브라우저 바에 칩이 붙어 탭하기 힘들던 문제 (2026-08-11 보고)
+        // — safe-area 만큼 바닥 여백을 확보한다
+        style={{ paddingBottom: "max(1.1rem, env(safe-area-inset-bottom))" }}
+      >
         {itemBar}
         {interact}
       </div>

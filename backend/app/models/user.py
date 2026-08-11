@@ -54,3 +54,5 @@ class UserSettings(Base):
     weekly_report_week: Mapped[str | None] = mapped_column(Text)
     # 활성 마스코트 — 좌하단에 상시 표시되는 캐릭터, NULL=끔 (docs/specs/mascot-shop.md)
     mascot_key: Mapped[str | None] = mapped_column(Text)
+    # 대표 업적 키 — 대전·리더보드 프로필 밑 칭호 (mascot-shop.md 플레이어 배지)
+    featured_achievement: Mapped[str | None] = mapped_column(Text)

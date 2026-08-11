@@ -1027,6 +1027,8 @@ class SettingsPatch(BaseModel):
     reminder_hour: int | None = Field(default=None, ge=5, le=23)
     study_level: int | None = Field(default=None, ge=1, le=4)
     levels_enabled: list[int] | None = None
+    # 대표 업적 — "" = 해제 (None 은 미변경). 달성한 업적만 지정 가능
+    featured_achievement: str | None = None
 
 
 @settings_router.get("")
@@ -1067,6 +1069,23 @@ async def update_settings(
         value = getattr(body, field)
         if value is not None:
             setattr(settings, field, value)
+    if body.featured_achievement is not None:
+        if body.featured_achievement == "":
+            settings.featured_achievement = None  # 칭호 해제
+        else:
+            from app.services import achievements as achievements_service
+            from app.services.game.profiles import ACHIEVEMENT_TITLES
+
+            if body.featured_achievement not in ACHIEVEMENT_TITLES:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "achievement_not_found")
+            earned = {
+                a["key"]
+                for a in await achievements_service.compute(db, user.id)
+                if a["achieved"]
+            }
+            if body.featured_achievement not in earned:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "not_achieved")
+            settings.featured_achievement = body.featured_achievement
     await db.commit()
     return _settings_dict(settings, await _push_subscribed(db, user.id))
 
@@ -1092,4 +1111,5 @@ def _settings_dict(settings: UserSettings, push_subscribed: bool) -> dict:
         "study_level": settings.study_level,
         "levels_enabled": settings.levels_enabled,
         "push_subscribed": push_subscribed,
+        "featured_achievement": settings.featured_achievement,
     }

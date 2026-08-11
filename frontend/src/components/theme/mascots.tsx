@@ -153,16 +153,24 @@ function Bubble({ text, flip }: { text: string; flip?: boolean }) {
   );
 }
 
-function Henyang({ outfits, flip }: { outfits: string[]; flip?: boolean }) {
+function Henyang({
+  outfits,
+  flip,
+  avatar,
+}: {
+  outfits: string[];
+  flip?: boolean;
+  avatar?: boolean;
+}) {
   return (
     <svg
-      width="104"
-      height="88"
-      viewBox="0 0 104 88"
+      width={avatar ? 34 : 104}
+      height={avatar ? 30 : 88}
+      viewBox={avatar ? "6 12 88 76" : "0 0 104 88"}
       fill="none"
-      className="mascot-anim-giggle"
+      className={avatar ? undefined : "mascot-anim-giggle"}
     >
-      <Bubble text="헤헤" flip={flip} />
+      {!avatar && <Bubble text="헤헤" flip={flip} />}
       {/* 귀 */}
       <path
         d="M16 46 L22 18 L40 36 Z"
@@ -233,16 +241,24 @@ function Henyang({ outfits, flip }: { outfits: string[]; flip?: boolean }) {
   );
 }
 
-function Bricky({ outfits, flip }: { outfits: string[]; flip?: boolean }) {
+function Bricky({
+  outfits,
+  flip,
+  avatar,
+}: {
+  outfits: string[];
+  flip?: boolean;
+  avatar?: boolean;
+}) {
   return (
     <svg
-      width="104"
-      height="88"
-      viewBox="0 0 104 88"
+      width={avatar ? 34 : 104}
+      height={avatar ? 30 : 88}
+      viewBox={avatar ? "6 12 88 76" : "0 0 104 88"}
       fill="none"
-      className="mascot-anim-bounce"
+      className={avatar ? undefined : "mascot-anim-bounce"}
     >
-      <Bubble text="착착" flip={flip} />
+      {!avatar && <Bubble text="착착" flip={flip} />}
       {/* 스터드 2개 (레고 윗면) */}
       <rect
         x="22"
@@ -322,16 +338,24 @@ function Bricky({ outfits, flip }: { outfits: string[]; flip?: boolean }) {
   );
 }
 
-function Mongi({ outfits, flip }: { outfits: string[]; flip?: boolean }) {
+function Mongi({
+  outfits,
+  flip,
+  avatar,
+}: {
+  outfits: string[];
+  flip?: boolean;
+  avatar?: boolean;
+}) {
   return (
     <svg
-      width="104"
-      height="88"
-      viewBox="0 0 104 88"
+      width={avatar ? 34 : 104}
+      height={avatar ? 30 : 88}
+      viewBox={avatar ? "6 12 88 76" : "0 0 104 88"}
       fill="none"
-      className="mascot-anim-float"
+      className={avatar ? undefined : "mascot-anim-float"}
     >
-      <Bubble text="몽!" flip={flip} />
+      {!avatar && <Bubble text="몽!" flip={flip} />}
       {/* 다리 4개 — 물결 */}
       <path
         d="M18 78 q-6 8 2 10 M34 82 q-4 8 4 6 M58 82 q4 8 -4 6 M74 78 q6 8 -2 10"
@@ -398,14 +422,17 @@ export function MascotSvg({
   kind,
   outfits,
   flip = false,
+  avatar = false,
 }: {
   kind: string;
   outfits: string[];
   /** 표시 컨테이너가 좌우 반전일 때 true — 말풍선 글자를 역반전해 읽히게 한다 */
   flip?: boolean;
+  /** 프로필 아바타 모드 — 말풍선 없이 크롭·축소·정지 (플레이어 배지) */
+  avatar?: boolean;
 }) {
-  if (kind === "bricky") return <Bricky outfits={outfits} flip={flip} />;
-  if (kind === "mongi") return <Mongi outfits={outfits} flip={flip} />;
-  if (kind === "henyang") return <Henyang outfits={outfits} flip={flip} />;
+  if (kind === "bricky") return <Bricky outfits={outfits} flip={flip} avatar={avatar} />;
+  if (kind === "mongi") return <Mongi outfits={outfits} flip={flip} avatar={avatar} />;
+  if (kind === "henyang") return <Henyang outfits={outfits} flip={flip} avatar={avatar} />;
   return null;
 }

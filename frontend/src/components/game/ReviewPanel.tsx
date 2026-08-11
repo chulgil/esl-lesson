@@ -11,12 +11,15 @@ export function ReviewPanel({
   noun = "단어",
   hint = "추가한 단어는 오늘의 학습 큐에 새 카드로 들어가요",
   source = "unknown",
+  heading = "이번 판에서 틀린",
 }: {
   items: GameReviewItem[];
   noun?: string;
   hint?: string;
   /** 어느 게임에서 담았는가 — 사용 이벤트 meta (P1-D) */
   source?: string;
+  /** 머리말 — 타자연습은 "복습하면 좋을" (철자 한둘 실수 ≠ 틀림, 2026-08-11) */
+  heading?: string;
 }) {
   const [added, setAdded] = useState<Record<number, boolean>>({});
 
@@ -42,7 +45,7 @@ export function ReviewPanel({
     <div className="flex flex-col gap-2 rounded-lg border-2 border-brick-red/30 bg-brick-red/5 p-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-bold">
-          이번 판에서 틀린 {noun} {items.length}개
+          {heading} {noun} {items.length}개
         </h3>
         {items.some((i) => !added[i.item_id]) ? (
           <button

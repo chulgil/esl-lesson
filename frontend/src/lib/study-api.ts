@@ -285,6 +285,8 @@ export const studyApi = {
       daily_goal: number;
       /** 복습 리마인더 시각(KST, 5-23) — push-reminder.md */
       reminder_hour: number;
+      /** 대표 업적 키 — 대전·리더보드 칭호 (mascot-shop.md 플레이어 배지) */
+      featured_achievement: string | null;
       /** 내 기기 중 푸시 구독이 하나라도 있는가 — 온보딩 ③ 완료 판정 */
       push_subscribed: boolean;
     }>("/api/settings"),
@@ -293,6 +295,8 @@ export const studyApi = {
     study_level?: number;
     daily_goal?: number;
     reminder_hour?: number;
+    /** 대표 업적 — "" = 해제 */
+    featured_achievement?: string;
   }) =>
     request<{
       hint_delay_seconds: number;
@@ -300,6 +304,7 @@ export const studyApi = {
       levels_enabled: number[];
       daily_goal: number;
       reminder_hour: number;
+      featured_achievement: string | null;
       push_subscribed: boolean;
     }>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   answer: (body: {

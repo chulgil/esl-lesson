@@ -19,6 +19,7 @@ from sqlalchemy import select
 from app.core.db import get_session_factory
 from app.models import Content, DictationRace, ItemOccurrence, LearningItem, TranscriptSegment
 from app.services.game.manager import WordPoolError, review_items
+from app.services.game.profiles import safe_player_badges
 from app.services.game.typing_race import pick_sentences
 from app.services.visibility import visible_item_clause
 
@@ -393,8 +394,14 @@ class DictationManager:
                 "code": session.code,
                 "host": session.players[0].name if session.players else "",
                 "players": [p.name for p in session.players],
+                "profiles": await self._profiles(session),
             },
         )
+
+    async def _profiles(self, session) -> dict:
+        """이름 -> {mascot, title} — 대기실·결과의 플레이어 배지 (mascot-shop.md)."""
+        badges = await safe_player_badges([p.user_id for p in session.players])
+        return {p.name: badges[p.user_id] for p in session.players if p.user_id in badges}
 
     async def _broadcast(
         self, session: DictationSession, message: dict, exclude: int | None = None

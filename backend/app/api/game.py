@@ -8,7 +8,7 @@ from typing import Annotated
 import jwt as pyjwt
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +33,7 @@ from app.services.game.bingo import caller
 from app.services.game.dictation import dictator
 from app.services.game.invites import GAMES, invite_hub, invite_push_payload, safe_theme
 from app.services.game.manager import WordPoolError, manager
+from app.services.game.profiles import safe_player_badges
 from app.services.game.quiz_royale import royale
 from app.services.game.scramble import scrambler
 from app.services.game.spectate import spectate_hub
@@ -214,14 +215,69 @@ async def leaderboard(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
     union = p1.union_all(p2).subquery()
     rows = (
         await db.execute(
-            select(User.nickname, func.sum(union.c.score).label("total"))
+            select(User.id, User.nickname, func.sum(union.c.score).label("total"))
             .join(User, User.id == union.c.uid)
             .group_by(User.id, User.nickname)
             .order_by(func.sum(union.c.score).desc())
             .limit(10)
         )
     ).all()
-    return {"items": [{"name": name, "score": int(total)} for name, total in rows]}
+    badges = await safe_player_badges([uid for uid, _, _ in rows])
+    return {
+        "items": [
+            {"name": name, "score": int(total), **(badges.get(uid) or {})}
+            for uid, name, total in rows
+        ]
+    }
+
+
+TYPING_HISTORY_LIMIT = 10
+
+
+@router.get("/typing/history")
+async def typing_history(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """내 타자연습 최근 기록 — 로비 히스토리 리스트 (2026-08-11 요청: 지난 기록이
+    보여야 "지난번의 나"를 이기는 동기가 된다)."""
+    races = (
+        (
+            await db.execute(
+                select(TypingRace)
+                .where(
+                    or_(TypingRace.player1_id == user.id, TypingRace.player2_id == user.id),
+                    TypingRace.status == "finished",
+                )
+                .order_by(TypingRace.ended_at.desc())
+                .limit(TYPING_HISTORY_LIMIT)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    items = []
+    for race in races:
+        slot = "p1" if race.player1_id == user.id else "p2"
+        stats = (race.stats or {}).get(slot) or {}
+        outcome = None
+        if race.mode == "race":
+            if race.winner_id is None:
+                outcome = "draw"
+            else:
+                outcome = "win" if race.winner_id == user.id else "lose"
+        items.append(
+            {
+                "played_at": race.ended_at.isoformat() if race.ended_at else None,
+                "mode": race.mode,
+                "cpm": stats.get("cpm", 0),
+                "peak_cpm": stats.get("peak_cpm", 0),
+                "accuracy": stats.get("accuracy", 0),
+                "sentences": stats.get("sentences", 0),
+                "outcome": outcome,
+            }
+        )
+    return {"items": items}
 
 
 LEADERBOARD_TOP = 5
@@ -325,15 +381,23 @@ async def weekly_leaderboards(
         | set(dictation_best)
     )
     names: dict[int, str] = {}
+    badges: dict[int, dict] = {}
     if all_ids:
         names = dict(
             (await db.execute(select(User.id, User.nickname).where(User.id.in_(all_ids)))).all()
         )
+        # 마스코트·칭호 — 순위표에서도 배지가 보여야 수집·경쟁 동기가 된다
+        badges = await safe_player_badges(list(all_ids))
 
     def top(best: dict[int, int]) -> list[dict]:
         ranked = sorted(best.items(), key=lambda kv: (-kv[1], names.get(kv[0], "")))
         return [
-            {"name": names.get(uid, "?"), "value": value, "me": uid == user.id}
+            {
+                "name": names.get(uid, "?"),
+                "value": value,
+                "me": uid == user.id,
+                **(badges.get(uid) or {}),
+            }
             for uid, value in ranked[:LEADERBOARD_TOP]
             if value > 0
         ]
