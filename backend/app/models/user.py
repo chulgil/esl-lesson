@@ -52,3 +52,5 @@ class UserSettings(Base):
     # 주간 성적표를 보낸 대상 주 ISO ("2026-W31" = 그 성적표가 다룬 지난주)
     # — 월요일 1회 발송 가드 (docs/specs/weekly-report.md)
     weekly_report_week: Mapped[str | None] = mapped_column(Text)
+    # 활성 마스코트 — 좌하단에 상시 표시되는 캐릭터, NULL=끔 (docs/specs/mascot-shop.md)
+    mascot_key: Mapped[str | None] = mapped_column(Text)

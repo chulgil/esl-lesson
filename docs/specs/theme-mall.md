@@ -11,7 +11,7 @@ XP 로 제한 테마를 구매한다 — 업적 보상과 **독립 설정, 동�
 
 | 항목 | 규칙 |
 |---|---|
-| 가격 | `theme_settings.price_xp` — 백오피스 테마 몰에서 입력, **NULL = 미판매** (보상 전용은 비워둔다) |
+| 가격 | `theme_settings.price_xp` — 백오피스 테마 몰에서 입력, **NULL = 미판매**. 기본 가격은 마이그레이션 3d4c34e2c8d9 가 시드 (2026-08-11 — 가격 미입력으로 상점이 비어 있던 문제, 백오피스 기입분은 보존) |
 | 지갑 | 가용 XP = 누적 XP(로그 실시간 집계, `progress.total_xp`) - 소비 합(`xp_spends` 원장). **레벨은 누적 기준 불변** — 구매해도 레벨은 안 내려간다 |
 | 구매 | POST `/api/themes/{key}/purchase` — restricted + 가격 설정 + 미보유 + 잔액 충분일 때 `xp_spends` 기록 + `theme_grants` 지급(note="XP 구매"). 경합은 uq 로 409 |
 | 노출 | GET `/api/themes` 에 `price_xp`(restricted 만)·`available_xp`. 설정 화면: 보유 XP 배지 + 잠긴 테마에 "N XP로 열기" 버튼(해금 업적 문구와 병기 가능), 구매 성공 시 즉시 그 테마로 전환 |
