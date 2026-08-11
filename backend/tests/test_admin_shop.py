@@ -116,3 +116,5 @@ async def test_admin_grant_and_revoke(admin_client, client, db_session):
     _use(client, user_token)
     shop = (await client.get("/api/shop")).json()
     assert next(m for m in shop["mascots"] if m["key"] == "mongi")["owned"] is False
+    # 활성 마스코트 회수 → 활성도 해제 — 좌하단·플레이어 배지에 남으면 안 된다
+    assert shop["active_mascot"] is None

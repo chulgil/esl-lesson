@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.security import require_admin
 from app.models import ItemGrant, ItemSetting, User
+from app.models.user import UserSettings
 from app.services.mascots import MASCOTS, OUTFITS, item_policies, item_price
 from app.services.notifications import notify
 
@@ -140,9 +141,19 @@ async def create_grant(
 
 @router.delete("/grants/{grant_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_grant(grant_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> None:
-    """회수 — 다음 카탈로그 조회부터 미보유. 활성 마스코트였다면 렌더러가 자연 소멸."""
+    """회수 — 다음 카탈로그 조회부터 미보유.
+
+    회수 대상이 활성 마스코트면 활성도 해제한다 — mascot_key 는 구매/PATCH
+    (보유 검증)로만 설정되므로 회수가 유일한 '미보유 활성' 경로다. 남겨두면
+    좌하단·플레이어 배지·공유 카드에 회수된 캐릭터가 계속 노출된다.
+    """
     grant = await db.get(ItemGrant, grant_id)
     if grant is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "grant_not_found")
+    kind, _, key = grant.item_key.partition(":")
+    if kind == "mascot":
+        settings = await db.get(UserSettings, grant.user_id)
+        if settings is not None and settings.mascot_key == key:
+            settings.mascot_key = None
     await db.delete(grant)
     await db.commit()
