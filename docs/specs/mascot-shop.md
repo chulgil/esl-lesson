@@ -47,7 +47,7 @@ school/academy 800, ocean/excel 1200, cat 2000 (백오피스 기입 가격은 �
 | GET `/api/admin/shop` | 카탈로그+유효가+판매 방식+보유자 수 |
 | PATCH `/api/admin/shop/{item_key}` | `{price_xp?}` 가격 오버라이드(null=기본가 복귀) / `{sale?}` "xp"\|"event" |
 | GET·POST `/api/admin/shop/{item_key}/grants` | 보유자 목록 / 이메일 지급 (409 중복, `item_granted` 벨 알림) |
-| DELETE `/api/admin/shop/grants/{id}` | 회수 — 다음 조회부터 미보유 |
+| DELETE `/api/admin/shop/grants/{id}` | 회수 — 다음 조회부터 미보유. **활성 마스코트면 활성도 해제** (mascot_key 는 보유 검증 경로로만 설정되므로 회수가 유일한 '미보유 활성' 경로 — 남기면 좌하단·배지·공유 카드에 계속 노출) |
 
 `sale="event"` = 이벤트 한정: 잔액과 무관하게 XP 구매 422, 상점 카드는
 "이벤트 한정" 배지(구매 버튼 없음). 유효 정책은 `services/mascots.item_policies`
