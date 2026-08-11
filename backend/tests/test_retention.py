@@ -137,6 +137,20 @@ async def test_saver_bridges_two_day_gap_with_two_savers(client, db_session):
     assert len(body["streak_saved_days"]) == 2
 
 
+async def test_streak_window_matches_stats_daily_grid(client, db_session):
+    """61일+ 연속 학습 — study.py stats 의 400일 잔디 창과 동일 창을 써야 끊기지 않는다.
+
+    STREAK_WINDOW_DAYS 가 stats.daily 조회 창(400일)보다 좁으면(구 값 60일)
+    그 경계에서 스트릭이 강제로 절단된다 (2026-08-03 잔디 확장 시 미동기화).
+    """
+    user = await login(client, db_session)
+    for days_ago in range(65):  # 오늘 포함 65일 연속
+        await _log_on(db_session, user.id, days_ago=days_ago)
+
+    res = await client.get("/api/study/stats")
+    assert res.json()["streak_days"] == 65
+
+
 async def test_saver_not_consumed_for_today_not_yet_studied(client, db_session):
     """오늘 아직 안 했을 뿐이면 소모하지 않는다 — 어제까지 이어진 스트릭만 보여준다."""
     user = await login(client, db_session)

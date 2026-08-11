@@ -1,6 +1,6 @@
 """콘텐츠 거버넌스 — 담기 게이트 + 원저작자 허락 증빙 (docs/specs/content-governance.md)."""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models import Content, ContentPermission, ContentSubscription, ItemOccurrence, LearningItem
 
@@ -66,6 +66,42 @@ async def test_public_items_hidden_until_subscribed(client, db_session):
     assert (await client.post(f"/api/my/contents/{content.id}/subscribe")).status_code == 202
     after = (await client.get("/api/study/queue")).json()
     assert len(after["questions"]) == 1
+
+
+async def test_subscribe_double_tap_race_is_idempotent(client, db_session, monkeypatch):
+    """동시 더블탭 — 두 요청 다 '미구독'으로 보고 커밋을 시도하면 두 번째는
+    uq_subscriptions_content_user 위반으로 500 이 날 수 있다. 멱등 202 로 흡수해야
+    한다 (2026-08-11 픽스)."""
+    from app.api import my_contents as my_contents_api
+    from app.models import ContentSubscription
+
+    content, _ = await make_public_content_with_item(db_session)
+    user = await login_as(client, db_session, "u2@example.com")
+    content_id, user_id = content.id, user.id  # subscribe() 내부 rollback 이
+    # content/user 를 만료시키므로 값으로 캡처 (my_contents.py 와 동일한 이유)
+
+    async def fake_not_subscribed(db, content_id, user_id):
+        return False  # 동시 요청이 아직 커밋 전이라 못 본 것처럼
+
+    monkeypatch.setattr(my_contents_api, "_already_subscribed", fake_not_subscribed)
+
+    # 다른 동시 요청이 이미 커밋을 마친 상태
+    db_session.add(ContentSubscription(content_id=content_id, user_id=user_id))
+    await db_session.commit()
+
+    res = await client.post(f"/api/my/contents/{content_id}/subscribe")
+    assert res.status_code == 202
+    assert res.json()["subscribed"] is True
+
+    count = (
+        await db_session.execute(
+            select(func.count(ContentSubscription.id)).where(
+                ContentSubscription.content_id == content_id,
+                ContentSubscription.user_id == user_id,
+            )
+        )
+    ).scalar_one()
+    assert count == 1
 
 
 async def test_unsubscribe_removes_items_from_queue(client, db_session):

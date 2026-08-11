@@ -146,10 +146,14 @@ async def purchase_item(
     if available < price:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
 
-    db.add(XpSpend(user_id=user.id, amount=price, reason=body.item_key))
-    db.add(Purchase(user_id=user.id, item_key=body.item_key, method="xp", amount=price))
-    db.add(ItemGrant(user_id=user.id, item_key=body.item_key, note="XP 구매"))
+    xp_spend = XpSpend(user_id=user.id, amount=price, reason=body.item_key)
+    purchase = Purchase(user_id=user.id, item_key=body.item_key, method="xp", amount=price)
+    grant = ItemGrant(user_id=user.id, item_key=body.item_key, note="XP 구매")
+    db.add(xp_spend)
+    db.add(purchase)
+    db.add(grant)
     settings = await _settings_of(db, user.id)
+    prev_mascot_key = settings.mascot_key
     kind, _, key = body.item_key.partition(":")
     if kind == "mascot":
         # 산 캐릭터는 즉시 화면에 — 활성 마스코트로 자동 전환 (2026-08-11 기획)
@@ -159,6 +163,17 @@ async def purchase_item(
     except IntegrityError as exc:  # 동시 구매 경합 (uq_item_grants_user_key)
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "already_owned") from exc
+
+    # 사전 검증(above)과 커밋 사이 다른 구매가 끼는 TOCTOU 경합 — 커밋 후
+    # 재검증으로 가용 XP 음수를 잡아내고 방금 산 아이템을 되돌린다 (2026-08-11)
+    if await progress.revert_if_overdrawn(
+        db,
+        user.id,
+        [xp_spend, purchase, grant],
+        extra_revert=lambda: setattr(settings, "mascot_key", prev_mascot_key),
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
+
     return {
         "item_key": body.item_key,
         "available_xp": available - price,
@@ -200,14 +215,26 @@ async def purchase_streak_saver(
     available = await progress.available_xp(db, user.id)
     if available < STREAK_SAVER_PRICE_XP:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
-    db.add(XpSpend(user_id=user.id, amount=STREAK_SAVER_PRICE_XP, reason="saver:streak"))
-    db.add(
-        Purchase(
-            user_id=user.id, item_key="saver:streak", method="xp", amount=STREAK_SAVER_PRICE_XP
-        )
+    xp_spend = XpSpend(user_id=user.id, amount=STREAK_SAVER_PRICE_XP, reason="saver:streak")
+    purchase = Purchase(
+        user_id=user.id, item_key="saver:streak", method="xp", amount=STREAK_SAVER_PRICE_XP
     )
-    settings.streak_savers += 1
+    db.add(xp_spend)
+    db.add(purchase)
+    prev_savers = settings.streak_savers
+    settings.streak_savers = prev_savers + 1
     await db.commit()
+
+    # 사전 검증과 커밋 사이 다른 구매가 끼는 TOCTOU 경합 — 커밋 후 재검증으로
+    # 가용 XP 음수를 잡아내고 방금 늘린 책갈피 개수를 되돌린다 (2026-08-11)
+    if await progress.revert_if_overdrawn(
+        db,
+        user.id,
+        [xp_spend, purchase],
+        extra_revert=lambda: setattr(settings, "streak_savers", prev_savers),
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
+
     return {
         "count": settings.streak_savers,
         "available_xp": available - STREAK_SAVER_PRICE_XP,

@@ -68,7 +68,7 @@ async def test_room_broadcast_includes_profiles(wired_db):  # noqa: F811
     profile = room["profiles"][user.nickname]
     assert profile["mascot"] == "bricky"
     assert profile["title"] == "첫 걸음"  # first_review 칭호
-    mgr.detach(user.id)
+    await mgr.detach(user.id)
 
 
 async def test_featured_achievement_patch_requires_earned(client, db_session):

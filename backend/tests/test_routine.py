@@ -106,6 +106,33 @@ async def test_summary_saved_even_when_llm_fails(client, db_session, monkeypatch
     )
 
 
+async def test_summary_resubmission_does_not_farm_xp(client, db_session):
+    """같은 콘텐츠 요약 재제출을 반복해도 XP 는 콘텐츠당 1회만 인정 (무한 파밍 방지).
+
+    이력 행은 보존한다 — routine.py 의 '재제출 = 새 이력' 계약은 유지, XP 집계만
+    사용자별 distinct content_id 기준으로 막는다.
+    """
+    from app.models import ContentSummary
+
+    user = await login(client, db_session)
+    await seed_items(db_session, count=1)
+    cid = await _subscribed_content_id(db_session, user.id)
+
+    for i in range(5):
+        res = await client.post(f"/api/contents/{cid}/summary", json={"text": f"Summary {i}."})
+        assert res.status_code == 200
+
+    stats = (await client.get("/api/study/stats")).json()
+    assert stats["xp"] == 20  # 5번 제출해도 콘텐츠 1개분 20 XP 만 인정
+
+    rows = (
+        (await db_session.execute(select(ContentSummary).where(ContentSummary.user_id == user.id)))
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 5  # 이력은 그대로 보존
+
+
 async def test_decks_include_routine_progress(client, db_session):
     """학습 탭 덱 목록에 루틴 진행(0~6) — 시작한 여정을 상기시킨다
     (effectiveness-audit 2차: 장치 사용 0건 = 발견 가능성 문제)."""

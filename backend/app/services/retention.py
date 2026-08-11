@@ -29,7 +29,9 @@ from app.models import (
 
 KST = timezone(timedelta(hours=9))
 SAVER_MAX = 2
-STREAK_WINDOW_DAYS = 60  # stats.daily 와 동일 창
+STREAK_WINDOW_DAYS = 400  # api/study.py stats 의 daily 잔디 조회 창(400일)과 동일 —
+# 단일 근거로 맞춰야 그 경계에서 스트릭이 강제 절단되지 않는다 (2026-08-11 픽스,
+# 2026-08-03 잔디 확장 시 60일로 미동기화됐던 값 동기화)
 
 
 def iso_week(day: date) -> str:

@@ -603,6 +603,11 @@ async def game_ws(websocket: WebSocket) -> None:
     became_online = not invite_hub.online(user_id)
     invite_hub.attach(user_id, user.nickname, send)
     await manager.attach(user_id, send)
+    await royale.attach(user_id, send)
+    await racer.attach(user_id, send)
+    await scrambler.attach(user_id, send)
+    await dictator.attach(user_id, send)
+    await caller.attach(user_id, send)
     if became_online:
         # 접속 상태 변화를 친구에게 실시간 푸시 (docs/specs/chat.md 프레즌스)
         async with get_session_factory()() as db:
@@ -697,7 +702,7 @@ async def game_ws(websocket: WebSocket) -> None:
             elif t == "qr.answer":
                 await royale.answer(user_id, str(msg.get("answer", "")))
             elif t == "qr.leave":
-                royale.detach(user_id)
+                await royale.detach(user_id)
             # --- 받아쓰기 배틀 (docs/specs/dictation-battle.md) ---
             elif t == "dt.solo":
                 try:
@@ -724,7 +729,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     user_id, idx=int(msg.get("idx", -1)), text=str(msg.get("text", ""))
                 )
             elif t == "dt.leave":
-                dictator.detach(user_id)
+                await dictator.detach(user_id)
             # --- 어순 조립 레이스 (docs/specs/scramble-race.md) ---
             elif t == "sc.solo":
                 try:
@@ -755,7 +760,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     user_id, idx=int(msg.get("idx", -1)), mistakes=int(msg.get("mistakes", 0))
                 )
             elif t == "sc.leave":
-                scrambler.detach(user_id)
+                await scrambler.detach(user_id)
             # --- 영문 타자연습 (docs/specs/typing-race.md) ---
             elif t == "tp.solo":
                 try:
@@ -789,7 +794,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     errors=int(msg.get("errors", 0)),
                 )
             elif t == "tp.leave":
-                racer.detach(user_id)
+                await racer.detach(user_id)
             # --- 리스닝 빙고 (docs/specs/listening-bingo.md) ---
             elif t == "bg.solo":
                 try:
@@ -816,7 +821,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     user_id, no=int(msg.get("no", -1)), item_id=int(msg.get("item_id", 0))
                 )
             elif t == "bg.leave":
-                caller.detach(user_id)
+                await caller.detach(user_id)
             # --- 학습 관전 (승인제 릴레이 — docs/specs/study-spectate.md) ---
             elif t == "st.host":
                 await spectate_hub.host(user_id, user.nickname, send)
@@ -885,11 +890,11 @@ async def game_ws(websocket: WebSocket) -> None:
             except Exception:  # noqa: BLE001 — 종료 경로에서 프레즌스 실패는 무시
                 logger.warning("presence offline broadcast failed user=%s", user_id)
         manager.detach(user_id)
-        royale.detach(user_id)
-        racer.detach(user_id)
-        scrambler.detach(user_id)
-        dictator.detach(user_id)
-        caller.detach(user_id)
+        await royale.detach(user_id)
+        await racer.detach(user_id)
+        await scrambler.detach(user_id)
+        await dictator.detach(user_id)
+        await caller.detach(user_id)
         await spectate_hub.detach(user_id)
     except Exception:
         logger.exception("ws error user=%s", user_id)
@@ -901,9 +906,9 @@ async def game_ws(websocket: WebSocket) -> None:
             except Exception:  # noqa: BLE001 — 종료 경로에서 프레즌스 실패는 무시
                 logger.warning("presence offline broadcast failed user=%s", user_id)
         manager.detach(user_id)
-        royale.detach(user_id)
-        racer.detach(user_id)
-        scrambler.detach(user_id)
-        dictator.detach(user_id)
-        caller.detach(user_id)
+        await royale.detach(user_id)
+        await racer.detach(user_id)
+        await scrambler.detach(user_id)
+        await dictator.detach(user_id)
+        await caller.detach(user_id)
         await spectate_hub.detach(user_id)

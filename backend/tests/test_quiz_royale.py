@@ -211,3 +211,56 @@ async def test_solo_requires_word_pool(wired_db):  # noqa: F811
     manager = qr.QuizRoyaleManager()
     with pytest.raises(WordPoolError):
         await manager.solo(user.id, user.name, Collector(), bot_level=1, bots=1)
+
+
+async def test_reconnect_during_round_keeps_session(wired_db, fast_rounds):  # noqa: F811
+    """대전 도중 WS 끊김 → 재연결 시 세션 복귀해야 한다 (버그: detach 가 매치 진행 중에도
+    by_user 를 즉시 지워 재접속을 막았다)."""
+    p1 = await seed_user_and_words(wired_db)
+    p2 = User(google_sub="g-recon", email="recon@example.com", name="RC")
+    wired_db.add(p2)
+    await wired_db.commit()
+
+    manager = qr.QuizRoyaleManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(p1.id, p1.name, s1)
+    await manager.join(p2.id, p2.name, s2, code)
+    await manager.start(p1.id)
+    session = manager.sessions[manager.by_user[p1.id]]
+    for _ in range(50):
+        if any(m["t"] == "qr.round" for m in s2.messages):
+            break
+        await asyncio.sleep(0.02)
+
+    await manager.detach(p2.id)  # WS 끊김 — 매치는 진행 중
+    assert p2.id in manager.by_user  # 세션 매핑이 유지돼야 재접속 가능
+    assert session.match_id in manager.sessions  # 세션 자체도 살아있어야 함
+
+    s2b = Collector()
+    resumed = await manager.attach(p2.id, s2b)
+    assert resumed is session
+    idx = manager._index_of(session, p2.id)
+    assert session.players[idx].send is s2b
+    assert any(m["t"] == "qr.round" for m in s2b.messages)  # 현재 라운드 재전송
+
+    session.task.cancel()
+
+
+async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  # noqa: F811
+    """대기방에서 호스트가 나가 세션이 삭제되면 남은 플레이어에게 알려야 한다 (버그 2:
+    기존엔 아무 브로드캐스트 없이 세션만 삭제돼 화면이 멈췄다)."""
+    p1 = await seed_user_and_words(wired_db)
+    p2 = User(google_sub="g-hl", email="hl@example.com", name="HL")
+    wired_db.add(p2)
+    await wired_db.commit()
+
+    manager = qr.QuizRoyaleManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(p1.id, p1.name, s1)
+    await manager.join(p2.id, p2.name, s2, code)
+
+    await manager.detach(p1.id)  # 호스트 이탈 — 대기방(시작 전)
+
+    assert any(m.get("code") == "room_closed" for m in s2.messages)
+    assert p2.id not in manager.by_user  # 세션 정리됨
+    assert not manager.sessions

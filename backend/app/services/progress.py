@@ -4,6 +4,7 @@
 api/study.py 에서 분리 (2026-08-05 유지보수 리팩토링) — 선정·산출 규칙의 정본.
 """
 
+from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select
@@ -239,9 +240,13 @@ async def routine_xp(db: AsyncSession, user_id: int) -> int:
             )
         )
     ).scalar_one()
+    # distinct content_id — 같은 콘텐츠 재제출은 이력으로 쌓이지만 XP 는 1회만
+    # 인정 (2026-08-11 무한 파밍 픽스 전: COUNT(id) 라 재제출마다 20 XP 지급됨)
     summaries = (
         await db.execute(
-            select(func.count(ContentSummary.id)).where(ContentSummary.user_id == user_id)
+            select(func.count(func.distinct(ContentSummary.content_id))).where(
+                ContentSummary.user_id == user_id
+            )
         )
     ).scalar_one()
     return completed * 50 + summaries * 20
@@ -259,3 +264,28 @@ async def spent_xp(db: AsyncSession, user_id: int) -> int:
 async def available_xp(db: AsyncSession, user_id: int) -> int:
     """가용 XP = 누적 - 소비. 레벨은 누적 XP 기준 불변 — 구매해도 레벨은 안 내려간다."""
     return await total_xp(db, user_id) - await spent_xp(db, user_id)
+
+
+async def revert_if_overdrawn(
+    db: AsyncSession,
+    user_id: int,
+    rows: list,
+    extra_revert: Callable[[], None] | None = None,
+) -> bool:
+    """구매 커밋 직후 재검증 — 동시 구매 경합(TOCTOU)으로 가용 XP 가 음수가 되면
+    방금 커밋한 행을 삭제하고(+extra_revert 로 부가 상태 되돌림) True 를 반환한다.
+
+    사전 잔액 검증(available_xp < price)과 커밋 사이에 다른 구매가 끼면 둘 다
+    통과해 이중 차감될 수 있다. FOR UPDATE 잠금은 asyncpg(운영)에는 유효하지만
+    테스트가 쓰는 aiosqlite 에선 no-op 이라 검증이 안 된다 — 대신 커밋 후
+    재확인 + 보상 삭제로 두 백엔드에서 동일하게 동작·검증 가능한 방식을 쓴다
+    (2026-08-11 TOCTOU 픽스). 호출자는 True 반환 시 422 insufficient_xp 로 응답한다.
+    """
+    if await available_xp(db, user_id) >= 0:
+        return False
+    if extra_revert is not None:
+        extra_revert()
+    for row in rows:
+        await db.delete(row)
+    await db.commit()
+    return True

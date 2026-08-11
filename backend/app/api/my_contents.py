@@ -9,6 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
@@ -50,7 +51,7 @@ async def get_subscribed_content(db: AsyncSession, content_id: int, user: User) 
     return content
 
 
-async def subscribe(db: AsyncSession, content_id: int, user_id: int) -> None:
+async def _already_subscribed(db: AsyncSession, content_id: int, user_id: int) -> bool:
     exists = (
         await db.execute(
             select(ContentSubscription.id).where(
@@ -59,9 +60,19 @@ async def subscribe(db: AsyncSession, content_id: int, user_id: int) -> None:
             )
         )
     ).scalar_one_or_none()
-    if exists is None:
-        db.add(ContentSubscription(content_id=content_id, user_id=user_id))
+    return exists is not None
+
+
+async def subscribe(db: AsyncSession, content_id: int, user_id: int) -> None:
+    if await _already_subscribed(db, content_id, user_id):
+        return
+    db.add(ContentSubscription(content_id=content_id, user_id=user_id))
+    try:
         await db.commit()
+    except IntegrityError:
+        # 동시 더블탭 경합 (uq_subscriptions_content_user) — 이미 구독됨,
+        # 멱등 처리 (기존 202 계약 유지, 2026-08-11 500 픽스)
+        await db.rollback()
 
 
 @router.post("/contents/{content_id}/subscribe", status_code=status.HTTP_202_ACCEPTED)
@@ -75,8 +86,10 @@ async def subscribe_content(
     # 준비 안 된/개인 콘텐츠는 담을 수 없다. 존재 여부도 흘리지 않도록 동일 404
     if content is None or content.visibility != "public" or content.status != "ready":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
-    await subscribe(db, content.id, user.id)
-    return {"id": content.id, "subscribed": True}
+    # subscribe() 내부 rollback(동시 경합 시)이 content 를 만료시킬 수 있어
+    # content_id 파라미터(이미 아는 값)를 그대로 쓴다 — 재접근 없이 안전
+    await subscribe(db, content_id, user.id)
+    return {"id": content_id, "subscribed": True}
 
 
 @router.get("/contents")

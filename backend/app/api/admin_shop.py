@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
@@ -108,6 +109,15 @@ class GrantCreate(BaseModel):
     note: str | None = None
 
 
+async def _duplicate_item_grant(db: AsyncSession, user_id: int, item_key: str) -> bool:
+    row = (
+        await db.execute(
+            select(ItemGrant.id).where(ItemGrant.user_id == user_id, ItemGrant.item_key == item_key)
+        )
+    ).scalar_one_or_none()
+    return row is not None
+
+
 @router.post("/{item_key}/grants")
 async def create_grant(
     item_key: str,
@@ -121,17 +131,17 @@ async def create_grant(
     ).scalar_one_or_none()
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user_not_found")
-    duplicate = (
-        await db.execute(
-            select(ItemGrant.id).where(ItemGrant.user_id == user.id, ItemGrant.item_key == item_key)
-        )
-    ).scalar_one_or_none()
-    if duplicate is not None:
+    if await _duplicate_item_grant(db, user.id, item_key):
         raise HTTPException(status.HTTP_409_CONFLICT, "already_granted")
 
     grant = ItemGrant(user_id=user.id, item_key=item_key, note=body.note or "이벤트 지급")
     db.add(grant)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        # 동시 지급 경합 (uq_item_grants_user_key) — 이미 지급됨
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "already_granted") from None
     # 벨 알림 — "'브리키' 캐릭터를 받았어요" (payload 는 지급 시점 스냅샷)
     await notify(db, user.id, "item_granted", {"item_key": item_key, "note": body.note})
     await db.commit()

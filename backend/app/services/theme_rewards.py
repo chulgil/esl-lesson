@@ -12,6 +12,7 @@ allowed 판정보다 먼저 실행한다.
 """
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ThemeGrant, ThemeRewardRule
@@ -43,7 +44,22 @@ async def sync_theme_rewards(db: AsyncSession, user_id: int) -> list[str]:
             continue
         title = titles.get(rule.achievement_key, rule.achievement_key)
         # note = 지급 사유 이력 — 규칙이 나중에 바뀌어도 "왜 받았는지" 가 남는다
-        db.add(ThemeGrant(user_id=user_id, theme_key=rule.theme_key, note=f"업적 달성: {title}"))
+        try:
+            # SAVEPOINT 로 이 grant 시도만 격리 — GET /api/themes 와
+            # GET /api/study/achievements 병렬 호출 경합(uq_theme_grants_user_theme)
+            # 으로 한 건이 실패해도, 같은 호출에서 먼저 성공한 다른 grant 는
+            # 롤백되지 않는다 (2026-08-11 500 픽스)
+            async with db.begin_nested():
+                db.add(
+                    ThemeGrant(
+                        user_id=user_id, theme_key=rule.theme_key, note=f"업적 달성: {title}"
+                    )
+                )
+                await db.flush()
+        except IntegrityError:
+            # 동시 요청이 이미 지급을 마쳤다 — 그냥 넘어간다
+            granted.add(rule.theme_key)
+            continue
         await notify(db, user_id, "theme_granted", {"theme_key": rule.theme_key, "note": title})
         granted.add(rule.theme_key)
         newly.append(rule.theme_key)
