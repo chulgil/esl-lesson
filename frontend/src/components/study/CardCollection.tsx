@@ -41,11 +41,18 @@ export function CardCollection({ stats }: { stats: Stats }) {
                 ),
               );
         const percent = Math.round(ratio * 100);
+        // 학습 난이도로 잠긴 타입 — "콘텐츠 미완성"으로 오해되던 빈 칸에 이유를
+        // 붙인다 (2026-08-11 보고: 문장 칸이 늘 0). 게임에서 담은 카드도 이때 나온다
+        const locked = lv.enabled === false;
         return (
           <div
             key={lv.level}
-            className="flex flex-col items-center gap-1"
-            title={`${TYPE_LABELS[lv.item_type] ?? lv.item_type} 카드 ${lv.available_items}개 중 ${lv.cards}개를 학습했어요 (한 번이라도 푼 카드)`}
+            className={`flex flex-col items-center gap-1 ${locked ? "opacity-50" : ""}`}
+            title={
+              locked
+                ? `${TYPE_LABELS[lv.item_type] ?? lv.item_type} 카드 ${lv.available_items}개가 준비되어 있어요 — 설정에서 학습 난이도를 올리면 출제가 시작돼요`
+                : `${TYPE_LABELS[lv.item_type] ?? lv.item_type} 카드 ${lv.available_items}개 중 ${lv.cards}개를 학습했어요 (한 번이라도 푼 카드)`
+            }
           >
             <div className="flex flex-col-reverse gap-0.5" aria-hidden>
               {Array.from({ length: COLLECTION_SLOTS }, (_, i) => (
@@ -60,10 +67,14 @@ export function CardCollection({ stats }: { stats: Stats }) {
             <p className="text-xs opacity-60">
               {TYPE_LABELS[lv.item_type] ?? `레벨 ${lv.level}`} · {lv.cards}/
               {lv.available_items}
-              {lv.cards > 0 && (
-                <span className="ml-1">
-                  ({percent === 0 ? "1% 미만" : `${percent}%`})
-                </span>
+              {locked ? (
+                <span className="ml-1">(난이도 올리면 열려요)</span>
+              ) : (
+                lv.cards > 0 && (
+                  <span className="ml-1">
+                    ({percent === 0 ? "1% 미만" : `${percent}%`})
+                  </span>
+                )
               )}
             </p>
           </div>

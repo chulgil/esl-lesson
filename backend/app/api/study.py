@@ -754,6 +754,9 @@ async def get_stats(
                 "item_type": item_type,
                 "cards": cards_by_type.get(item_type, 0),
                 "available_items": available_by_type.get(item_type, 0),
+                # 학습 난이도로 잠긴 타입 표시 — 컬렉션이 0 인 이유를 설명
+                # (2026-08-11 보고: 문장 칸이 늘 비어 "콘텐츠 미완성"으로 오해)
+                "enabled": level in (user_settings.levels_enabled or []),
             }
             for item_type, level in ITEM_TYPE_LEVEL.items()
         ],

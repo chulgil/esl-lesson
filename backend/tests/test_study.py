@@ -201,6 +201,11 @@ async def test_answer_wrong_lapses_and_stats(client, db_session):
     assert stats["reviews_today"] == 1
     assert stats["streak_days"] == 1
     assert any(lv["cards"] == 1 for lv in stats["levels"])
+    # 잠긴 타입 표시 (2026-08-11): 기본 초급(levels_enabled=[1,2]) — 문장·패턴은
+    # 잠김으로 내려가 컬렉션이 "왜 0인지"를 설명한다
+    enabled_of = {lv["item_type"]: lv["enabled"] for lv in stats["levels"]}
+    assert enabled_of["word"] is True and enabled_of["idiom"] is True
+    assert enabled_of["pattern"] is False and enabled_of["sentence"] is False
 
 
 async def test_rate_overrides_last_review(client, db_session):

@@ -143,6 +143,8 @@ export interface Stats {
     cards: number;
     /** 내가 만날 수 있는 항목 수 — 공용 승인 ∪ 내 개인 (전역 승인 아님) */
     available_items: number;
+    /** 학습 난이도(levels_enabled)로 활성화된 타입인가 — 컬렉션 잠김 표시용 */
+    enabled?: boolean;
   }[];
   daily: Record<string, number>;
 }
