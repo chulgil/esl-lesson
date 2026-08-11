@@ -49,6 +49,7 @@ function QuizRoyaleInner() {
             "뉘앙스 문항을 만들 재료가 아직 부족해요 — 뜻 맞히기로 즐겨주세요.",
           room_not_found: "방을 찾을 수 없어요.",
           room_full: "방이 가득 찼어요 (최대 4명).",
+          room_closed: "방장이 나가서 방이 닫혔어요.",
         }[msg.code] ?? msg.code,
       );
     }

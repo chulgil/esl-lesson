@@ -97,12 +97,22 @@ async def purchase_theme(
     if available < price:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
 
-    db.add(XpSpend(user_id=user.id, amount=price, reason=f"theme:{theme_key}"))
-    db.add(Purchase(user_id=user.id, item_key=f"theme:{theme_key}", method="xp", amount=price))
-    db.add(ThemeGrant(user_id=user.id, theme_key=theme_key, note="XP 구매", granted_by=None))
+    xp_spend = XpSpend(user_id=user.id, amount=price, reason=f"theme:{theme_key}")
+    purchase = Purchase(user_id=user.id, item_key=f"theme:{theme_key}", method="xp", amount=price)
+    grant = ThemeGrant(user_id=user.id, theme_key=theme_key, note="XP 구매", granted_by=None)
+    db.add(xp_spend)
+    db.add(purchase)
+    db.add(grant)
     try:
         await db.commit()
     except IntegrityError as exc:  # 동시 구매 경합 (uq_theme_grants_user_theme)
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "already_owned") from exc
+
+    # 사전 검증(above)과 커밋 사이 다른 구매가 끼는 TOCTOU 경합 — 커밋 후
+    # 재검증으로 가용 XP 음수를 잡아내고 방금 산 테마를 되돌린다 (shop.py 와
+    # 동일한 방식, 2026-08-11)
+    if await progress.revert_if_overdrawn(db, user.id, [xp_spend, purchase, grant]):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
+
     return {"key": theme_key, "allowed": True, "available_xp": available - price}

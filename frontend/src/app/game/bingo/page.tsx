@@ -138,6 +138,7 @@ function BingoInner() {
               "빙고에 쓸 단어가 부족해요 (최소 16개) — 콘텐츠를 담고 학습을 시작하면 단어가 쌓여요.",
             room_not_found: "방을 찾을 수 없어요.",
             room_full: "방이 가득 찼어요 (최대 4명).",
+            room_closed: "방장이 나가서 방이 닫혔어요.",
           }[msg.code] ?? msg.code,
         );
         break;

@@ -281,6 +281,7 @@ class Board:
         if target is None:
             self.misses += 1
             self.combo = 0
+            self._combo_item_marker = 0
             self.lock_until = self.elapsed + MISS_LOCK_SECONDS
             return ClearResult(ok=False, combo=0, effects=["miss"])
 

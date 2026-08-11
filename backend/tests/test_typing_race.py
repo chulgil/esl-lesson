@@ -222,3 +222,56 @@ async def test_solo_requires_sentences(wired_db):  # noqa: F811
     manager = tr.TypingRaceManager()
     with pytest.raises(WordPoolError):
         await manager.solo(user.id, user.name, Collector())
+
+
+async def test_reconnect_during_race_keeps_session(wired_db, fast_race):  # noqa: F811
+    """대전 도중 WS 끊김 → 재연결 시 세션 복귀해야 한다 (버그: detach 가 매치 진행 중에도
+    by_user 를 즉시 지워 재접속을 막았다)."""
+    host = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db)
+    guest = User(google_sub="g-rc", email="rc@example.com", name="RC")
+    wired_db.add(guest)
+    await wired_db.commit()
+
+    manager = tr.TypingRaceManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    await _wait_for(s2, "tp.sentence")
+
+    await manager.detach(guest.id)  # WS 끊김 — 매치는 진행 중
+    assert guest.id in manager.by_user  # 세션 매핑이 유지돼야 재접속 가능
+    assert session.match_id in manager.sessions
+
+    s2b = Collector()
+    resumed = await manager.attach(guest.id, s2b)
+    assert resumed is session
+    racer = next(p for p in session.players if p.user_id == guest.id)
+    assert racer.send is s2b
+    assert any(m["t"] == "tp.start" for m in s2b.messages)  # 현재 상태 재전송
+    assert any(m["t"] == "tp.sentence" for m in s2b.messages)
+
+    session.task.cancel()
+
+
+async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  # noqa: F811
+    """대기방에서 호스트가 나가 세션이 삭제되면 남은 플레이어에게 알려야 한다 (버그 2:
+    기존엔 아무 브로드캐스트 없이 세션만 삭제돼 화면이 멈췄다)."""
+    host = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db)
+    guest = User(google_sub="g-hl", email="hl@example.com", name="HL")
+    wired_db.add(guest)
+    await wired_db.commit()
+
+    manager = tr.TypingRaceManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(guest.id, guest.name, s2, code)
+
+    await manager.detach(host.id)  # 호스트 이탈 — 대기방(시작 전)
+
+    assert any(m.get("code") == "room_closed" for m in s2.messages)
+    assert guest.id not in manager.by_user  # 세션 정리됨
+    assert not manager.sessions

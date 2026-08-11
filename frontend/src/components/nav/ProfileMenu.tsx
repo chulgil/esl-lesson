@@ -58,6 +58,13 @@ export function ProfileMenu({ me }: { me: Me }) {
             <p className="truncate text-xs opacity-50">{me.email}</p>
           </div>
           <Link
+            href="/shop"
+            onClick={() => setOpen(false)}
+            className="flex min-h-11 items-center px-4 text-sm font-bold transition hover:bg-ink/5"
+          >
+            상점
+          </Link>
+          <Link
             href="/settings"
             onClick={() => setOpen(false)}
             className="flex min-h-11 items-center px-4 text-sm font-bold transition hover:bg-ink/5"

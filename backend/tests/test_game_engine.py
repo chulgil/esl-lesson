@@ -377,6 +377,33 @@ def test_combo_grants_item_every_5():
     assert board.items
 
 
+def test_combo_reset_on_miss_also_resets_item_marker():
+    """오답으로 콤보가 0으로 리셋되면 아이템 마커도 함께 리셋돼야 다음 스트릭에서도
+    5콤보에 아이템이 나온다 (버그: marker 미리셋 시 10콤보 후 리셋되면 다음 스트릭은
+    15콤보까지 아이템이 안 나옴)."""
+    board = bilingual_board()
+    first_gain = None
+    for _ in range(5):
+        tick_until_spawn(board)
+        r = board.submit(board.bricks[0].answer)
+        if r.item_gained:
+            first_gain = r.item_gained
+    assert first_gain is not None
+    assert board._combo_item_marker == 1
+
+    miss = board.submit("no-such-word-xyz")
+    assert not miss.ok and board.combo == 0
+    assert board._combo_item_marker == 0  # 리셋되어야 다음 스트릭에서 다시 지급
+
+    second_gain = None
+    for _ in range(5):
+        tick_until_spawn(board)
+        r = board.submit(board.bricks[0].answer)
+        if r.item_gained:
+            second_gain = r.item_gained
+    assert second_gain is not None
+
+
 def test_item_brick_grants_item_on_clear():
     board = bilingual_board()
     # 아이템 브릭이 나올 때까지 스폰 (7스폰당 1회)

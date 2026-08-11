@@ -232,7 +232,7 @@ class QuizRoyaleManager:
         variant: str = "meaning",
     ) -> QuizSession:
         """나 + 봇 1~3 — 만들자마자 바로 시작."""
-        self._leave_if_idle(user_id)
+        await self._leave_if_idle(user_id)
         pool = [] if variant == "nuance" else await self._load_pool(user_id, content_ids)
         session = await self._new_session(user_id, name, send, "solo", None, content_ids)
         session.variant = variant
@@ -250,7 +250,7 @@ class QuizRoyaleManager:
         content_ids: list[int] | None = None,
         variant: str = "meaning",
     ) -> str:
-        self._leave_if_idle(user_id)
+        await self._leave_if_idle(user_id)
         if variant != "nuance":
             await self._load_pool(user_id, content_ids)  # 시작 전에 풀 부족을 미리 알림
         code = secrets.token_hex(3).upper()
@@ -268,7 +268,7 @@ class QuizRoyaleManager:
         if len(session.players) >= MAX_PLAYERS:
             await send({"t": "error", "code": "room_full"})
             return
-        self._leave_if_idle(user_id)
+        await self._leave_if_idle(user_id)
         session.players.append(QuizPlayer(user_id=user_id, name=name, send=send))
         self.by_user[user_id] = session.match_id
         await self._broadcast_room(session)
@@ -308,20 +308,49 @@ class QuizRoyaleManager:
         session.answers[idx] = (answer == question.answer, elapsed)
         await self._broadcast(session, {"t": "qr.answered", "name": session.players[idx].name})
 
-    def detach(self, user_id: int) -> None:
-        """접속 종료 — 대기실이면 제거, 진행 중이면 미제출로 계속."""
+    async def attach(self, user_id: int, send: Sender) -> QuizSession | None:
+        """재접속: 진행 중인 라운드가 있으면 sender 재바인딩 + 현재 라운드 재전송."""
+        session = self._session_of(user_id)
+        if session is None or not session.started:
+            return None
+        idx = self._index_of(session, user_id)
+        if idx is None:
+            return None
+        player = session.players[idx]
+        player.send = send
+        if 0 <= session.round_no < len(session.questions):
+            question = session.questions[session.round_no]
+            remaining = max(0.0, ROUND_SECONDS - (time.monotonic() - session.round_started))
+            try:
+                await player.send(
+                    {
+                        "t": "qr.round",
+                        "no": session.round_no + 1,
+                        "total": len(session.questions),
+                        "prompt": question.prompt,
+                        "choices": question.choices,
+                        "seconds": remaining,
+                    }
+                )
+            except Exception:
+                player.send = None
+        return session
+
+    async def detach(self, user_id: int) -> None:
+        """접속 종료 — 대기실이면 제거, 진행 중이면 미제출로 계속(재접속 대비 매핑 유지)."""
         session = self._session_of(user_id)
         if session is None:
             return
-        self.by_user.pop(user_id, None)
         if not session.started:
+            self.by_user.pop(user_id, None)
             session.players = [p for p in session.players if p.user_id != user_id]
             humans = [p for p in session.players if p.user_id is not None]
             if session.host_id == user_id or not humans:
-                if session.code:
-                    self.rooms.pop(session.code, None)
-                self.sessions.pop(session.match_id, None)
+                # 남은 대기 플레이어에게 방 종료를 알린다 — 안 알리면 화면이 멈춘다 (버그 2)
+                await self._broadcast(session, {"t": "error", "code": "room_closed"})
+                self._cleanup(session)
             return
+        # 진행 중 매치는 by_user 매핑 유지 — WS 재접속(attach) 이 세션을 찾을 수 있어야 한다
         idx = self._index_of(session, user_id)
         if idx is not None:
             session.players[idx].send = None
@@ -548,11 +577,11 @@ class QuizRoyaleManager:
                 return idx
         return None
 
-    def _leave_if_idle(self, user_id: int) -> None:
+    async def _leave_if_idle(self, user_id: int) -> None:
         """시작 전 세션에 남아 있으면 정리 — 새 판 진입 허용."""
         session = self._session_of(user_id)
         if session is not None and not session.started:
-            self.detach(user_id)
+            await self.detach(user_id)
 
 
 royale = QuizRoyaleManager()

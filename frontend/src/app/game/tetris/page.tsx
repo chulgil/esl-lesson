@@ -76,6 +76,10 @@ function TetrisInner() {
   const socketRef = useRef<GameSocket | null>(null);
   const garbageTipShown = useRef(false);
   const prevGarbageCount = useRef(0);
+  // 아이템 토스트/힌트 타이머 핸들 — clear 없이 재획득하면 이전 타이머가 새 표시를
+  // 조기에 지웠다 (버그 헌트 2026-08-11)
+  const itemToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleMessage = useCallback((msg: ServerMsg) => {
     switch (msg.t) {
@@ -107,8 +111,9 @@ function TetrisInner() {
         }
         break;
       case "item.gained":
+        if (itemToastTimerRef.current) clearTimeout(itemToastTimerRef.current);
         setItemToast(msg.item);
-        setTimeout(() => setItemToast(null), 2500);
+        itemToastTimerRef.current = setTimeout(() => setItemToast(null), 2500);
         break;
       case "match.review":
         setReview(msg.items);
@@ -119,8 +124,9 @@ function TetrisInner() {
         break;
       case "item.result":
         if (msg.ok && msg.item === "hint" && msg.hint_answer) {
+          if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
           setHint(msg.hint_answer);
-          setTimeout(() => setHint(null), 1500);
+          hintTimerRef.current = setTimeout(() => setHint(null), 1500);
         }
         break;
       case "error":
@@ -161,6 +167,14 @@ function TetrisInner() {
     document.body.classList.toggle("game-focus", active);
     return () => document.body.classList.remove("game-focus");
   }, [phase]);
+
+  // 언마운트 시 남은 토스트/힌트 타이머 정리 (버그 헌트 2026-08-11)
+  useEffect(() => {
+    return () => {
+      if (itemToastTimerRef.current) clearTimeout(itemToastTimerRef.current);
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    };
+  }, []);
 
   // 내 전적 + 주간 리더보드 (P3 리텐션) — 로비 진입/경기 종료 시 갱신
   useEffect(() => {

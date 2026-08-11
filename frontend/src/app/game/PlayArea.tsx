@@ -106,8 +106,9 @@ export function PlayArea({
               onClick={() => onTap(chip)}
               className={`rounded-full border-2 font-bold shadow-sm transition hover:-translate-y-0.5 active:translate-y-0 active:scale-95 disabled:opacity-50 ${
                 gi === 0
-                  ? "min-h-10 px-3 py-1.5 text-sm sm:min-h-11 sm:px-4 sm:py-2 sm:text-base"
-                  : "min-h-9 px-2.5 py-1 text-xs sm:min-h-10 sm:px-3 sm:py-1.5 sm:text-sm"
+                  ? // 모바일 칩을 한 단계 키움(+8px) — 하단 선택지가 좁다는 보고 (2026-08-11)
+                    "min-h-12 px-3.5 py-2 text-sm sm:min-h-11 sm:px-4 sm:py-2 sm:text-base"
+                  : "min-h-11 px-3 py-1.5 text-xs sm:min-h-10 sm:px-3 sm:py-1.5 sm:text-sm"
               } ${
                 hint === chip
                   ? "border-brick-yellow bg-highlight/60"
@@ -124,33 +125,35 @@ export function PlayArea({
     </div>
   );
 
+  // 하단 배너(오답/아이템획득/힌트/젤리안내)는 각자 독립 타이머라 동시에 여러 개가
+  // 뜰 수 있었고, 쌓인 높이가 모바일 예약 여백(pb-44)을 넘으면 보드를 가렸다
+  // (버그 헌트 2026-08-11) — 우선순위 1개만 렌더해 높이를 고정폭으로 예측 가능하게 만든다
+  const banner = missFlash ? (
+    <p className="text-center text-base font-bold text-brick-red">
+      오답! 콤보 리셋
+    </p>
+  ) : itemToast && ITEM_META[itemToast] ? (
+    <p className="text-center text-base font-bold text-ink">
+      <span className="inline-flex items-center gap-1.5 rounded bg-brick-yellow/40 px-2 py-0.5">
+        + <ItemIcon kind={itemToast} size={16} />
+        {ITEM_META[itemToast].label} 획득!
+      </span>
+    </p>
+  ) : hint ? (
+    // 힌트는 아이템 사용의 결과 — 작게 보이면 소비한 보람이 없음, 크게
+    <p className="rounded-md bg-highlight/60 py-1 text-center text-lg font-bold text-ink">
+      힌트: {hint}
+    </p>
+  ) : garbageTip ? (
+    <p className="rounded-md bg-brick-red/10 px-3 py-2 text-center text-sm font-bold text-brick-red">
+      회색 ×_× 젤리 = 상대의 공격! 아무 단어나 클리어하면 1개씩 사라져요
+    </p>
+  ) : null;
+
   // 입력 영역: 급한 브릭 순 학습카드式 보기 그룹 (정답 + 오답) — 탭으로만 클리어
   const interact = (
     <div className={`flex flex-col gap-2 ${missFlash ? "miss-shake" : ""}`}>
-      {missFlash && (
-        <p className="text-center text-base font-bold text-brick-red">
-          오답! 콤보 리셋
-        </p>
-      )}
-      {itemToast && ITEM_META[itemToast] && (
-        <p className="text-center text-base font-bold text-ink">
-          <span className="inline-flex items-center gap-1.5 rounded bg-brick-yellow/40 px-2 py-0.5">
-            + <ItemIcon kind={itemToast} size={16} />
-            {ITEM_META[itemToast].label} 획득!
-          </span>
-        </p>
-      )}
-      {garbageTip && (
-        <p className="rounded-md bg-brick-red/10 px-3 py-2 text-center text-sm font-bold text-brick-red">
-          회색 ×_× 젤리 = 상대의 공격! 아무 단어나 클리어하면 1개씩 사라져요
-        </p>
-      )}
-      {hint && (
-        // 힌트는 아이템 사용의 결과 — 작게 보이면 소비한 보람이 없음, 크게
-        <p className="rounded-md bg-highlight/60 py-1 text-center text-lg font-bold text-ink">
-          힌트: {hint}
-        </p>
-      )}
+      {banner}
       {hasTapBricks && tapRow}
     </div>
   );
@@ -186,7 +189,8 @@ export function PlayArea({
   }
 
   return (
-    <section className="flex flex-col gap-3 pb-44">
+    // pb-52: 하단 고정 바가 칩 확대(+20px, 2026-08-11 보고)로 높아진 만큼 보드 여백도 확보
+    <section className="flex flex-col gap-3 pb-52">
       <div className="flex items-center justify-between">
         <ScoreHud label="나" board={me} timeLeft={timeLeft} />
       </div>
@@ -214,10 +218,10 @@ export function PlayArea({
       </div>
 
       <div
-        className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2.5 border-t-2 border-ink/15 bg-white/95 px-3 pt-3 backdrop-blur"
+        className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-3 border-t-2 border-ink/15 bg-white/95 px-3 pt-4 backdrop-blur"
         // 홈 인디케이터/브라우저 바에 칩이 붙어 탭하기 힘들던 문제 (2026-08-11 보고)
         // — safe-area 만큼 바닥 여백을 확보한다
-        style={{ paddingBottom: "max(1.1rem, env(safe-area-inset-bottom))" }}
+        style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
       >
         {itemBar}
         {interact}

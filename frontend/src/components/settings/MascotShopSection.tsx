@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PurchaseHistory } from "@/components/settings/PurchaseHistory";
-import { XpWallet } from "@/components/settings/XpWallet";
 import { MascotSvg } from "@/components/theme/mascots";
-import { dispatchShopUpdated, shopApi, type ShopCatalog } from "@/lib/shop-api";
+import {
+  SHOP_EVENT,
+  dispatchShopUpdated,
+  shopApi,
+  type ShopCatalog,
+} from "@/lib/shop-api";
 
 /** 캐릭터 상점 — 마스코트·악세사리·책갈피를 XP 로 구매 (docs/specs/mascot-shop.md).
  *
@@ -23,6 +26,9 @@ export function MascotShopSection() {
 
   useEffect(() => {
     load();
+    // 테마 구매로 XP 를 써도 이쪽 잔액·버튼 활성이 즉시 맞아야 한다 (버그 헌트 2026-08-11)
+    window.addEventListener(SHOP_EVENT, load);
+    return () => window.removeEventListener(SHOP_EVENT, load);
   }, []);
 
   if (!shop) return null;
@@ -80,12 +86,10 @@ export function MascotShopSection() {
 
   return (
     <section className="mt-8">
-      <p className="mb-1 text-sm font-bold">캐릭터 상점</p>
+      <p className="mb-1 text-sm font-bold">캐릭터</p>
       <p className="mb-2 text-xs opacity-60">
-        복습·게임으로 모은 XP로 캐릭터를 데려와요 — 화면 왼쪽 아래에서 함께
-        공부해요.
+        XP로 캐릭터를 데려와요 — 채팅 버튼과 화면 곳곳에서 함께 공부해요.
       </p>
-      <XpWallet amount={shop.available_xp} />
       {notice && <p className="mb-2 text-xs text-brick-red">{notice}</p>}
 
       {/* 마스코트 — 미리보기 + 구매/활성. 수집 도감식: 보유/미보유가 한눈에 */}
@@ -204,9 +208,6 @@ export function MascotShopSection() {
             : `${shop.streak_saver.price_xp} XP로 1개 충전`}
         </button>
       </div>
-
-      {/* 구매 내역 — 각 사용자별 이력 (2026-08-11 요구) */}
-      <PurchaseHistory />
     </section>
   );
 }

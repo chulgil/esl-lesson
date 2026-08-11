@@ -7,7 +7,10 @@ admin_client 는 같은 클라이언트에 admin 쿠키를 씌운 것 — login(
 덮어쓰므로 역할 전환은 세션 쿠키 스위칭으로 한다.
 """
 
+from sqlalchemy import func, select
+
 from app.core.security import SESSION_COOKIE
+from app.models import ItemGrant
 from tests.test_study import login
 from tests.test_theme_shop import _earn_xp
 
@@ -118,3 +121,39 @@ async def test_admin_grant_and_revoke(admin_client, client, db_session):
     assert next(m for m in shop["mascots"] if m["key"] == "mongi")["owned"] is False
     # 활성 마스코트 회수 → 활성도 해제 — 좌하단·플레이어 배지에 남으면 안 된다
     assert shop["active_mascot"] is None
+
+
+async def test_admin_grant_race_returns_409_not_500(admin_client, client, db_session, monkeypatch):
+    """동시 지급(백오피스 더블클릭 등) — 두 요청 다 '미지급'으로 보고 flush 하면
+    두 번째는 uq_item_grants_user_key 위반으로 500 이 날 수 있다. 409 로
+    흡수해야 한다 (2026-08-11 픽스)."""
+    from app.api import admin_shop as admin_shop_api
+
+    admin_token = _token(admin_client)
+    user = await login(client, db_session, email="racer@example.com")
+    user_id = user.id  # create_grant 내부 rollback 이 user 를 만료시키므로 캡처
+    _use(client, admin_token)
+
+    async def fake_not_duplicate(db, user_id, item_key):
+        return False  # 동시 요청이 아직 커밋 전이라 못 본 것처럼
+
+    monkeypatch.setattr(admin_shop_api, "_duplicate_item_grant", fake_not_duplicate)
+
+    # 다른 동시 지급 요청이 이미 커밋을 마친 상태
+    db_session.add(ItemGrant(user_id=user_id, item_key="mascot:mongi", note="선착 지급"))
+    await db_session.commit()
+
+    res = await client.post(
+        "/api/admin/shop/mascot:mongi/grants", json={"email": "racer@example.com"}
+    )
+    assert res.status_code == 409
+    assert res.json()["detail"] == "already_granted"
+
+    count = (
+        await db_session.execute(
+            select(func.count(ItemGrant.id)).where(
+                ItemGrant.user_id == user_id, ItemGrant.item_key == "mascot:mongi"
+            )
+        )
+    ).scalar_one()
+    assert count == 1

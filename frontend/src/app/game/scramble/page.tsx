@@ -192,7 +192,9 @@ function ScrambleInner() {
               ? "조립할 문장이 아직 부족해요 — 영상을 등록하면 문장이 쌓여요"
               : msg.code === "room_not_found"
                 ? "방을 찾을 수 없어요 — 코드를 확인해주세요"
-                : msg.code,
+                : msg.code === "room_closed"
+                  ? "방장이 나가서 방이 닫혔어요."
+                  : msg.code,
           );
           setPhase("lobby");
           break;
@@ -229,7 +231,9 @@ function ScrambleInner() {
 
   function connect(action: (socket: GameSocket) => void) {
     setError(null);
-    if (socketRef.current) {
+    // 끊긴 뒤에도 socketRef 가 죽은 소켓을 들고 있어 send() 가 조용히 씹혔다
+    // (버그 헌트 2026-08-11) — truthy 체크 대신 isOpen() 으로 재사용 가능 여부 확인
+    if (socketRef.current?.isOpen()) {
       action(socketRef.current);
       return;
     }

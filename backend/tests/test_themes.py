@@ -106,6 +106,41 @@ async def test_grant_validations(admin_client, db_session):
     assert unknown.json()["detail"] == "theme_not_found"
 
 
+async def test_admin_grant_race_returns_409_not_500(admin_client, db_session, monkeypatch):
+    """동시 지급(백오피스 더블클릭 등) — 두 요청 다 '미지급'으로 보고 flush 하면
+    두 번째는 uq_theme_grants_user_theme 위반으로 500 이 날 수 있다. 409 로
+    흡수해야 한다 (2026-08-11 픽스)."""
+    from app.api import admin_themes as admin_themes_api
+
+    user = await make_user(db_session, "kitty@example.com", "냥집사")
+    await db_session.commit()
+    user_id = user.id  # create_grant 내부 rollback 이 user 를 만료시키므로 캡처
+
+    async def fake_not_duplicate(db, user_id, theme_key):
+        return False  # 동시 요청이 아직 커밋 전이라 못 본 것처럼
+
+    monkeypatch.setattr(admin_themes_api, "_duplicate_theme_grant", fake_not_duplicate)
+
+    # 다른 동시 지급 요청이 이미 커밋을 마친 상태
+    db_session.add(ThemeGrant(user_id=user_id, theme_key="cat", note="선착 지급"))
+    await db_session.commit()
+
+    res = await admin_client.post(
+        "/api/admin/themes/cat/grants", json={"email": "kitty@example.com"}
+    )
+    assert res.status_code == 409
+    assert res.json()["detail"] == "already_granted"
+
+    count = (
+        await db_session.execute(
+            select(func.count(ThemeGrant.id)).where(
+                ThemeGrant.user_id == user_id, ThemeGrant.theme_key == "cat"
+            )
+        )
+    ).scalar_one()
+    assert count == 1
+
+
 async def test_revoke_locks_again(admin_client, db_session):
     user = await make_user(db_session, "kitty@example.com", "냥집사")
     await db_session.commit()
@@ -277,6 +312,57 @@ async def test_achievement_grants_theme_and_keeps_it(client, admin_client, db_se
     admin_client.cookies.set(SESSION_COOKIE, create_session_token(me))
     by_key = await themes_by_key(client)
     assert by_key["candy"]["allowed"] is True
+
+
+async def test_sync_theme_rewards_survives_concurrent_duplicate_grant(
+    client, db_session, monkeypatch
+):
+    """GET /api/themes 와 GET /api/study/achievements 가 병렬 호출되면 같은 grant 를
+    동시에 넣으려다 IntegrityError 로 500 이 날 수 있다 — commit 을 감싸 무해하게
+    넘어가야 한다 (2026-08-11 픽스).
+
+    완전한 동시성은 테스트 DB(StaticPool 단일 커넥션) 특성상 재현이 어려워, 다른
+    동시 요청이 achievements.compute() 호출 직후·우리 커밋 직전에 이미 같은 grant
+    를 커밋한 상황을 achievements.compute 몽키패치로 직접 유발한다.
+    """
+    from app.models import ThemeRewardRule
+    from app.services import achievements as achievements_service
+    from app.services import theme_rewards as theme_rewards_service
+
+    db_session.add(ThemeRewardRule(achievement_key="first_friend", theme_key="candy"))
+    await db_session.commit()
+
+    me = await login(client, db_session)
+    friend = await make_user(db_session, "pal2@example.com", "친구2")
+    from app.models.friend import Friendship
+
+    db_session.add(Friendship(requester_id=me.id, addressee_id=friend.id, status="accepted"))
+    await db_session.commit()
+
+    real_compute = achievements_service.compute
+
+    async def racy_compute(db, user_id):
+        items = await real_compute(db, user_id)
+        # 다른 동시 요청이 granted 조회 이후·우리 커밋 이전에 이미 같은 grant 를
+        # 커밋 완료한 상황 재현
+        db.add(ThemeGrant(user_id=user_id, theme_key="candy", note="경쟁 지급(동시 요청)"))
+        await db.commit()
+        return items
+
+    monkeypatch.setattr(theme_rewards_service.achievements, "compute", racy_compute)
+
+    res = await client.get("/api/themes")
+    assert res.status_code == 200
+
+    by_key = await themes_by_key(client)
+    assert by_key["candy"]["allowed"] is True
+
+    count = (
+        await db_session.execute(
+            select(func.count(ThemeGrant.id)).where(ThemeGrant.theme_key == "candy")
+        )
+    ).scalar_one()
+    assert count == 1  # 경합해도 grant 는 1행만
 
 
 async def test_exam_achievement_grants_theme(client, db_session):

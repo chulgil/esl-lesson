@@ -137,14 +137,14 @@ class BingoManager:
     # --- 진입 ---
 
     async def solo(self, user_id: int, name: str, send: Sender) -> BingoSession:
-        self._leave_if_idle(user_id)
+        await self._leave_if_idle(user_id)
         await self._pool(user_id)  # 시작 전에 단어 부족을 미리 알림
         session = await self._new_session(user_id, name, send, "solo", None)
         await self._start(session)
         return session
 
     async def create(self, user_id: int, name: str, send: Sender) -> str:
-        self._leave_if_idle(user_id)
+        await self._leave_if_idle(user_id)
         await self._pool(user_id)
         code = secrets.token_hex(3).upper()
         session = await self._new_session(user_id, name, send, "room", code)
@@ -160,7 +160,7 @@ class BingoManager:
         if len(session.players) >= MAX_PLAYERS:
             await send({"t": "error", "code": "room_full"})
             return
-        self._leave_if_idle(user_id)
+        await self._leave_if_idle(user_id)
         session.players.append(BingoPlayer(user_id=user_id, name=name, send=send))
         self.by_user[user_id] = session.match_id
         await self._broadcast_room(session)
@@ -207,18 +207,53 @@ class BingoManager:
             player.wrong += 1
             await self._safe_send(player, {"t": "bg.tap_result", "ok": False, "item_id": item_id})
 
-    def detach(self, user_id: int) -> None:
+    async def attach(self, user_id: int, send: Sender) -> BingoSession | None:
+        """재접속: 진행 중인 빙고가 있으면 sender 재바인딩 + 현재 상태(내 보드) 재전송."""
+        session = self._session_of(user_id)
+        if session is None or not session.started:
+            return None
+        player = next((p for p in session.players if p.user_id == user_id), None)
+        if player is None:
+            return None
+        player.send = send
+        await self._safe_send(
+            player,
+            {
+                "t": "bg.start",
+                "board": [{"item_id": i, "en": session.words[i][0]} for i in player.arrangement],
+                "total": len(session.call_order),
+                "round_seconds": ROUND_SECONDS,
+                "countdown": 0,
+                "players": [p.name for p in session.players],
+            },
+        )
+        if 0 <= session.round_no < len(session.call_order):
+            item_id = session.call_order[session.round_no]
+            await self._safe_send(
+                player,
+                {
+                    "t": "bg.round",
+                    "no": session.round_no,
+                    "total": len(session.call_order),
+                    "media": session.media.get(item_id),
+                    "tts": session.words[item_id][0],
+                },
+            )
+        return session
+
+    async def detach(self, user_id: int) -> None:
         session = self._session_of(user_id)
         if session is None:
             return
-        self.by_user.pop(user_id, None)
         if not session.started:
+            self.by_user.pop(user_id, None)
             session.players = [p for p in session.players if p.user_id != user_id]
             if session.host_id == user_id or not session.players:
-                if session.code:
-                    self.rooms.pop(session.code, None)
-                self.sessions.pop(session.match_id, None)
+                # 남은 대기 플레이어에게 방 종료를 알린다 — 안 알리면 화면이 멈춘다 (버그 2)
+                await self._broadcast(session, {"t": "error", "code": "room_closed"})
+                self._cleanup(session)
             return
+        # 진행 중 매치는 by_user 매핑 유지 — WS 재접속(attach) 이 세션을 찾을 수 있어야 한다
         player = next((p for p in session.players if p.user_id == user_id), None)
         if player is not None:
             player.send = None
@@ -461,10 +496,10 @@ class BingoManager:
         match_id = self.by_user.get(user_id)
         return self.sessions.get(match_id) if match_id is not None else None
 
-    def _leave_if_idle(self, user_id: int) -> None:
+    async def _leave_if_idle(self, user_id: int) -> None:
         session = self._session_of(user_id)
         if session is not None and not session.started:
-            self.detach(user_id)
+            await self.detach(user_id)
 
 
 caller = BingoManager()

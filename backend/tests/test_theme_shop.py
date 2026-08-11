@@ -83,6 +83,44 @@ async def test_purchase_rejected_when_insufficient_or_not_for_sale(client, db_se
     assert (await client.post("/api/themes/note/purchase")).status_code == 422
 
 
+async def test_purchase_theme_reverts_on_toctou_race(admin_client, client, db_session, monkeypatch):
+    """사전 잔액검증과 커밋 사이 다른 구매가 끼어드는 경합 — 커밋 후 재검증으로
+    가용 XP 음수를 잡아내고 방금 산 테마를 되돌린다 (2026-08-11 TOCTOU 픽스,
+    shop.py 마스코트 구매와 동일한 방식)."""
+    from app.api import themes as themes_api
+    from app.models import XpSpend
+    from app.services import progress as progress_service
+
+    await admin_client.patch("/api/admin/themes/ocean/price", json={"price_xp": 1000})
+
+    user = await login(client, db_session)
+    await _earn_xp(db_session, user.id, reviews=200)  # 2000 XP
+
+    # 동시에 이미 커밋된 다른 구매(마스코트 1500) — 실제 가용 XP 는 500
+    db_session.add(XpSpend(user_id=user.id, amount=1500, reason="mascot:mongi"))
+    await db_session.commit()
+
+    real_available_xp = progress_service.available_xp
+    calls = {"n": 0}
+
+    async def stale_then_real(db, uid):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return 2000  # 사전 검증 시점 — 동시 구매가 아직 반영 안 된 것처럼
+        return await real_available_xp(db, uid)
+
+    monkeypatch.setattr(themes_api.progress, "available_xp", stale_then_real)
+
+    res = await client.post("/api/themes/ocean/purchase")
+    assert res.status_code == 422
+    assert res.json()["detail"] == "insufficient_xp"
+
+    listing = (await client.get("/api/themes")).json()
+    ocean = next(i for i in listing["items"] if i["key"] == "ocean")
+    assert ocean["allowed"] is False  # 되돌림 — 미보유
+    assert listing["available_xp"] == 500  # 동시 구매분만 반영
+
+
 async def test_reward_and_price_coexist(admin_client, client, db_session):
     """업적 보상과 XP 판매는 독립 설정 — 동시 사용 가능 (2026-08-05 결정).
 
