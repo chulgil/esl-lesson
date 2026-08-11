@@ -19,8 +19,25 @@ import { useAppTheme } from "@/lib/theme";
 /** 채팅 위젯 — excelkospi 우하단 버튼 컨셉 (docs/specs/chat.md 위장 테마).
  *  설정(플로팅 체크) 에 따라 두 가지로 표시된다:
  *  - 플로팅(기본): 우하단 작은 팝업. Esc 또는 바깥 클릭으로 닫힘.
+ *    PC 는 헤더 드래그로 위치 이동 (localStorage 유지 — 2026-08-11 요청).
  *  - 도킹: 화면 우측에 상시 고정된 패널(닫기 없음, excelkospi 채팅 레일 컨셉).
  *  페이지(/chat)는 푸시 딥링크·모바일용으로 유지. 오피스 테마 = "메모" 패널로 위장. */
+
+// 플로팅 팝업 위치 (PC 전용)
+const POS_KEY = "esl:chat:widget-pos";
+const PANEL_W = 360; // sm:w-[22.5rem]
+const EDGE = 8; // 화면 가장자리 여백
+
+function clampPos(pos: { x: number; y: number }): { x: number; y: number } {
+  // 팝업이 화면 밖으로 사라지지 않게 — 가로는 전체, 세로는 헤더가 항상 보이게
+  const maxX = Math.max(EDGE, window.innerWidth - PANEL_W - EDGE);
+  const maxY = Math.max(EDGE, window.innerHeight - 120);
+  return {
+    x: Math.min(Math.max(EDGE, pos.x), maxX),
+    y: Math.min(Math.max(EDGE, pos.y), maxY),
+  };
+}
+
 export function ChatWidget() {
   const pathname = usePathname();
   const theme = useAppTheme();
@@ -33,6 +50,13 @@ export function ChatWidget() {
   const [unread, setUnread] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
+  // 플로팅 위치 — null = 기본(우하단). 드래그로 바뀌면 좌표 고정 + 저장
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const posRef = useRef<{ x: number; y: number } | null>(null);
+  posRef.current = panelPos;
 
   // 도킹은 데스크톱 전용 — 모바일에서 우측 상시 패널은 화면 전체를 덮고
   // 닫을 방법이 없다 (2026-07-28 검증에서 발견). 모바일은 항상 플로팅.
@@ -48,6 +72,50 @@ export function ChatWidget() {
   useEffect(() => {
     fetchMe().then((me) => setLoggedIn(Boolean(me)));
   }, []);
+
+  // 저장된 플로팅 위치 복원 + 창 크기 변화 시 화면 안으로 재클램프
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(POS_KEY);
+      if (saved) setPanelPos(clampPos(JSON.parse(saved)));
+    } catch {
+      // 손상된 저장값 — 기본 위치 사용
+    }
+    const onResize = () => {
+      if (posRef.current) setPanelPos(clampPos(posRef.current));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // 헤더 드래그 이동 (PC 플로팅 전용) — 버튼(뒤로/닫기) 클릭은 드래그로 안 잡는다
+  function onHeaderPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest("button")) return;
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault(); // 드래그 중 텍스트 선택 방지
+  }
+  function onHeaderPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return;
+    setPanelPos(
+      clampPos({
+        x: e.clientX - dragRef.current.dx,
+        y: e.clientY - dragRef.current.dy,
+      }),
+    );
+  }
+  function onHeaderPointerUp() {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    try {
+      if (posRef.current)
+        localStorage.setItem(POS_KEY, JSON.stringify(posRef.current));
+    } catch {
+      // 저장 실패는 무시 — 세션 내 위치는 유지된다
+    }
+  }
 
   // 안읽음 배지 — WS 이벤트 즉시 + 60초 폴링 (서버 TTL 캐시)
   useEffect(() => {
@@ -172,17 +240,40 @@ export function ChatWidget() {
           }
           style={
             effFloating && isDesktop
-              ? { maxHeight: "min(30rem, calc(100dvh - 7rem))" }
+              ? {
+                  maxHeight: "min(30rem, calc(100dvh - 7rem))",
+                  // 드래그로 옮긴 위치 — 기본(우하단) Tailwind 클래스를 덮는다
+                  ...(panelPos
+                    ? {
+                        left: panelPos.x,
+                        top: panelPos.y,
+                        right: "auto",
+                        bottom: "auto",
+                      }
+                    : {}),
+                }
               : undefined
           }
         >
-          {/* 헤더 */}
+          {/* 헤더 — PC 플로팅은 드래그 핸들 (창 위치 이동, 2026-08-11 요청) */}
           <div
-            className={
+            onPointerDown={
+              effFloating && isDesktop ? onHeaderPointerDown : undefined
+            }
+            onPointerMove={
+              effFloating && isDesktop ? onHeaderPointerMove : undefined
+            }
+            onPointerUp={
+              effFloating && isDesktop ? onHeaderPointerUp : undefined
+            }
+            title={
+              effFloating && isDesktop ? "드래그해서 창 위치 이동" : undefined
+            }
+            className={`${
               excel
                 ? "flex items-center gap-2 bg-[#185c37] px-3 py-1.5 text-xs text-white"
                 : "flex items-center gap-2 border-b-2 border-ink/10 bg-white px-3 py-2"
-            }
+            } ${effFloating && isDesktop ? "cursor-move touch-none select-none" : ""}`}
           >
             {room ? (
               <button
