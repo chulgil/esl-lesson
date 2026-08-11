@@ -23,6 +23,12 @@ const EMPTY_PERMISSION: ContentPermission = {
   note: "",
 };
 
+/** URL 에서 video_id 추출 — 등록 성공 시 검색 결과에 "등록됨" 마킹용 */
+function videoIdOf(url: string): string | null {
+  const match = url.match(/(?:[?&]v=|youtu\.be\/)([\w-]{6,})/);
+  return match ? match[1] : null;
+}
+
 export default function NewContentPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("youtube");
@@ -32,6 +38,9 @@ export default function NewContentPage() {
   const [scriptKo, setScriptKo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // 연속 등록 — 유튜브 탭은 등록 후 검색 상태를 유지한 채 다음 영상으로 (2026-08-11)
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
   // CC 게이트(cc_required) — 비 CC 는 허락 증빙을 남겨야 등록된다
   const [ccBlocked, setCcBlocked] = useState(false);
   // CC 영상 찾기 — creativeCommon+자막 보유만 검색해 후보에서 바로 등록
@@ -58,8 +67,15 @@ export default function NewContentPage() {
     permission.evidence.trim() !== "" &&
     scopeComplete;
 
+  function markRegistered(videoUrl: string) {
+    const videoId = videoIdOf(videoUrl);
+    if (!videoId) return;
+    setRegisteredIds((prev) => new Set(prev).add(videoId));
+  }
+
   async function submit(withPermission = false) {
     setError(null);
+    setSuccessNotice(null);
     setCcBlocked(false);
     setSubmitting(true);
     try {
@@ -69,15 +85,26 @@ export default function NewContentPage() {
           url,
           permission: withPermission ? permission : undefined,
         });
-      } else {
-        await adminApi.createContent({
-          source: "manual",
-          title,
-          script_en: scriptEn,
-          script_ko: scriptKo || undefined,
-          url: url || undefined,
-        });
+        // 화면 잔류 — 검색 결과·검색어를 유지한 채 다음 영상을 이어서 등록 (2026-08-11)
+        const registeredTitle = ccItems?.find(
+          (v) => videoIdOf(url) === v.video_id,
+        )?.title;
+        markRegistered(url);
+        setUrl("");
+        setPermission(EMPTY_PERMISSION);
+        setSuccessNotice(
+          `${registeredTitle ? `'${registeredTitle}' ` : ""}등록 시작 — 추출은 백그라운드에서 진행돼요. 다음 영상을 이어서 등록할 수 있어요.`,
+        );
+        setSubmitting(false);
+        return;
       }
+      await adminApi.createContent({
+        source: "manual",
+        title,
+        script_en: scriptEn,
+        script_ko: scriptKo || undefined,
+        url: url || undefined,
+      });
       router.push("/admin/contents");
     } catch (e) {
       const message = e instanceof Error ? e.message : "등록 실패";
@@ -85,6 +112,11 @@ export default function NewContentPage() {
         setCcBlocked(true);
       } else if (message === "permission_scope_insufficient") {
         setError("자막·번역·학습항목 세 가지 이용이 모두 허락되어야 등록돼요.");
+      } else if (message === "already_registered") {
+        // 서버 중복 가드 — 목록에도 즉시 "등록됨" 반영
+        markRegistered(url);
+        setUrl("");
+        setError("이미 등록된 영상이에요 — 다른 영상을 선택하세요.");
       } else {
         setError(message);
       }
@@ -242,15 +274,21 @@ export default function NewContentPage() {
                   {ccItems.map((v) => {
                     const videoUrl = `https://www.youtube.com/watch?v=${v.video_id}`;
                     const selected = url === videoUrl;
+                    // 서버 표시 + 이번 세션 등록분 — 중복 후보를 화면에서 차단
+                    const registered =
+                      v.registered || registeredIds.has(v.video_id);
                     return (
                       <li key={v.video_id}>
                         <button
                           type="button"
+                          disabled={registered}
                           onClick={() => setUrl(videoUrl)}
                           className={`flex w-full items-center gap-3 rounded-md border-2 p-2 text-left transition ${
-                            selected
-                              ? "border-brick-green bg-brick-green/10"
-                              : "border-ink/10 bg-white hover:border-brick-green/50"
+                            registered
+                              ? "border-ink/10 bg-ink/5 opacity-60"
+                              : selected
+                                ? "border-brick-green bg-brick-green/10"
+                                : "border-ink/10 bg-white hover:border-brick-green/50"
                           }`}
                         >
                           {v.thumbnail_url ? (
@@ -273,10 +311,16 @@ export default function NewContentPage() {
                                 ` · ${v.published_at.slice(0, 10)}`}
                             </span>
                           </span>
-                          {selected && (
-                            <span className="shrink-0 text-xs font-bold text-brick-green">
-                              선택됨
+                          {registered ? (
+                            <span className="shrink-0 rounded bg-ink/10 px-1.5 py-0.5 text-xs font-bold opacity-70">
+                              등록됨
                             </span>
+                          ) : (
+                            selected && (
+                              <span className="shrink-0 text-xs font-bold text-brick-green">
+                                선택됨
+                              </span>
+                            )
                           )}
                         </button>
                       </li>
@@ -337,6 +381,18 @@ export default function NewContentPage() {
         )}
 
         {error && <p className="text-sm text-brick-red">{error}</p>}
+        {successNotice && (
+          <p className="rounded-md border-2 border-brick-green/40 bg-brick-green/10 px-3 py-2 text-sm font-bold text-brick-green">
+            {successNotice}{" "}
+            <button
+              type="button"
+              onClick={() => router.push("/admin/contents")}
+              className="underline"
+            >
+              목록에서 상태 보기
+            </button>
+          </p>
+        )}
 
         {ccBlocked && (
           <div className="flex flex-col gap-3 rounded-md border-2 border-brick-yellow bg-highlight/30 p-4 text-sm">
@@ -442,7 +498,11 @@ export default function NewContentPage() {
         )}
 
         <div>
-          <Brick color="green" disabled={submitting} onClick={() => submit()}>
+          <Brick
+            color="green"
+            disabled={submitting || (tab === "youtube" && !url.trim())}
+            onClick={() => submit()}
+          >
             {submitting ? "등록 중..." : "등록"}
           </Brick>
         </div>

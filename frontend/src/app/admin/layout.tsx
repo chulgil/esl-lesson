@@ -10,6 +10,7 @@ const NAV = [
   { href: "/admin/items", label: "항목 풀" },
   { href: "/admin/users", label: "사용자" },
   { href: "/admin/themes", label: "테마 몰" },
+  { href: "/admin/shop", label: "캐릭터 상점" },
 ];
 
 export default function AdminLayout({

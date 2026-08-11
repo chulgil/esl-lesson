@@ -22,7 +22,17 @@ export interface ShopItem {
   key: string;
   label: string;
   price_xp: number;
+  /** "event" = 이벤트 지급 전용 — XP 구매 불가 (백오피스 설정) */
+  sale: "xp" | "event";
   owned: boolean;
+}
+
+export interface PurchaseRow {
+  item_key: string;
+  method: "xp" | "cash" | "card";
+  amount: number;
+  currency: string;
+  created_at: string;
 }
 
 export interface ShopCatalog {
@@ -42,6 +52,7 @@ export function dispatchShopUpdated(): void {
 
 export const shopApi = {
   catalog: () => request<ShopCatalog>("/api/shop"),
+  purchases: () => request<{ items: PurchaseRow[] }>("/api/shop/purchases"),
   purchase: (itemKey: string) =>
     request<{
       item_key: string;

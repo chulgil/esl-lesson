@@ -7,6 +7,7 @@ import { DailyGoalSetting } from "@/components/settings/DailyGoalSetting";
 import { MascotShopSection } from "@/components/settings/MascotShopSection";
 import { NicknameCard } from "@/components/settings/NicknameCard";
 import { NotificationCard } from "@/components/settings/NotificationCard";
+import { XpWallet } from "@/components/settings/XpWallet";
 import { deleteMe } from "@/lib/api";
 import { studyApi } from "@/lib/study-api";
 import { APP_THEMES, setAppTheme, useAppTheme } from "@/lib/theme";
@@ -125,17 +126,13 @@ function ThemeSection() {
   return (
     <section className="mt-10 max-w-lg">
       <p className="mb-1 text-sm font-bold">테마</p>
-      <p className="mb-3 text-xs opacity-60">
+      <p className="mb-2 text-xs opacity-60">
         앱 전체(배경·버튼·게임 보드)의 디자인 컨셉이 함께 바뀝니다.
         <span className="block">
           새 테마는 업적 달성·이벤트, 또는 XP 로 열 수 있어요.
-          {availableXp !== null && (
-            <span className="ml-1 rounded bg-brick-blue/10 px-1.5 py-0.5 font-bold text-brick-blue">
-              보유 {availableXp} XP
-            </span>
-          )}
         </span>
       </p>
+      {availableXp !== null && <XpWallet amount={availableXp} />}
       {buyError && (
         <p className="mb-3 text-xs font-bold text-brick-red">{buyError}</p>
       )}

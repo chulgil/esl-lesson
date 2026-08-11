@@ -14,10 +14,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.models import ItemGrant, XpSpend
+from app.models import ItemGrant, Purchase, XpSpend
 from app.models.user import User, UserSettings
 from app.services import progress
-from app.services.mascots import MASCOTS, OUTFITS, STREAK_SAVER_PRICE_XP, item_price
+from app.services.mascots import (
+    MASCOTS,
+    OUTFITS,
+    STREAK_SAVER_PRICE_XP,
+    item_policies,
+    item_price,
+)
 from app.services.retention import SAVER_MAX
 
 router = APIRouter(prefix="/shop", tags=["shop"])
@@ -48,6 +54,7 @@ async def shop_catalog(
     owned = await _owned_keys(db, user.id)
     settings = await _settings_of(db, user.id)
     available = await progress.available_xp(db, user.id)
+    policies = await item_policies(db)
     return {
         "available_xp": available,
         "active_mascot": settings.mascot_key,
@@ -55,7 +62,8 @@ async def shop_catalog(
             {
                 "key": key,
                 "label": meta["label"],
-                "price_xp": meta["price_xp"],
+                "price_xp": policies[f"mascot:{key}"]["price_xp"],
+                "sale": policies[f"mascot:{key}"]["sale"],
                 "owned": f"mascot:{key}" in owned,
             }
             for key, meta in MASCOTS.items()
@@ -65,7 +73,8 @@ async def shop_catalog(
             {
                 "key": key,
                 "label": meta["label"],
-                "price_xp": meta["price_xp"],
+                "price_xp": policies[f"outfit:{key}"]["price_xp"],
+                "sale": policies[f"outfit:{key}"]["sale"],
                 "owned": f"outfit:{key}" in owned,
             }
             for key, meta in OUTFITS.items()
@@ -75,6 +84,41 @@ async def shop_catalog(
             "count": settings.streak_savers,
             "max": SAVER_MAX,
         },
+    }
+
+
+PURCHASE_HISTORY_LIMIT = 50
+
+
+@router.get("/purchases")
+async def purchase_history(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """내 구매 이력 — 품목·결제수단·금액·시각 (최신순). 라벨은 프론트가 결정."""
+    rows = (
+        (
+            await db.execute(
+                select(Purchase)
+                .where(Purchase.user_id == user.id)
+                .order_by(Purchase.id.desc())
+                .limit(PURCHASE_HISTORY_LIMIT)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "item_key": p.item_key,
+                "method": p.method,
+                "amount": p.amount,
+                "currency": p.currency,
+                "created_at": p.created_at.isoformat(),
+            }
+            for p in rows
+        ]
     }
 
 
@@ -88,9 +132,13 @@ async def purchase_item(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
-    price = item_price(body.item_key)
-    if price is None:
+    if item_price(body.item_key) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "item_not_found")
+    policy = (await item_policies(db))[body.item_key]
+    if policy["sale"] == "event":
+        # 이벤트 지급 전용 — 잔액과 무관하게 XP 구매 차단 (백오피스 설정)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "event_only_item")
+    price = policy["price_xp"]
     owned = await _owned_keys(db, user.id)
     if body.item_key in owned:
         raise HTTPException(status.HTTP_409_CONFLICT, "already_owned")
@@ -99,6 +147,7 @@ async def purchase_item(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
 
     db.add(XpSpend(user_id=user.id, amount=price, reason=body.item_key))
+    db.add(Purchase(user_id=user.id, item_key=body.item_key, method="xp", amount=price))
     db.add(ItemGrant(user_id=user.id, item_key=body.item_key, note="XP 구매"))
     settings = await _settings_of(db, user.id)
     kind, _, key = body.item_key.partition(":")
@@ -152,6 +201,11 @@ async def purchase_streak_saver(
     if available < STREAK_SAVER_PRICE_XP:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
     db.add(XpSpend(user_id=user.id, amount=STREAK_SAVER_PRICE_XP, reason="saver:streak"))
+    db.add(
+        Purchase(
+            user_id=user.id, item_key="saver:streak", method="xp", amount=STREAK_SAVER_PRICE_XP
+        )
+    )
     settings.streak_savers += 1
     await db.commit()
     return {

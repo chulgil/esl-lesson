@@ -38,6 +38,7 @@ router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(requir
 @router.get("/youtube/cc-search")
 async def cc_search(
     q: Annotated[str, Query(min_length=1, max_length=100)],
+    db: Annotated[AsyncSession, Depends(get_db)],
     page_token: Annotated[str | None, Query(max_length=300)] = None,
 ) -> dict:
     """CC(creativeCommon)·자막 보유·영어 영상만 검색 — 등록 후보 제시.
@@ -51,6 +52,16 @@ async def cc_search(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "youtube_search_failed") from exc
     if result is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "youtube_api_key_missing")
+    # 이미 등록된 영상 표시 — 연속 등록 시 중복 후보를 화면에서 걸러낸다 (2026-08-11)
+    video_ids = [i["video_id"] for i in result["items"]]
+    registered = set(
+        (
+            await db.execute(
+                select(Content.youtube_video_id).where(Content.youtube_video_id.in_(video_ids))
+            )
+        ).scalars()
+    )
+    result["items"] = [{**i, "registered": i["video_id"] in registered} for i in result["items"]]
     return result
 
 
@@ -118,6 +129,9 @@ async def create_public_content(
             existing = (
                 await db.execute(select(Content).where(Content.youtube_video_id == video_id))
             ).scalar_one_or_none()
+            if existing is not None and existing.visibility == "public":
+                # 공용 중복 등록 차단 — 연속 등록 흐름의 이중 클릭/재선택 방지
+                raise HTTPException(status.HTTP_409_CONFLICT, "already_registered")
             if existing is not None and existing.visibility == "private":
                 if body.permission is not None:
                     db.add(_permission_row(existing.id, body.permission, admin.id))

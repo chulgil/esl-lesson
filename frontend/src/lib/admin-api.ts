@@ -63,6 +63,8 @@ export interface CcSearchItem {
   channel_title: string;
   published_at: string;
   thumbnail_url: string;
+  /** 이미 등록된 영상 — 연속 등록 시 중복 후보 걸러내기 (2026-08-11) */
+  registered: boolean;
 }
 
 export interface AdminUser {
@@ -240,4 +242,50 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify({ role }),
     }),
+};
+
+/** 백오피스 캐릭터 상점 — 가격·판매 방식·지급 관리 (docs/specs/mascot-shop.md) */
+export interface AdminShopItem {
+  key: string;
+  kind: "mascot" | "outfit";
+  label: string;
+  default_price_xp: number;
+  price_xp: number;
+  sale: "xp" | "event";
+  grants: number;
+}
+
+export interface ItemGrantRow {
+  id: number;
+  email: string;
+  nickname: string;
+  note: string | null;
+  created_at: string;
+}
+
+export const adminShopApi = {
+  items: () => request<{ items: AdminShopItem[] }>("/api/admin/shop"),
+
+  patchItem: (
+    key: string,
+    body: { price_xp?: number | null; sale?: "xp" | "event" },
+  ) =>
+    request<{ key: string; price_xp: number; sale: "xp" | "event" }>(
+      `/api/admin/shop/${encodeURIComponent(key)}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+
+  grants: (key: string) =>
+    request<{ items: ItemGrantRow[] }>(
+      `/api/admin/shop/${encodeURIComponent(key)}/grants`,
+    ),
+
+  grant: (key: string, body: { email: string; note?: string }) =>
+    request<ItemGrantRow>(`/api/admin/shop/${encodeURIComponent(key)}/grants`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  revoke: (grantId: number) =>
+    request<void>(`/api/admin/shop/grants/${grantId}`, { method: "DELETE" }),
 };
