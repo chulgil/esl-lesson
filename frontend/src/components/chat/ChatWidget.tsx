@@ -331,7 +331,8 @@ export function ChatWidget() {
                 type="button"
                 onClick={() => setRoom(null)}
                 aria-label="목록으로"
-                className="font-bold opacity-80 hover:opacity-100"
+                // 44px 터치 타겟 — 글자만 있으면 모바일에서 누르기 어렵다 (2026-08-12 보고)
+                className="flex min-h-11 min-w-11 items-center justify-center text-xl font-bold opacity-80 hover:opacity-100"
               >
                 ‹
               </button>
@@ -350,7 +351,9 @@ export function ChatWidget() {
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="닫기 (Esc)"
-                className="ml-auto opacity-60 hover:opacity-100"
+                // 44px 터치 타겟 + 큰 글리프 — × 가 너무 작아 터치가 어렵다는
+                // 보고 (2026-08-12). 시각 무게는 opacity 로 낮게 유지
+                className="ml-auto flex min-h-11 min-w-11 items-center justify-center text-2xl leading-none opacity-60 hover:opacity-100"
               >
                 ×
               </button>
@@ -382,8 +385,10 @@ export function ChatWidget() {
               ? "fixed right-4 bottom-20 z-50 flex min-h-10 items-center gap-1.5 rounded-full bg-[#185c37] px-4 font-sans text-xs font-bold text-white shadow-lg hover:bg-[#217346] sm:bottom-4"
               : mascotLauncher
                 ? // 캐릭터 런처 — 산 마스코트가 버튼 자체가 된다 (연필 대체).
-                  // idle 애니메이션은 새 메시지가 있을 때만 (없으면 정지, 2026-08-11)
-                  `fixed right-1 bottom-16 z-50 origin-bottom-right scale-75 transition hover:-translate-y-0.5 sm:right-3 sm:bottom-2 sm:scale-100 ${
+                  // idle 애니메이션은 새 메시지가 있을 때만 (없으면 정지, 2026-08-11).
+                  // z-30: 하단 탭바(z-40) 뒤로 — 움직일 때 메뉴 위로 겹쳐 잘려
+                  // 보이던 문제 (2026-08-12 보고, 좌하단 MascotPeek 와 동일 층)
+                  `fixed right-1 bottom-16 z-30 origin-bottom-right scale-75 transition hover:-translate-y-0.5 sm:right-3 sm:bottom-2 sm:scale-100 ${
                     unread > 0 ? "mascot-launcher-attn" : ""
                   }`
                 : `fixed right-4 bottom-20 z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5 sm:bottom-4 ${
