@@ -16,6 +16,7 @@ from app.models import (
     ReviewCard,
     TranscriptSegment,
 )
+from app.services.langs import SUPPORTED_LANGS
 from app.services.youtube import parse_video_id
 
 
@@ -25,9 +26,13 @@ class ContentCreate(BaseModel):
     title: str | None = Field(default=None, max_length=500)
     script_en: str | None = None
     script_ko: str | None = None
+    # 콘텐츠(자막) 언어 — en/ja/ko, 기본 en (docs/specs/chat-translation.md 콘텐츠 다국어)
+    lang: str = "en"
 
     @model_validator(mode="after")
     def check_by_source(self) -> "ContentCreate":
+        if self.lang not in SUPPORTED_LANGS:
+            raise ValueError(f"unsupported lang: {self.lang}")
         if self.source == "youtube" and not self.url:
             raise ValueError("youtube source requires url")
         if self.source == "manual" and (not self.title or not self.script_en):
@@ -44,9 +49,18 @@ def split_sentences(text: str) -> list[str]:
 
 
 async def create_content(
-    db: AsyncSession, body: ContentCreate, creator_id: int, visibility: str
+    db: AsyncSession,
+    body: ContentCreate,
+    creator_id: int,
+    visibility: str,
+    lang: str | None = None,
 ) -> Content:
-    """콘텐츠 행 생성 (커밋 포함). 파이프라인 큐잉은 호출부에서."""
+    """콘텐츠 행 생성 (커밋 포함). 파이프라인 큐잉은 호출부에서.
+
+    lang: 호출부(등록 API)가 Data API 자동 감지값을 넘기면 body.lang 대신 우선
+    적용된다 — 감지 실패(None)면 body.lang(기본 en) 그대로 사용.
+    """
+    resolved_lang = lang or body.lang
     if body.source == "youtube":
         video_id = parse_video_id(body.url or "")
         if video_id is None:
@@ -63,6 +77,7 @@ async def create_content(
             youtube_video_id=video_id,
             url=body.url,
             title=body.title or f"(제목 조회 중) {video_id}",
+            lang=resolved_lang,
             created_by=creator_id,
         )
         db.add(content)
@@ -74,6 +89,7 @@ async def create_content(
         visibility=visibility,
         url=body.url,
         title=body.title,
+        lang=resolved_lang,
         created_by=creator_id,
     )
     db.add(content)
@@ -126,6 +142,7 @@ async def content_detail(db: AsyncSession, content: Content) -> dict:
         "url": content.url,
         "title": content.title,
         "title_ko": content.title_ko,
+        "lang": content.lang,
         "status": content.status,
         "error_message": content.error_message,
         "segments": [
@@ -202,6 +219,7 @@ def content_summary(content: Content) -> dict:
         "source": content.source,
         "visibility": content.visibility,
         "title": content.title,
+        "lang": content.lang,
         "status": content.status,
         "youtube_video_id": content.youtube_video_id,
         "youtube_license": content.youtube_license,

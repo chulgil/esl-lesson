@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.services.langs import SUPPORTED_LANGS
+
 VIDEO_ID_PATTERNS = (
     re.compile(r"(?:youtube\.com/watch\?(?:.*&)?v=)([A-Za-z0-9_-]{11})"),
     re.compile(r"(?:youtu\.be/)([A-Za-z0-9_-]{11})"),
@@ -70,6 +72,49 @@ async def fetch_license(video_id: str) -> str | None:
         return items[0].get("status", {}).get("license")
     except Exception:
         # 조회 실패는 미확인(None) — 게이트가 안전 기본값으로 차단
+        return None
+
+
+def detect_video_lang(raw_lang: str | None) -> str | None:
+    """defaultAudioLanguage/defaultLanguage 원본 코드를 지원 언어(ko/en/ja)로 매핑.
+
+    미표기·지원 밖 언어(langs.SUPPORTED_LANGS 밖)는 None — 등록 화면 값으로 폴백
+    (docs/specs/chat-translation.md 콘텐츠 다국어).
+    """
+    if not raw_lang:
+        return None
+    lowered = raw_lang.lower()
+    for code in SUPPORTED_LANGS:
+        if lowered.startswith(code):
+            return code
+    return None
+
+
+async def fetch_video_lang(video_id: str) -> str | None:
+    """Data API 로 defaultAudioLanguage(없으면 defaultLanguage) 조회 → 지원 언어 매핑.
+
+    등록 화면에서 lang 자동 감지용. 키 없음/조회 실패/미지원 언어는 None
+    (호출부가 body 에 명시된 값으로 폴백).
+    """
+    from app.core.config import get_settings
+
+    api_key = get_settings().youtube_api_key
+    if not api_key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(
+                DATA_API_VIDEOS_URL,
+                params={"part": "snippet", "id": video_id, "key": api_key},
+            )
+            res.raise_for_status()
+            items = res.json().get("items", [])
+        if not items:
+            return None
+        snippet = items[0].get("snippet", {})
+        raw_lang = snippet.get("defaultAudioLanguage") or snippet.get("defaultLanguage")
+        return detect_video_lang(raw_lang)
+    except Exception:
         return None
 
 

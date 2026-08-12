@@ -8,6 +8,7 @@ from pathlib import Path
 from anthropic import AsyncAnthropic
 
 from app.core.config import get_settings
+from app.services.langs import LANG_LABELS
 
 TRANSLATE_BATCH_SIZE = 20
 EXTRACT_CHUNK_WORDS = 8000
@@ -23,6 +24,8 @@ EXTRACT_TOOL = {
                 "items": {
                     "type": "object",
                     "properties": {
+                        # en/ko 필드명은 역사적 유산 — 실제로는 콘텐츠 언어(en/ja/ko)
+                        # 원문/한국어 번역 쌍을 담는다 (Phase 4 에서 필드 일반화 예정)
                         "en": {"type": "string"},
                         "ko": {"type": "string"},
                         "difficulty": {"enum": ["basic", "intermediate", "advanced"]},
@@ -66,7 +69,7 @@ EXTRACT_TOOL = {
                         "ko": {"type": "string"},
                         "thinking_ko": {
                             "type": "string",
-                            "description": "영어 어순 그대로 직역한 한국어 (영어식 사고 힌트)",
+                            "description": "원문 어순 그대로 직역한 한국어 (원문식 사고 힌트)",
                         },
                         "segment_seq": {"type": "integer"},
                     },
@@ -78,25 +81,38 @@ EXTRACT_TOOL = {
     },
 }
 
-EXTRACT_SYSTEM = """\
-당신은 한국인 학습자를 위한 영어 교육 콘텐츠 큐레이터다.
-주어진 영어 스크립트(세그먼트 번호 포함)에서 학습 가치가 높은 항목을 추출한다.
+
+def _extract_system(source_lang: str = "en") -> str:
+    """추출 시스템 프롬프트 — 소스 언어 라벨을 반영 (다국어 학습, langs.LANG_LABELS 단일 근거)."""
+    label = LANG_LABELS.get(source_lang, LANG_LABELS["en"])
+    return f"""\
+당신은 한국인 학습자를 위한 {label} 교육 콘텐츠 큐레이터다.
+주어진 {label} 스크립트(세그먼트 번호 포함)에서 학습 가치가 높은 항목을 추출한다.
 
 규칙:
 - CEFR A1 수준의 기초 표현(thank you, sorry, got it, hello 등 인사/맞장구/기초 어휘)은 제외
 - words: 주제 이해에 중요한 중급 이상 단어 10-30개
 - idioms: 관용 표현, phrasal verb, collocation 5-15개
 - patterns: 스크립트에 반복되거나 범용성 높은 문형 3-10개. template 은 빈칸을 ___ 로 표기
-- sentences: 통암기 가치가 있는 완결 문장 5-15개. thinking_ko 는 영어 어순 그대로 직역한
+- sentences: 통암기 가치가 있는 완결 문장 5-15개. thinking_ko 는 {label} 어순 그대로 직역한
   한국어 (예: "There is a tree over there" -> "있다, 나무 한 그루가, 저기에")
 - segment_seq 는 항목이 등장한 세그먼트 번호
 - 각 항목의 difficulty 를 basic/intermediate/advanced 로 자기 평가하고
   basic 은 가급적 포함하지 않는다
 반드시 save_learning_items 도구를 호출한다."""
 
-TRANSLATE_SYSTEM = """\
-영어 문장 배열을 자연스러운 한국어로 번역한다.
+
+def _translate_system(source_lang: str = "en") -> str:
+    """번역 시스템 프롬프트 — 소스 언어 라벨을 반영 (영어 하드코딩 제거)."""
+    label = LANG_LABELS.get(source_lang, LANG_LABELS["en"])
+    return f"""\
+{label} 문장 배열을 자연스러운 한국어로 번역한다.
 입력과 같은 길이의 JSON 배열(문자열)만 출력한다. 다른 텍스트 금지."""
+
+
+def _translate_one_system(source_lang: str = "en") -> str:
+    label = LANG_LABELS.get(source_lang, LANG_LABELS["en"])
+    return f"다음 {label} 문장을 자연스러운 한국어로 번역한다. 번역문만 출력한다."
 
 
 @lru_cache
@@ -115,27 +131,32 @@ def _client() -> AsyncAnthropic:
     return AsyncAnthropic(api_key=get_settings().anthropic_api_key, timeout=600, max_retries=2)
 
 
-async def translate_texts(texts: list[str]) -> list[str]:
-    """세그먼트 배치 번역. 배치 개수 불일치 시 문장별 개별 번역으로 폴백."""
+async def translate_texts(texts: list[str], source_lang: str = "en") -> list[str]:
+    """세그먼트 배치 번역. 배치 개수 불일치 시 문장별 개별 번역으로 폴백.
+
+    source_lang: 원문 언어(en/ja/ko, langs.SUPPORTED_LANGS) — 번역 대상은 항상 한국어.
+    """
     results: list[str] = []
     model = get_settings().anthropic_translate_model
     client = _client()
     for i in range(0, len(texts), TRANSLATE_BATCH_SIZE):
         batch = texts[i : i + TRANSLATE_BATCH_SIZE]
         try:
-            results.extend(await _translate_batch(client, model, batch))
+            results.extend(await _translate_batch(client, model, batch, source_lang))
         except (ValueError, json.JSONDecodeError):
             # 모델이 개수를 안 맞추면 느리지만 확실한 개별 번역 (2026-07-11 운영 실측)
             for text in batch:
-                results.append(await _translate_one(client, model, text))
+                results.append(await _translate_one(client, model, text, source_lang))
     return results
 
 
-async def _translate_batch(client: AsyncAnthropic, model: str, batch: list[str]) -> list[str]:
+async def _translate_batch(
+    client: AsyncAnthropic, model: str, batch: list[str], source_lang: str = "en"
+) -> list[str]:
     res = await client.messages.create(
         model=model,
         max_tokens=8000,
-        system=TRANSLATE_SYSTEM,
+        system=_translate_system(source_lang),
         messages=[{"role": "user", "content": json.dumps(batch, ensure_ascii=False)}],
     )
     translated = _parse_json_array(_first_text(res))
@@ -144,29 +165,36 @@ async def _translate_batch(client: AsyncAnthropic, model: str, batch: list[str])
     return [str(t) for t in translated]
 
 
-async def _translate_one(client: AsyncAnthropic, model: str, text: str) -> str:
+async def _translate_one(
+    client: AsyncAnthropic, model: str, text: str, source_lang: str = "en"
+) -> str:
     res = await client.messages.create(
         model=model,
         max_tokens=1000,
-        system="다음 영어 문장을 자연스러운 한국어로 번역한다. 번역문만 출력한다.",
+        system=_translate_one_system(source_lang),
         messages=[{"role": "user", "content": text}],
     )
     return _first_text(res).strip()
 
 
-async def extract_items(segments: list[tuple[int, str]]) -> dict:
-    """(seq, en_text) 목록에서 4종 추출. 긴 스크립트는 청크 분할 후 병합."""
+async def extract_items(segments: list[tuple[int, str]], source_lang: str = "en") -> dict:
+    """(seq, en_text) 목록에서 4종 추출. 긴 스크립트는 청크 분할 후 병합.
+
+    source_lang: 원문 언어(en/ja/ko) — 추출 프롬프트에 반영 (ja 콘텐츠면 세그먼트
+    텍스트가 일본어라는 뜻이며, 그래도 결과의 en/ko 필드명은 그대로 유지된다).
+    """
     chunks = _chunk_segments(segments)
     merged: dict = {"words": [], "idioms": [], "patterns": [], "sentences": []}
     model = get_settings().anthropic_model
     client = _client()
+    system = _extract_system(source_lang)
     for chunk in chunks:
         body = "\n".join(f"[{seq}] {text}" for seq, text in chunk)
         # 장시간 생성 대비 스트리밍으로 수신 (비스트리밍은 대형 응답에서 타임아웃 위험)
         async with client.messages.stream(
             model=model,
             max_tokens=16000,
-            system=EXTRACT_SYSTEM,
+            system=system,
             tools=[EXTRACT_TOOL],
             tool_choice={"type": "tool", "name": "save_learning_items"},
             messages=[{"role": "user", "content": body}],

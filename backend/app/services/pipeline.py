@@ -135,15 +135,24 @@ async def _step_transcript(db: AsyncSession, content: Content) -> dict:
     if existing.scalar_one_or_none() is not None:
         return {"skipped": "segments already exist"}
 
-    en = await asyncio.to_thread(youtube.fetch_transcript, content.youtube_video_id, ("en",))
-    sentences = youtube.merge_into_sentences(en.snippets)
+    # 1차 fetch 는 content.lang 우선순위 — en 하드코딩 대신 콘텐츠 언어를 따른다
+    # (docs/specs/chat-translation.md 콘텐츠 다국어). 결과는 en_text 필드에 담기지만
+    # 필드명은 역사적 유산이고 실제로는 콘텐츠 언어(en/ja/ko)의 원문이다.
+    primary = await asyncio.to_thread(
+        youtube.fetch_transcript, content.youtube_video_id, (content.lang,)
+    )
+    sentences = youtube.merge_into_sentences(primary.snippets)
 
     ko_texts: dict[int, str] = {}
-    try:
-        ko = await asyncio.to_thread(youtube.fetch_transcript, content.youtube_video_id, ("ko",))
-        ko_texts = _align_ko_by_time(sentences, ko.snippets)
-    except youtube.TranscriptNotFoundError:
-        pass  # 한글 자막 없음 — translate 단계에서 AI 번역
+    if content.lang != "ko":
+        # 이미 ko 가 원문이면 별도 얼라인 자막이 불필요 — 그 외 언어만 시도
+        try:
+            ko = await asyncio.to_thread(
+                youtube.fetch_transcript, content.youtube_video_id, ("ko",)
+            )
+            ko_texts = _align_ko_by_time(sentences, ko.snippets)
+        except youtube.TranscriptNotFoundError:
+            pass  # 한글 자막 없음 — translate 단계에서 AI 번역
 
     for seq, snippet in enumerate(sentences):
         db.add(
@@ -160,7 +169,7 @@ async def _step_transcript(db: AsyncSession, content: Content) -> dict:
     await db.flush()
     return {
         "segments": len(sentences),
-        "generated": en.is_generated,
+        "generated": primary.is_generated,
         "ko_matched": len(ko_texts),
     }
 
@@ -180,6 +189,11 @@ def _align_ko_by_time(
 
 
 async def _step_translate(db: AsyncSession, content: Content) -> dict:
+    if content.lang == "ko":
+        # 번역 대상(ko_text)은 항상 한국어 고정 — 원문이 이미 ko 면 번역이
+        # 곧 원문과 같아 스킵한다. ko_text 는 NULL 유지(프론트가 이미 null-safe
+        # 렌더 — docs/specs/chat-translation.md 콘텐츠 다국어)
+        return {"translated": 0, "skipped": "source already ko"}
     result = await db.execute(
         select(TranscriptSegment)
         .where(TranscriptSegment.content_id == content.id, TranscriptSegment.ko_text.is_(None))
@@ -188,7 +202,9 @@ async def _step_translate(db: AsyncSession, content: Content) -> dict:
     missing = list(result.scalars())
     if not missing:
         return {"translated": 0}
-    translated = await extraction.translate_texts([s.en_text for s in missing])
+    translated = await extraction.translate_texts(
+        [s.en_text for s in missing], source_lang=content.lang
+    )
     for segment, ko in zip(missing, translated, strict=True):
         segment.ko_text = ko
     await db.flush()
@@ -205,7 +221,9 @@ async def _step_extract(db: AsyncSession, content: Content) -> dict:
     if not segments:
         raise RuntimeError("no segments to extract from")
 
-    data = await extraction.extract_items([(s.seq, s.en_text) for s in segments])
+    data = await extraction.extract_items(
+        [(s.seq, s.en_text) for s in segments], source_lang=content.lang
+    )
     seg_by_seq = {s.seq: s for s in segments}
     counts = {"created": 0, "reused": 0}
 

@@ -42,6 +42,8 @@ export function useChatRoom(otherId: number) {
   );
   const [otherRead, setOtherRead] = useState(0);
   const [typing, setTyping] = useState(false);
+  // 이 대화의 자동번역 on/off — WS 로 새로 도착한 메시지의 번역을 조회할지 판단
+  const [translate, setTranslate] = useState(false);
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [input, setInput] = useState("");
   const [attachedItem, setAttachedItem] = useState<ShareableItem | null>(null);
@@ -111,6 +113,7 @@ export function useChatRoom(otherId: number) {
       .then((res) => {
         setMessages(res.items);
         setOnline(res.online);
+        setTranslate(res.translate);
         if (res.peer) setPeerName(res.peer.name);
         const reads = res.reads[String(otherId)];
         if (reads) setOtherRead(reads);
@@ -161,6 +164,7 @@ export function useChatRoom(otherId: number) {
           );
         });
         setOnline(res.online);
+        setTranslate(res.translate);
         const reads = res.reads[String(otherId)];
         if (reads) setOtherRead(reads);
         // 패널을 접어둔(위장) 동안은 읽음 처리 보류 — 배지·알림이 살아야 한다
@@ -208,6 +212,20 @@ export function useChatRoom(otherId: number) {
         // 접힌(위장) 패널에서는 읽음 보류 — 다시 펼치면 chat.resync 가 처리
         if (isChatPanelVisible()) markReadAndSignal();
         if (stickBottom.current) requestAnimationFrame(scrollToBottom);
+        // WS 는 번역을 실어오지 않는다(비동기 완료 전 도착) — 켜져 있으면 1회 조회
+        if (translate) {
+          chatApi
+            .translation(msg.id)
+            .then((res) => {
+              if (!res.translation) return;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === msg.id ? { ...m, translation: res.translation } : m,
+                ),
+              );
+            })
+            .catch(() => {});
+        }
       } else if (msg.t === "chat.read" && msg.user_id === otherId) {
         setOtherRead(msg.last_read_message_id);
       } else if (msg.t === "chat.typing" && msg.from_user_id === otherId) {
@@ -227,6 +245,7 @@ export function useChatRoom(otherId: number) {
                   body: "",
                   item_ref: null,
                   image_url: null,
+                  translation: null,
                 }
               : m,
           ),
@@ -236,7 +255,7 @@ export function useChatRoom(otherId: number) {
         resync();
       }
     });
-  }, [otherId, scrollToBottom, markReadAndSignal, resync]);
+  }, [otherId, scrollToBottom, markReadAndSignal, resync, translate]);
 
   // 내 메시지 삭제 — 낙관적 치환 후 서버 확정 (실패 시 재동기화로 복원)
   const onDeleteMessage = useCallback(
@@ -244,7 +263,14 @@ export function useChatRoom(otherId: number) {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === id
-            ? { ...m, deleted: true, body: "", item_ref: null, image_url: null }
+            ? {
+                ...m,
+                deleted: true,
+                body: "",
+                item_ref: null,
+                image_url: null,
+                translation: null,
+              }
             : m,
         ),
       );

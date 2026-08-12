@@ -74,6 +74,93 @@ async def test_create_youtube_content_validates_and_dedups(admin_client, db_sess
         assert dup.status_code == 409
 
 
+async def test_admin_content_summary_and_detail_expose_lang(admin_client, db_session):
+    content = Content(source="manual", title="T", lang="ko", visibility="public", status="ready")
+    db_session.add(content)
+    await db_session.commit()
+
+    listed = await admin_client.get("/api/admin/contents")
+    item = next(i for i in listed.json()["items"] if i["id"] == content.id)
+    assert item["lang"] == "ko"
+
+    detail = await admin_client.get(f"/api/admin/contents/{content.id}")
+    assert detail.json()["lang"] == "ko"
+
+
+async def test_create_content_accepts_lang_and_rejects_invalid(admin_client, db_session):
+    """등록 body 의 lang(en/ja/ko, 기본 en) 이 저장되고 그 외 값은 422 (다국어 학습)."""
+    ok = await admin_client.post(
+        "/api/admin/contents",
+        json={
+            "source": "manual",
+            "title": "日本語スクリプト",
+            "script_en": "こんにちは。",
+            "lang": "ja",
+        },
+    )
+    assert ok.status_code == 202
+    row = await db_session.get(Content, ok.json()["id"])
+    assert row.lang == "ja"
+
+    default_lang = await admin_client.post(
+        "/api/admin/contents",
+        json={"source": "manual", "title": "No lang field", "script_en": "Hello."},
+    )
+    assert default_lang.status_code == 202
+    default_row = await db_session.get(Content, default_lang.json()["id"])
+    assert default_row.lang == "en"
+
+    bad = await admin_client.post(
+        "/api/admin/contents",
+        json={"source": "manual", "title": "Bad lang", "script_en": "Hello.", "lang": "fr"},
+    )
+    assert bad.status_code == 422
+
+
+async def test_create_youtube_content_auto_detects_lang_from_data_api(admin_client, db_session):
+    """Data API defaultAudioLanguage 감지 시 body 기본값(en) 대신 감지값을 반영."""
+    from unittest.mock import AsyncMock, patch
+
+    import app.api.admin_contents as admin_mod
+
+    with (
+        patch.object(
+            admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="creativeCommon")
+        ),
+        patch.object(admin_mod.youtube, "fetch_video_lang", new=AsyncMock(return_value="ja")),
+    ):
+        res = await admin_client.post(
+            "/api/admin/contents",
+            json={"source": "youtube", "url": "https://youtu.be/jadetect0001"},
+        )
+    assert res.status_code == 202
+    row = await db_session.get(Content, res.json()["id"])
+    assert row.lang == "ja"
+
+
+async def test_create_youtube_content_falls_back_to_body_lang_when_undetected(
+    admin_client, db_session
+):
+    """Data API 감지 실패(None) 시 body 에 명시한 lang 값을 그대로 사용."""
+    from unittest.mock import AsyncMock, patch
+
+    import app.api.admin_contents as admin_mod
+
+    with (
+        patch.object(
+            admin_mod.youtube, "fetch_license", new=AsyncMock(return_value="creativeCommon")
+        ),
+        patch.object(admin_mod.youtube, "fetch_video_lang", new=AsyncMock(return_value=None)),
+    ):
+        res = await admin_client.post(
+            "/api/admin/contents",
+            json={"source": "youtube", "url": "https://youtu.be/nodetect00001", "lang": "ko"},
+        )
+    assert res.status_code == 202
+    row = await db_session.get(Content, res.json()["id"])
+    assert row.lang == "ko"
+
+
 async def test_public_promotion_requires_cc_license(admin_client, db_session):
     """공용 승격 CC 게이트 — CC 아니면(미확인 포함) 409, 허락 증빙으로만 우회."""
     from unittest.mock import AsyncMock, patch

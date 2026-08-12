@@ -1,0 +1,193 @@
+"""채팅 자동번역 API 동봉 — 목록 조회 + 단건 엔드포인트 (docs/specs/chat-translation.md)."""
+
+import pytest
+
+from app.models import UserSettings
+from app.services import chat as chat_service
+from app.services import translation as translation_service
+from tests.test_chat import login, send_body, two_friends
+from tests.test_my_contents import login_as
+
+
+@pytest.fixture(autouse=True)
+def _fresh_caches():
+    """test_chat.py 와 동일 격리 — 인프로세스 캐시가 파일 경계를 넘어 새지 않게."""
+    chat_service.reset_caches()
+    yield
+    chat_service.reset_caches()
+
+
+async def enable_translate(db, user_id, primary="ko", learning=None):
+    settings = await db.get(UserSettings, user_id)
+    if settings is None:
+        settings = UserSettings(user_id=user_id)
+        db.add(settings)
+    settings.chat_translate = True
+    settings.primary_lang = primary
+    settings.learning_langs = learning or ["en"]
+    await db.commit()
+    return settings
+
+
+async def stub_translation(monkeypatch, mapping):
+    """text -> (translated_text, engine) 매핑으로 엔진 체인을 대체 — 실호출 금지.
+
+    타깃 언어(lang)는 translate_chat 이 뷰어 설정에서 직접 계산하므로 매핑에
+    넣지 않는다 — 여기선 엔진이 반환하는 (번역문, engine) 만 흉내낸다."""
+
+    async def fake_chain(text, target):
+        result = mapping.get(text)
+        if result is None:
+            return None
+        return result
+
+    monkeypatch.setattr(translation_service, "_translate_via_chain", fake_chain)
+
+
+async def test_messages_omit_translation_field_when_setting_off(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "hello", "cid-tr00001"))
+
+    res = (await client.get(f"/api/chat/with/{b.id}/messages")).json()
+    assert res["translate"] is False
+    assert all("translation" not in m for m in res["items"])
+
+
+async def test_messages_attach_translation_when_setting_on(client, db_session, monkeypatch):
+    a, b = await two_friends(client, db_session)
+    await stub_translation(monkeypatch, {"hello": ("안녕", "haiku")})
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "hello", "cid-tr00002"))
+    await enable_translate(db_session, a.id)
+
+    res = (await client.get(f"/api/chat/with/{b.id}/messages")).json()
+    assert res["translate"] is True
+    row = next(m for m in res["items"] if m["body"] == "hello")
+    assert row["translation"] == {"lang": "ko", "text": "안녕"}
+
+
+async def test_messages_translation_direction_uses_viewer_settings(client, db_session, monkeypatch):
+    """번역 방향은 조회하는 사람(viewer)의 설정 기준 — 상대 설정과 무관."""
+    a, b = await two_friends(client, db_session)
+    await stub_translation(monkeypatch, {"hello": ("안녕", "haiku")})
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "hello", "cid-tr00003"))
+
+    # b 는 번역을 켜지 않음 — a 가 조회할 때만 번역 필드가 붙는다
+    await login(client, db_session, b)
+    off = (await client.get(f"/api/chat/with/{a.id}/messages")).json()
+    assert off["translate"] is False
+
+    await enable_translate(db_session, a.id)
+    await login(client, db_session, a)
+    on = (await client.get(f"/api/chat/with/{b.id}/messages")).json()
+    assert on["translate"] is True
+
+
+async def test_messages_skips_deleted_and_empty_body(client, db_session, monkeypatch):
+    a, b = await two_friends(client, db_session)
+    called_texts: list[str] = []
+
+    async def fake_chain(text, target):
+        called_texts.append(text)
+        return "x", "haiku"
+
+    monkeypatch.setattr(translation_service, "_translate_via_chain", fake_chain)
+    await login(client, db_session, a)
+    sent = await client.post(
+        "/api/chat/messages", json=send_body(b.id, "지울 메시지", "cid-tr00004")
+    )
+    await client.delete(f"/api/chat/messages/{sent.json()['id']}")
+    await enable_translate(db_session, a.id)
+
+    res = (await client.get(f"/api/chat/with/{b.id}/messages")).json()
+    deleted_row = next(m for m in res["items"] if m["id"] == sent.json()["id"])
+    assert deleted_row["translation"] is None
+    assert called_texts == []  # 삭제된 메시지는 엔진 호출 안 함
+
+
+async def test_messages_translation_window_caps_at_30(client, db_session, monkeypatch):
+    """비용 상한 — 최신 30개만 번역 대상, 그 밖은 translation: null."""
+    a, b = await two_friends(client, db_session)
+    called_texts: list[str] = []
+
+    async def fake_chain(text, target):
+        called_texts.append(text)
+        return "t", "haiku"
+
+    monkeypatch.setattr(translation_service, "_translate_via_chain", fake_chain)
+    await login(client, db_session, a)
+    for i in range(35):
+        await client.post("/api/chat/messages", json=send_body(b.id, f"m{i}", f"cid-win{i:05d}"))
+    await enable_translate(db_session, a.id)
+
+    res = (await client.get(f"/api/chat/with/{b.id}/messages?limit=50")).json()
+    items = res["items"]
+    assert len(items) == 35
+    # 오래된 5개는 번역 대상 밖
+    for m in items[:5]:
+        assert m["translation"] is None
+    # 최신 30개는 번역 시도됨 (캐시 미스 → 엔진 1회씩)
+    # m0..m34 는 영문 → 뷰어 기본 설정(primary=ko)과 달라 target=ko(모국어로 번역)
+    for m in items[5:]:
+        assert m["translation"] == {"lang": "ko", "text": "t"}
+    assert len(called_texts) == 30
+
+
+# --- 단건 엔드포인트 ---------------------------------------------------------------
+
+
+async def test_single_message_translation_requires_participant(client, db_session, monkeypatch):
+    a, b = await two_friends(client, db_session)
+    await stub_translation(monkeypatch, {"secret": ("hi", "haiku")})
+    await login(client, db_session, a)
+    sent = (
+        await client.post("/api/chat/messages", json=send_body(b.id, "secret", "cid-tr00005"))
+    ).json()
+    await enable_translate(db_session, a.id)
+
+    await login_as(client, db_session, "outsider@example.com")
+    res = await client.get(f"/api/chat/messages/{sent['id']}/translation")
+    assert res.status_code == 403
+
+    await login(client, db_session, a)
+    ok = await client.get(f"/api/chat/messages/{sent['id']}/translation")
+    assert ok.status_code == 200
+    # "secret" 은 영문 → 뷰어 primary=ko 와 달라 target=ko(모국어로 번역)
+    assert ok.json()["translation"] == {"lang": "ko", "text": "hi"}
+
+
+async def test_single_message_translation_missing_message_is_404(client, db_session):
+    a, _b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    res = await client.get("/api/chat/messages/999999/translation")
+    assert res.status_code == 404
+
+
+async def test_single_message_translation_null_when_setting_off(client, db_session, monkeypatch):
+    a, b = await two_friends(client, db_session)
+    await stub_translation(monkeypatch, {"hi there": ("안녕", "haiku")})
+    await login(client, db_session, a)
+    sent = (
+        await client.post("/api/chat/messages", json=send_body(b.id, "hi there", "cid-tr00006"))
+    ).json()
+    # chat_translate 기본값 False — 켜지 않음
+    res = await client.get(f"/api/chat/messages/{sent['id']}/translation")
+    assert res.status_code == 200
+    assert res.json()["translation"] is None
+
+
+async def test_single_message_translation_null_for_deleted(client, db_session, monkeypatch):
+    a, b = await two_friends(client, db_session)
+    await stub_translation(monkeypatch, {"del me": ("안녕", "haiku")})
+    await login(client, db_session, a)
+    sent = (
+        await client.post("/api/chat/messages", json=send_body(b.id, "del me", "cid-tr00007"))
+    ).json()
+    await client.delete(f"/api/chat/messages/{sent['id']}")
+    await enable_translate(db_session, a.id)
+
+    res = await client.get(f"/api/chat/messages/{sent['id']}/translation")
+    assert res.status_code == 200
+    assert res.json()["translation"] is None

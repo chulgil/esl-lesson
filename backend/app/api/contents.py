@@ -92,6 +92,7 @@ async def list_ready_contents(
                 "title": c.title,
                 "source": c.source,
                 "url": c.url,
+                "lang": c.lang,
                 "mine": c.visibility == "private",
                 "subscribed": c.id in subscribed,
                 # CC 배지·저작자표시용 (consult-brief §5 — 라이선스 명칭 표시 요건)
@@ -156,6 +157,7 @@ async def get_ready_content(
         "title": content.title,
         "source": content.source,
         "url": content.url,
+        "lang": content.lang,
         "mine": content.visibility == "private",
         "subscribed": subscribed,
         "youtube_license": content.youtube_license,
@@ -187,7 +189,7 @@ async def create_content_request(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
-    """"이런 영상이 보고 싶어요" — 공급을 수요와 연결 (effectiveness-audit P0-3).
+    """ "이런 영상이 보고 싶어요" — 공급을 수요와 연결 (effectiveness-audit P0-3).
 
     관리자가 백오피스 등록 화면에서 목록을 보고 CC 검색으로 채운다.
     하루 5건 제한 — 남용 가드.

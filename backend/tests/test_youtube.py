@@ -152,3 +152,60 @@ async def test_fetch_license_parses_and_skips_without_key(monkeypatch):
             assert await youtube.fetch_license("abc123def45") is None
     finally:
         settings.youtube_api_key = original
+
+
+def test_detect_video_lang_maps_supported_prefixes():
+    """defaultAudioLanguage 원본 코드 → 지원 언어(ko/en/ja) 매핑. 미지원/미표기는 None."""
+    from app.services.youtube import detect_video_lang
+
+    assert detect_video_lang("ja") == "ja"
+    assert detect_video_lang("ja-JP") == "ja"
+    assert detect_video_lang("ko") == "ko"
+    assert detect_video_lang("ko-KR") == "ko"
+    assert detect_video_lang("en") == "en"
+    assert detect_video_lang("en-US") == "en"
+    assert detect_video_lang("fr") is None  # 지원 3개 언어 밖 — 등록 화면 값으로 폴백
+    assert detect_video_lang(None) is None
+    assert detect_video_lang("") is None
+
+
+async def test_fetch_video_lang_parses_snippet_and_skips_without_key(monkeypatch):
+    """Data API snippet.defaultAudioLanguage 조회 — 키 미설정/실패는 None (등록 값 폴백)."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from app.core.config import get_settings
+    from app.services import youtube
+
+    settings = get_settings()
+    original = settings.youtube_api_key
+    try:
+        settings.youtube_api_key = ""
+        assert await youtube.fetch_video_lang("abc123def45") is None  # 키 없음 → 스킵
+
+        settings.youtube_api_key = "test-key"
+        res = MagicMock()
+        res.json.return_value = {"items": [{"snippet": {"defaultAudioLanguage": "ja-JP"}}]}
+        res.raise_for_status.return_value = None
+        http = MagicMock()
+        http.__aenter__ = AsyncMock(return_value=http)
+        http.__aexit__ = AsyncMock(return_value=False)
+        http.get = AsyncMock(return_value=res)
+        with patch.object(youtube.httpx, "AsyncClient", return_value=http):
+            assert await youtube.fetch_video_lang("abc123def45") == "ja"
+
+        # defaultAudioLanguage 없으면 defaultLanguage 폴백
+        res.json.return_value = {"items": [{"snippet": {"defaultLanguage": "ko"}}]}
+        with patch.object(youtube.httpx, "AsyncClient", return_value=http):
+            assert await youtube.fetch_video_lang("abc123def45") == "ko"
+
+        # 지원 언어 밖(fr) → None
+        res.json.return_value = {"items": [{"snippet": {"defaultAudioLanguage": "fr"}}]}
+        with patch.object(youtube.httpx, "AsyncClient", return_value=http):
+            assert await youtube.fetch_video_lang("abc123def45") is None
+
+        # 조회 실패는 None
+        http.get = AsyncMock(side_effect=RuntimeError("boom"))
+        with patch.object(youtube.httpx, "AsyncClient", return_value=http):
+            assert await youtube.fetch_video_lang("abc123def45") is None
+    finally:
+        settings.youtube_api_key = original

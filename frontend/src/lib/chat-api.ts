@@ -1,5 +1,11 @@
 /** 친구 1:1 채팅 API — 전송은 REST 멱등 POST, 수신은 WS (docs/specs/chat.md) */
 
+/** 자동 번역 결과 — 상대 언어 자동 감지 후 내 주언어/학습언어로 번역 (i18n) */
+export interface Translation {
+  lang: "ko" | "en" | "ja";
+  text: string;
+}
+
 export interface ChatMessage {
   id: number;
   conversation_id: number;
@@ -24,6 +30,8 @@ export interface ChatMessage {
     deleted: boolean;
     preview: string;
   } | null;
+  /** 자동 번역 — WS 로 갓 도착한 메시지는 비어 있다가 별도 조회로 채워진다 */
+  translation?: Translation | null;
 }
 
 export interface ChatConversation {
@@ -69,7 +77,14 @@ export const chatApi = {
       reads: Record<string, number>;
       online: boolean;
       peer: { user_id: number; name: string } | null;
+      /** 이 대화에 자동번역이 켜져 있는가 — WS 수신 메시지 번역 조회 여부 판단 */
+      translate: boolean;
     }>(`/api/chat/with/${userId}/messages${before ? `?before=${before}` : ""}`),
+  /** WS 로 도착한 메시지의 번역 — 비동기 완료 후 1회 조회 (i18n) */
+  translation: (id: number) =>
+    request<{ translation: Translation | null }>(
+      `/api/chat/messages/${id}/translation`,
+    ),
   send: (body: {
     to_user_id: number;
     body: string;

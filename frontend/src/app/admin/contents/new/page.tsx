@@ -36,6 +36,8 @@ export default function NewContentPage() {
   const [title, setTitle] = useState("");
   const [scriptEn, setScriptEn] = useState("");
   const [scriptKo, setScriptKo] = useState("");
+  // 콘텐츠 언어 — 유튜브/수기 탭 공통, 기본 영어 (i18n)
+  const [lang, setLang] = useState<"en" | "ja" | "ko">("en");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // 연속 등록 — 유튜브 탭은 등록 후 검색 상태를 유지한 채 다음 영상으로 (2026-08-11)
@@ -83,6 +85,7 @@ export default function NewContentPage() {
         await adminApi.createContent({
           source: "youtube",
           url,
+          lang,
           permission: withPermission ? permission : undefined,
         });
         // 화면 잔류 — 검색 결과·검색어를 유지한 채 다음 영상을 이어서 등록 (2026-08-11)
@@ -104,6 +107,7 @@ export default function NewContentPage() {
         script_en: scriptEn,
         script_ko: scriptKo || undefined,
         url: url || undefined,
+        lang,
       });
       router.push("/admin/contents");
     } catch (e) {
@@ -185,6 +189,20 @@ export default function NewContentPage() {
       </div>
 
       <div className="mt-4 flex flex-col gap-4 rounded-lg border-2 border-ink/10 bg-white p-6">
+        {/* 콘텐츠 언어 — 유튜브/수기 탭 공통 (i18n) */}
+        <label className="flex max-w-xs flex-col gap-1 text-sm">
+          콘텐츠 언어
+          <select
+            value={lang}
+            onChange={(e) => setLang(e.target.value as "en" | "ja" | "ko")}
+            className="rounded border-2 border-ink/20 px-3 py-2"
+          >
+            <option value="en">영어</option>
+            <option value="ja">일본어</option>
+            <option value="ko">한국어</option>
+          </select>
+        </label>
+
         {tab === "youtube" ? (
           <>
             <label className="flex flex-col gap-1 text-sm">

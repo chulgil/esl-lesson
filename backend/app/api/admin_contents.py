@@ -117,12 +117,16 @@ async def create_public_content(
     admin: Annotated[User, Depends(require_admin)],
 ) -> dict:
     license_: str | None = None
+    detected_lang: str | None = None
     if body.source == "youtube":
         video_id = parse_video_id(body.url or "")
         if video_id:
             # 공용 = 전 회원 제공이라 CC(재배포 허용) 영상만 증빙 없이 허용.
             # 미확인(키 없음/조회 실패)도 안전 기본값으로 차단 — 허락 증빙으로만 우회
             license_ = await youtube.fetch_license(video_id)
+            # defaultAudioLanguage 자동 감지 — 성공하면 body.lang(기본 en) 대신 반영
+            # (docs/specs/chat-translation.md 콘텐츠 다국어 등록)
+            detected_lang = await youtube.fetch_video_lang(video_id)
             if license_ != "creativeCommon" and body.permission is None:
                 raise HTTPException(status.HTTP_409_CONFLICT, "cc_required")
             # 이미 개인이 등록한 영상이면 공용으로 승격 (재추출 없음)
@@ -143,7 +147,7 @@ async def create_public_content(
     permission = (
         _permission_row(0, body.permission, admin.id) if body.permission is not None else None
     )
-    content = await create_content(db, body, admin.id, visibility="public")
+    content = await create_content(db, body, admin.id, visibility="public", lang=detected_lang)
     if license_ is not None:
         content.youtube_license = license_
     if permission is not None:

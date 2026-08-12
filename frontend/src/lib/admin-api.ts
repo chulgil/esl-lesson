@@ -77,6 +77,14 @@ export interface AdminUser {
   total_reviews: number;
 }
 
+/** 번역 사용량 — 예산 대비 소진, 엔진별 분담 (i18n 대시보드) */
+export interface TranslationUsage {
+  month_chars: number;
+  budget_chars: number;
+  by_engine: { deepl: number; haiku: number };
+  today_calls: number;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: "same-origin",
@@ -174,6 +182,8 @@ export const adminApi = {
     title?: string;
     script_en?: string;
     script_ko?: string;
+    /** 콘텐츠 언어 — 생략 시 서버 기본값 "en" (i18n) */
+    lang?: "en" | "ja" | "ko";
     /** 비 CC 영상은 원저작자 허락 증빙이 있어야 등록된다 (content-governance.md) */
     permission?: ContentPermission;
   }) =>
@@ -242,6 +252,9 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify({ role }),
     }),
+
+  translationUsage: () =>
+    request<TranslationUsage>("/api/admin/translation-usage"),
 };
 
 /** 백오피스 캐릭터 상점 — 가격·판매 방식·지급 관리 (docs/specs/mascot-shop.md) */
