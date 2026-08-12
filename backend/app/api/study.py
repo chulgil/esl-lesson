@@ -1041,6 +1041,8 @@ class SettingsPatch(BaseModel):
     primary_lang: str | None = None
     learning_langs: list[str] | None = None
     chat_translate: bool | None = None
+    translate_mine: bool | None = None
+    translate_theirs: bool | None = None
 
 
 @settings_router.get("")
@@ -1113,6 +1115,10 @@ async def update_settings(
         settings.learning_langs = learning
     if body.chat_translate is not None:
         settings.chat_translate = body.chat_translate
+    if body.translate_mine is not None:
+        settings.translate_mine = body.translate_mine
+    if body.translate_theirs is not None:
+        settings.translate_theirs = body.translate_theirs
     await db.commit()
     return _settings_dict(settings, await _push_subscribed(db, user.id))
 
@@ -1142,4 +1148,6 @@ def _settings_dict(settings: UserSettings, push_subscribed: bool) -> dict:
         "primary_lang": settings.primary_lang,
         "learning_langs": settings.learning_langs,
         "chat_translate": settings.chat_translate,
+        "translate_mine": settings.translate_mine,
+        "translate_theirs": settings.translate_theirs,
     }

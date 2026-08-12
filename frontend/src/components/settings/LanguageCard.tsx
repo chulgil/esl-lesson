@@ -17,6 +17,8 @@ export function LanguageCard() {
   const [primaryLang, setPrimaryLang] = useState<Lang | null>(null);
   const [learningLangs, setLearningLangs] = useState<Lang[]>([]);
   const [chatTranslate, setChatTranslate] = useState(false);
+  const [translateMine, setTranslateMine] = useState(true);
+  const [translateTheirs, setTranslateTheirs] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -27,6 +29,8 @@ export function LanguageCard() {
         setPrimaryLang(s.primary_lang);
         setLearningLangs(s.learning_langs as Lang[]);
         setChatTranslate(s.chat_translate);
+        setTranslateMine(s.translate_mine);
+        setTranslateTheirs(s.translate_theirs);
       })
       .catch(() => undefined);
   }, []);
@@ -40,6 +44,8 @@ export function LanguageCard() {
     primary_lang?: Lang;
     learning_langs?: Lang[];
     chat_translate?: boolean;
+    translate_mine?: boolean;
+    translate_theirs?: boolean;
   }) {
     setBusy(true);
     try {
@@ -47,6 +53,8 @@ export function LanguageCard() {
       setPrimaryLang(s.primary_lang);
       setLearningLangs(s.learning_langs as Lang[]);
       setChatTranslate(s.chat_translate);
+      setTranslateMine(s.translate_mine);
+      setTranslateTheirs(s.translate_theirs);
       flashSaved();
     } catch {
       // 실패 시 기존 값 유지
@@ -137,6 +145,32 @@ export function LanguageCard() {
         />
         채팅 자동번역
       </label>
+
+      {/* 번역 범위 — 내 글/상대 글 개별 체크 (2026-08-12 요청, 기본 내 글만) */}
+      {chatTranslate && (
+        <div className="mt-2 flex flex-wrap gap-2 pl-1">
+          <label className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-md border-2 border-ink/15 bg-white px-3 text-xs font-bold transition hover:border-ink/40">
+            <input
+              type="checkbox"
+              checked={translateMine}
+              disabled={busy}
+              onChange={(e) => patch({ translate_mine: e.target.checked })}
+              className="h-3.5 w-3.5"
+            />
+            내가 쓴 글 번역
+          </label>
+          <label className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-md border-2 border-ink/15 bg-white px-3 text-xs font-bold transition hover:border-ink/40">
+            <input
+              type="checkbox"
+              checked={translateTheirs}
+              disabled={busy}
+              onChange={(e) => patch({ translate_theirs: e.target.checked })}
+              className="h-3.5 w-3.5"
+            />
+            상대가 쓴 글 번역
+          </label>
+        </div>
+      )}
 
       {saved && (
         <p className="mt-2 text-xs font-bold text-brick-green">저장했어요</p>
