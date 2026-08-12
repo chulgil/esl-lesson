@@ -122,6 +122,47 @@ async def test_queue_introduces_my_phrases(client, db_session):
     assert any("meeting" in t for t in answers)
 
 
+async def test_deck_study_works_with_default_levels(client, db_session):
+    """기본 레벨(단어·숙어)이어도 내 말투 덱 한정 학습은 문장이 나온다 (2026-08-12 빈 세션 보고)."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-mp00061")
+    await seed_translation(
+        db_session, "오늘 야근해야 할 것 같아", "I think I have to work late today"
+    )
+    deck_id = (await client.get("/api/study/my-phrases")).json()["content_id"]
+
+    # levels_enabled 는 기본값 [1,2] (문장 미포함) 그대로
+    queue = (await client.get(f"/api/study/queue?content_id={deck_id}")).json()
+    assert len(queue["questions"]) == 1
+    assert "work late" in queue["questions"][0]["hint_answer"]
+
+
+async def test_exclude_phrase_removes_and_stays_removed(client, db_session, wired_db):  # noqa: F811
+    """문장 빼기 — 목록·게임 풀에서 사라지고, 재동기화에도 돌아오지 않는다."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await send(client, b.id, "이 문장은 빼고 싶어요", "cid-mp00071")
+    await seed_translation(db_session, "이 문장은 빼고 싶어요", "I want to remove this one")
+    items = (await client.get("/api/study/my-phrases/items")).json()["items"]
+    assert len(items) == 1
+
+    res = await client.delete(f"/api/study/my-phrases/{items[0]['item_id']}")
+    assert res.status_code == 204
+
+    # 재동기화(목록 조회가 곧 sync)에도 돌아오지 않는다
+    again = (await client.get("/api/study/my-phrases/items")).json()["items"]
+    assert again == []
+    assert (await client.get("/api/study/my-phrases")).json()["total"] == 0
+    # 게임 풀에서도 제외
+    pool = await load_sentence_pool(a.id)
+    assert not any(s["en"] == "I want to remove this one" for s in pool)
+
+    # 존재하지 않는 항목 404
+    res = await client.delete("/api/study/my-phrases/999999")
+    assert res.status_code == 404
+
+
 async def test_deck_item_reuses_global_normalized_key(client, db_session):
     """같은 번역문이 이미 전역 항목으로 있으면 재사용 — Occurrence 만 연결."""
     a, b = await two_friends(client, db_session)

@@ -119,7 +119,7 @@ async def test_messages_translation_window_caps_at_30(client, db_session, monkey
     monkeypatch.setattr(translation_service, "_translate_via_chain", fake_chain)
     await login(client, db_session, a)
     for i in range(35):
-        await client.post("/api/chat/messages", json=send_body(b.id, f"m{i}", f"cid-win{i:05d}"))
+        await client.post("/api/chat/messages", json=send_body(b.id, f"msg number {i}", f"cid-win{i:05d}"))
     await enable_translate(db_session, a.id)
 
     res = (await client.get(f"/api/chat/with/{b.id}/messages?limit=50")).json()
@@ -129,7 +129,7 @@ async def test_messages_translation_window_caps_at_30(client, db_session, monkey
     for m in items[:5]:
         assert m["translation"] is None
     # 최신 30개는 번역 시도됨 (캐시 미스 → 엔진 1회씩)
-    # m0..m34 는 영문 → 뷰어 기본 설정(primary=ko)과 달라 target=ko(모국어로 번역)
+    # msg number N 은 영문 → 뷰어 기본 설정(primary=ko)과 달라 target=ko(모국어로 번역)
     for m in items[5:]:
         assert m["translation"] == {"lang": "ko", "text": "t"}
     assert len(called_texts) == 30

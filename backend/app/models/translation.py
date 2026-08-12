@@ -36,3 +36,21 @@ class TranslationUsage(Base, PkMixin, CreatedAtMixin):
     )
     chars: Mapped[int] = mapped_column(Integer)
     engine: Mapped[str] = mapped_column(String(16))
+
+
+class PhraseExclusion(Base, PkMixin, CreatedAtMixin):
+    """내가 쓰는 말에서 뺀 문장 — 재동기화가 다시 수집하지 않게 하는 원장.
+
+    키는 **원문(주언어) 정규화 키** — 번역 엔진이 바뀌어 번역문이 달라져도
+    같은 발화는 계속 제외된다 (my-phrases.md 편집).
+    """
+
+    __tablename__ = "phrase_exclusions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "text_key", name="uq_phrase_exclusions_user_key"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    text_key: Mapped[str] = mapped_column(String(200))

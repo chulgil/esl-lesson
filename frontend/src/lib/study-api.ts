@@ -368,6 +368,14 @@ export const studyApi = {
       added_now: number;
       recent: { en: string; ko: string }[];
     }>("/api/study/my-phrases"),
+  /** 편집용 전체 목록 + 문장 빼기 (재동기화에도 돌아오지 않음) */
+  myPhrasesItems: () =>
+    request<{
+      content_id: number;
+      items: { item_id: number; en: string; ko: string }[];
+    }>("/api/study/my-phrases/items"),
+  removeMyPhrase: (itemId: number) =>
+    request<void>(`/api/study/my-phrases/${itemId}`, { method: "DELETE" }),
   quests: () => request<QuestBoard>("/api/study/quests"),
   stats: () => request<Stats>("/api/study/stats"),
   weeklyReport: () => request<WeeklyReport>("/api/study/weekly-report"),

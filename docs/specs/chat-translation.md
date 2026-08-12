@@ -21,11 +21,16 @@
 
 ```
 ① 전역 문장 캐시 chat_translations (text_key+target_lang 유니크, 사용자 무관)
-② DeepL Free (DEEPL_API_KEY, 월 50만 자 무료) — 실패/미설정 시
-③ Haiku 폴백 (anthropic_translate_model)
+② Haiku (원어민 캐주얼 채팅체 프롬프트) — 2026-08-12 실측 감사로 1순위 교체:
+   DeepL 이 문맥 없는 단문에서 의미 반전 오역·의성어 음차·직역을 냄.
+   이 번역은 '내가 쓰는 말' 학습 재료라 품질 우선
+③ DeepL Free 폴백 (DEEPL_API_KEY, 월 50만 자 무료)
 ④ 하드캡: 월 TRANSLATE_MONTHLY_BUDGET_CHARS(기본 200만 자) 초과 또는
    사용자 일일 TRANSLATE_USER_DAILY_LIMIT(200건) 초과 → 번역만 조용히 중단
 ```
+
+이모티콘·초성(ㅋㅋ)·기호 전용 메시지는 번역 대상이 아니다
+(`langs.has_translatable_text` — 2026-08-12 실측: 음차·캐시 오염 방지).
 
 - 캐시 히트는 비용 0·usage 미기록. 엔진 호출만 translation_usage 원장에 기록
 - 백오피스 `/api/admin/translation-usage` — 월 글자수/예산·엔진별·오늘 호출

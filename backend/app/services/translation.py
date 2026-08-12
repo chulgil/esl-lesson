@@ -20,7 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models.translation import ChatTranslation, TranslationUsage
 from app.models.user import UserSettings
-from app.services.langs import DEEPL_CODES, LANG_LABELS, detect_lang, normalize_text_key
+from app.services.langs import (
+    DEEPL_CODES,
+    LANG_LABELS,
+    detect_lang,
+    has_translatable_text,
+    normalize_text_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +81,9 @@ async def translate_chat(
     db: AsyncSession, user_id: int, text: str, settings: UserSettings | None
 ) -> dict | None:
     """캐시 → 한도 게이트 → 엔진 체인. 성공 시 {"lang": ..., "text": ...}, 아니면 None."""
+    # 이모티콘·초성 전용 메시지는 번역 대상 아님 (2026-08-12 실측 — 음차 오염 방지)
+    if not has_translatable_text(text):
+        return None
     target = _target_lang(text, settings)
     if target is None:
         return None
@@ -131,20 +140,28 @@ async def translate_chat(
 
 
 async def _translate_via_chain(text: str, target: str) -> tuple[str, str] | None:
+    """Haiku(원어민 캐주얼 프롬프트) 우선, DeepL 폴백.
+
+    2026-08-12 실측 감사(프로덕션 196건): DeepL 이 문맥 없는 채팅 단문에서
+    의미 반전 오역("어디 안 가요"→"Where are you going?")·의성어 음차·직역을
+    냈다. 이 번역은 '내가 쓰는 말' 학습 재료가 되므로 품질 우선 — LLM 이
+    화용을 이해해 자연스럽다. 비용은 캐시+하드캡으로 방어(개인 사용 규모에서
+    사실상 0), DeepL 은 무료 폴백으로 유지.
+    """
     cfg = get_settings()
+    try:
+        translated = await _call_haiku(text, target)
+        if translated:
+            return translated, "haiku"
+    except Exception:  # noqa: BLE001 — 실패는 폴백으로, 채팅은 계속 진행
+        logger.warning("haiku translate failed, falling back to deepl text=%r", text[:40])
     if cfg.deepl_api_key:
         try:
             translated = await _call_deepl(text, target, cfg.deepl_api_key)
             if translated:
                 return translated, "deepl"
-        except Exception:  # noqa: BLE001 — 실패는 폴백으로, 채팅은 계속 진행
-            logger.warning("deepl translate failed, falling back to haiku text=%r", text[:40])
-    try:
-        translated = await _call_haiku(text, target)
-        if translated:
-            return translated, "haiku"
-    except Exception:  # noqa: BLE001
-        logger.exception("haiku translate failed text=%r", text[:40])
+        except Exception:  # noqa: BLE001
+            logger.exception("deepl translate failed text=%r", text[:40])
     return None
 
 
@@ -173,6 +190,20 @@ def _first_text(res) -> str:
     raise ValueError("no text block in response")
 
 
+def _haiku_system(target: str) -> str:
+    """원어민 캐주얼 채팅체 지시 — 직역·음차 방지 (2026-08-12 실측 감사 반영)."""
+    style = (
+        "미국인이 일상 문자 메시지에서 실제로 쓰는 캐주얼한 구어체 영어"
+        if target == "en"
+        else f"원어민이 메신저에서 실제로 쓰는 자연스러운 {LANG_LABELS[target]} 대화체"
+    )
+    return (
+        f"친구 사이의 채팅 메시지를 {style}로 번역한다. "
+        "한국어 채팅의 늘임말(요오·당·음)·초성(ㅋㅋ·ㅎㅎ)·의성어의 뉘앙스를 이해하고 "
+        "직역·음차 대신 의미와 말투를 옮긴다. 번역문만 출력한다."
+    )
+
+
 async def _call_haiku(text: str, target: str) -> str | None:
     cfg = get_settings()
     if not cfg.anthropic_api_key:
@@ -181,7 +212,7 @@ async def _call_haiku(text: str, target: str) -> str | None:
     res = await client.messages.create(
         model=cfg.anthropic_translate_model,
         max_tokens=1000,
-        system=f"자연스러운 대화체로 {LANG_LABELS[target]}로 번역하고 번역문만 출력한다.",
+        system=_haiku_system(target),
         messages=[{"role": "user", "content": text}],
     )
     out = _first_text(res).strip()
