@@ -4,7 +4,7 @@ from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, CreatedAtMixin, PkMixin
-from app.models.types import IntList
+from app.models.types import IntList, StrList
 
 ROLE_LEARNER = "learner"
 ROLE_ADMIN = "admin"
@@ -56,3 +56,8 @@ class UserSettings(Base):
     mascot_key: Mapped[str | None] = mapped_column(Text)
     # 대표 업적 키 — 대전·리더보드 프로필 밑 칭호 (mascot-shop.md 플레이어 배지)
     featured_achievement: Mapped[str | None] = mapped_column(Text)
+    # 다국어 학습 (docs/specs/chat-translation.md) — 주언어(모국어)·학습언어(복수)
+    primary_lang: Mapped[str] = mapped_column(Text, default="ko", server_default="ko")
+    learning_langs: Mapped[list[str]] = mapped_column(StrList, default=lambda: ["en"])
+    # 채팅 자동번역 ON/OFF — 메시지 밑 번역 줄 + 스피커 (기본 끔, 설정에서 켬)
+    chat_translate: Mapped[bool] = mapped_column(default=False, server_default="false")

@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     voyage_embedding_secret: str = ""
     voyage_embedding_model: str = "voyage-3.5-lite"
 
+    # 채팅 자동번역 (docs/specs/chat-translation.md) — 엔진 체인: 캐시 → DeepL Free → Haiku
+    deepl_api_key: str = ""  # 미설정 시 DeepL 건너뛰고 Haiku 폴백만
+    # 월 예산 하드캡 (글자수) — 초과 시 자동번역만 우아하게 중단 (채팅은 정상)
+    translate_monthly_budget_chars: int = 2_000_000
+    # 사용자당 일일 번역 한도 — 정상 사용엔 안 걸리는 어뷰즈 방지선
+    translate_user_daily_limit: int = 200
+
     # 서비스 URL (OAuth redirect 검증용)
     public_service_url: str = "https://esl.lessonaza.app"
     public_admin_url: str = "https://esladmin.lessonaza.app"
