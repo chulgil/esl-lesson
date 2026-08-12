@@ -18,10 +18,20 @@ export function MyPhrasesCard() {
   } | null>(null);
 
   useEffect(() => {
-    studyApi
-      .myPhrases()
-      .then(setData)
-      .catch(() => setData(null));
+    const load = () =>
+      studyApi
+        .myPhrases()
+        .then(setData)
+        .catch(() => setData(null));
+    load();
+    // 편집(빼기) 후 뒤로가기 — 모바일 bfcache 는 리마운트가 없어 stale 목록이
+    // 남는다 (2026-08-12 "반영 안 됨" 보고). 화면 복귀 시 재조회
+    window.addEventListener("pageshow", load);
+    window.addEventListener("focus", load);
+    return () => {
+      window.removeEventListener("pageshow", load);
+      window.removeEventListener("focus", load);
+    };
   }, []);
 
   if (data === null) return null;

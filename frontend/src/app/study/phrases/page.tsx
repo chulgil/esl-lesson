@@ -14,10 +14,15 @@ export default function MyPhrasesEditPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    studyApi
-      .myPhrasesItems()
-      .then((res) => setItems(res.items))
-      .catch(() => setError("목록을 불러오지 못했어요 — 새로고침해 주세요"));
+    const load = () =>
+      studyApi
+        .myPhrasesItems()
+        .then((res) => setItems(res.items))
+        .catch(() => setError("목록을 불러오지 못했어요 — 새로고침해 주세요"));
+    load();
+    // bfcache 복귀 대응 — 다른 화면을 다녀와도 최신 목록 (2026-08-12)
+    window.addEventListener("pageshow", load);
+    return () => window.removeEventListener("pageshow", load);
   }, []);
 
   async function remove(itemId: number) {
