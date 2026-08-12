@@ -8,6 +8,7 @@ import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
+import { LinkifiedText } from "@/components/chat/LinkifiedText";
 import { useChatRoom } from "@/components/chat/useChatRoom";
 import { MascotSvg } from "@/components/theme/mascots";
 import { fetchMe } from "@/lib/api";
@@ -626,7 +627,9 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
                   />
                 </button>
               )}
-              <span className="break-words whitespace-pre-wrap">{m.body}</span>
+              <span className="break-words whitespace-pre-wrap">
+                <LinkifiedText text={m.body} />
+              </span>
             </div>
           );
         })}
