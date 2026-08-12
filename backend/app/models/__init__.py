@@ -2,7 +2,7 @@
 
 from app.models.base import Base
 from app.models.card import ReviewCard, ReviewLog
-from app.models.chat import ChatMessage, ChatRead, Conversation
+from app.models.chat import ChatMessage, ChatRead, Conversation, SharedGoal
 from app.models.content import (
     Content,
     ContentPermission,
@@ -56,6 +56,7 @@ __all__ = [
     "QuizRoyalePlayer",
     "BingoMatch",
     "ScrambleRace",
+    "SharedGoal",
     "TranslationUsage",
     "TypingRace",
     "ItemGrant",

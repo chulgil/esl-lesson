@@ -7,13 +7,15 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Index,
+    Integer,
+    String,
     Text,
     UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, CreatedAtMixin, PkMixin
+from app.models.base import Base, CreatedAtMixin, PkMixin, TimestampMixin
 from app.models.types import JsonDict
 
 
@@ -73,3 +75,28 @@ class ChatRead(Base, PkMixin):
     )
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
     last_read_message_id: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+
+
+class SharedGoal(Base, PkMixin, TimestampMixin):
+    """함께 목표 — 대화방 공유 체크리스트·주간 달성표 (docs/specs/shared-goals.md).
+
+    kind="check": 자유 목표 (서로 추가·체크 — 카톡 공지의 공동 편집 모델).
+    kind="weekly_reviews": 주간 자동 달성표의 목표치 보관 (대화당 1행,
+    진행은 ReviewLog 주간 집계로 계산 — Duolingo Friend Quests 모델).
+    """
+
+    __tablename__ = "shared_goals"
+
+    conversation_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16), default="check", server_default="check")
+    text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    target_value: Mapped[int | None] = mapped_column(Integer)
+    done: Mapped[bool] = mapped_column(default=False, server_default="false")
+    done_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
