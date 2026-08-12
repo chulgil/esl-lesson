@@ -10,11 +10,14 @@ export function DeleteMessageButton({
   confirmLabel,
   className,
   onDelete,
+  ariaLabel = "메시지 삭제",
 }: {
   label: string;
   confirmLabel: string;
   className: string;
   onDelete: () => void;
+  /** 메시지 외 다른 대상(목표 항목 등)에 재사용할 때의 접근성 라벨 */
+  ariaLabel?: string;
 }) {
   const [asking, setAsking] = useState(false);
 
@@ -35,7 +38,7 @@ export function DeleteMessageButton({
           setAsking(true);
         }
       }}
-      aria-label="메시지 삭제"
+      aria-label={ariaLabel}
       className={`${className} ${asking ? "font-bold text-brick-red opacity-100" : ""}`}
     >
       {asking ? confirmLabel : label}

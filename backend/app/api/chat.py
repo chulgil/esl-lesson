@@ -18,6 +18,7 @@ from app.core.security import get_current_user
 from app.models import ChatMessage, Conversation, LearningItem, User
 from app.models.user import UserSettings
 from app.services import chat
+from app.services import goals as goals_service
 from app.services import push as push_service
 from app.services import translation as translation_service
 from app.services.game.invites import invite_hub
@@ -306,3 +307,82 @@ async def shareable_items(
             for i in rows
         ]
     }
+
+
+# --- 함께 목표 (docs/specs/shared-goals.md) --------------------------------------
+
+
+async def _push_goal_sync(conv: Conversation) -> None:
+    event = {"t": "goal.sync", "conversation_id": conv.id}
+    await chat.deliver_ws(conv.user_lo_id, event)
+    await chat.deliver_ws(conv.user_hi_id, event)
+
+
+class GoalCreateBody(BaseModel):
+    text: str = Field(max_length=100)
+
+
+class GoalPatchBody(BaseModel):
+    text: str | None = Field(default=None, max_length=100)
+    done: bool | None = None
+
+
+class WeeklyTargetBody(BaseModel):
+    target_value: int
+
+
+@router.get("/with/{other_id}/goals")
+async def get_goals(
+    other_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    return await goals_service.get_view(db, user.id, other_id)
+
+
+@router.post("/with/{other_id}/goals", status_code=status.HTTP_201_CREATED)
+async def add_goal(
+    other_id: int,
+    payload: GoalCreateBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    item, conv = await goals_service.add_check(db, user.id, other_id, payload.text)
+    await _push_goal_sync(conv)
+    return item
+
+
+@router.patch("/goals/{goal_id}")
+async def patch_goal(
+    goal_id: int,
+    payload: GoalPatchBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    item, conv = await goals_service.patch_check(db, user.id, goal_id, payload.text, payload.done)
+    await _push_goal_sync(conv)
+    return item
+
+
+@router.delete("/goals/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_goal(
+    goal_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    conv = await goals_service.delete_check(db, user.id, goal_id)
+    await _push_goal_sync(conv)
+
+
+@router.patch("/with/{other_id}/goals/weekly")
+async def patch_weekly_goal(
+    other_id: int,
+    payload: WeeklyTargetBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    weekly, conv = await goals_service.set_weekly_target(
+        db, user.id, other_id, payload.target_value
+    )
+    await _push_goal_sync(conv)
+    return weekly

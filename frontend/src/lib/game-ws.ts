@@ -413,6 +413,9 @@ export type ChatServerMsg =
   | { t: "chat.deleted"; conversation_id: number; message_id: number }
   | { t: "chat.typing"; from_user_id: number }
   | { t: "presence"; user_id: number; online: boolean }
+  // 함께 목표 변경(추가·체크·삭제·주간 목표 수정) 브로드캐스트 — 클라는 재조회
+  // (docs/specs/shared-goals.md)
+  | { t: "goal.sync"; conversation_id: number }
   // 클라 합성 신호 (서버 발신 아님) — WS 재접속 시 열린 대화방 재동기화 트리거
   | { t: "chat.resync" };
 
