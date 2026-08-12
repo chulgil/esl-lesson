@@ -877,6 +877,23 @@ async def my_phrases_items(
     }
 
 
+@router.post("/my-phrases/refresh")
+async def refresh_my_phrases(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """내 덱 번역 품질 새로고침 — 엔진·프롬프트 개선분을 기존 문장에 적용.
+
+    항목 ID 유지(복습 진행도 보존), 실명 치환 + 재번역. 본인 덱만.
+    사용량은 translation_usage 로 예산 회계에 포함된다."""
+    from app.services import my_phrases as my_phrases_service
+
+    settings = await get_user_settings(db, user)
+    updated = await my_phrases_service.refresh_my_phrases(db, user, settings)
+    await db.commit()
+    return {"updated": updated}
+
+
 @router.delete("/my-phrases/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_my_phrase(
     item_id: int,

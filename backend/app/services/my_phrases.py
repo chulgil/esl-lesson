@@ -170,6 +170,59 @@ async def sync_my_phrases(
     return deck, added
 
 
+REFRESH_CAP = 300  # 한 번에 갱신하는 항목 상한 (LLM 호출 폭주 방지)
+
+
+async def refresh_my_phrases(db: AsyncSession, user: User, settings: UserSettings | None) -> int:
+    """내 덱 전체 번역 품질 새로고침 — 항목 ID 유지(복습 진행도 보존).
+
+    엔진·프롬프트가 개선됐을 때 기존 문장을 새 품질로: 원문 실명 치환
+    (anonymize) 후 재번역해 ko/en 텍스트를 제자리 갱신. 본인 덱만 — 항목이
+    공유(전역 dedup)됐어도 chat 덱 항목은 채팅 유래라 사실상 개인 소유.
+    사용량은 translation_usage 에 기록(예산 회계). 커밋은 호출자 책임.
+    """
+    from app.models import TranslationUsage
+
+    primary = settings.primary_lang if settings and settings.primary_lang else "ko"
+    learning = (settings.learning_langs if settings and settings.learning_langs else ["en"])[0]
+    deck = (
+        await db.execute(
+            select(Content).where(Content.source == "chat", Content.created_by == user.id)
+        )
+    ).scalar_one_or_none()
+    if deck is None:
+        return 0
+    items = (
+        (
+            await db.execute(
+                select(LearningItem)
+                .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+                .where(ItemOccurrence.content_id == deck.id)
+                .limit(REFRESH_CAP)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    updated = 0
+    for item in items:
+        ko = (item.ko_text or "").strip()
+        if not ko:
+            continue
+        safe = await translation_service.anonymize_names(ko, primary)
+        result = await translation_service._translate_via_chain(safe, learning)  # noqa: SLF001
+        if result is None:
+            continue  # 엔진 불가 — 남은 항목은 다음 새로고침에서
+        translated, engine = result
+        item.ko_text = safe
+        item.en_text = translated
+        db.add(TranslationUsage(user_id=user.id, chars=len(safe), engine=engine))
+        updated += 1
+    if updated:
+        await db.flush()
+    return updated
+
+
 async def exclude_phrase(db: AsyncSession, user: User, item_id: int) -> bool:
     """덱에서 문장 빼기 — Occurrence 삭제 + 원문 키를 제외 원장에 기록.
 
