@@ -51,6 +51,27 @@ export interface ShareableItem {
   ko_text: string;
 }
 
+/** 함께 목표 — 체크리스트 항목 (docs/specs/shared-goals.md) */
+export interface GoalItem {
+  id: number;
+  text: string;
+  done: boolean;
+  done_by_name: string | null;
+  created_by_name: string | null;
+}
+
+/** 이번 주(KST 월요일 시작) 복습 수 합산 — target 대비 각자 기여 */
+export interface GoalWeekly {
+  target: number;
+  mine: number;
+  theirs: number;
+}
+
+export interface GoalsResponse {
+  items: GoalItem[];
+  weekly: GoalWeekly;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: "same-origin",
@@ -121,6 +142,27 @@ export const chatApi = {
     request<{ items: ShareableItem[] }>(
       `/api/chat/shareable-items?q=${encodeURIComponent(q)}`,
     ),
+
+  // --- 함께 목표 (docs/specs/shared-goals.md) ---
+  goals: (otherId: number) =>
+    request<GoalsResponse>(`/api/chat/with/${otherId}/goals`),
+  addGoal: (otherId: number, text: string) =>
+    request<GoalItem>(`/api/chat/with/${otherId}/goals`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  patchGoal: (id: number, patch: { text?: string; done?: boolean }) =>
+    request<GoalItem>(`/api/chat/goals/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  setWeeklyTarget: (otherId: number, targetValue: number) =>
+    request<GoalWeekly>(`/api/chat/with/${otherId}/goals/weekly`, {
+      method: "PATCH",
+      body: JSON.stringify({ target_value: targetValue }),
+    }),
+  deleteGoal: (id: number) =>
+    request<void>(`/api/chat/goals/${id}`, { method: "DELETE" }),
 };
 
 /** 멱등키 — 재시도해도 서버에 한 건만 저장된다 */

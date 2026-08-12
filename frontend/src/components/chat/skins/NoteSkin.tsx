@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
+import { GoalBoard } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
@@ -15,7 +16,7 @@ import type { ChatSkinProps } from "./types";
 /** 교환 노트 스킨 — 종이 테마(노트·캔디·레고·헤냥이) 공용 위장.
  *  말풍선 없이 필기 줄 형식: 힐끗 보면 학습 노트로 보인다 (docs/specs/chat.md).
  *  내 글 = 파란 잉크, 상대 글 = 검정 잉크. 창은 화면 우측에 도킹(컴팩트 max-w-md)된다. */
-export function NoteSkin(p: ChatSkinProps) {
+export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
   // 패널 밖(빈 종이) 클릭 = 채팅 패널 토글 — 힐끗 보일 때 빈 노트로 위장 (2026-07-31)
   const [panelHidden, setPanelHidden] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -56,6 +57,8 @@ export function NoteSkin(p: ChatSkinProps) {
             />
           </h1>
         </header>
+
+        <GoalBoard otherId={p.otherId} excel={false} peerName={p.peerName} />
 
         {p.error && <p className="mb-2 text-sm text-brick-red">{p.error}</p>}
 

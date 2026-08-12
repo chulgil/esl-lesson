@@ -6,6 +6,7 @@ import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
+import { GoalBoard } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
@@ -523,6 +524,7 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
 
   return (
     <>
+      <GoalBoard otherId={userId} excel={excel} peerName={p.peerName} />
       <div
         ref={p.listRef}
         onScroll={p.onScroll}

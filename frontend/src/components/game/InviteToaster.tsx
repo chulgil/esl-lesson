@@ -104,7 +104,8 @@ export function InviteToaster() {
       msg.t === "chat.deleted" ||
       msg.t === "chat.typing" ||
       msg.t === "presence" ||
-      msg.t === "notif.new"
+      msg.t === "notif.new" ||
+      msg.t === "goal.sync"
     ) {
       dispatchChatEvent(msg);
       // 테마 지급(업적 보상·이벤트)은 벨 적재에 더해 즉시 축하 — 획득 순간 각인

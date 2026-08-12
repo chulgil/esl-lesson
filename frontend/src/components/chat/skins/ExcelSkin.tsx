@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
+import { GoalBoard } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
@@ -22,7 +23,7 @@ import type { ChatSkinProps } from "./types";
 
 const COLS = ["A", "B", "C", "D"];
 
-export function ExcelSkin(p: ChatSkinProps) {
+export function ExcelSkin(p: ChatSkinProps & { otherId: number }) {
   const router = useRouter();
   // 빈 시트 클릭 = 채팅 레일 토글 (위장 강화, 2026-07-31)
   const [railHidden, setRailHidden] = useState(false);
@@ -56,6 +57,7 @@ export function ExcelSkin(p: ChatSkinProps) {
       statusRight={<span>행 {rowBase + 2}</span>}
       blank={<BlankSheet cols={COLS} />}
     >
+      <GoalBoard otherId={p.otherId} excel peerName={p.peerName} />
       <div className="flex min-h-0 flex-1">
         {/* 좌측 — 실제 시트처럼 보이는 채움 영역 (위장, 모바일에서는 숨김).
             클릭 = 채팅 레일 토글 — 빈 시트만 남겨 위장 강화 (2026-07-31) */}

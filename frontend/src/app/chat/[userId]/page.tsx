@@ -45,8 +45,8 @@ export default function ChatRoomPage() {
   }
 
   return theme === "excel" ? (
-    <ExcelSkin {...skinProps} />
+    <ExcelSkin {...skinProps} otherId={otherId} />
   ) : (
-    <NoteSkin {...skinProps} />
+    <NoteSkin {...skinProps} otherId={otherId} />
   );
 }
