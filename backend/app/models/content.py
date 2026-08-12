@@ -23,7 +23,7 @@ JOB_STATUSES = ("pending", "running", "done", "failed")
 class Content(Base, PkMixin, TimestampMixin):
     __tablename__ = "contents"
     __table_args__ = (
-        CheckConstraint("source IN ('youtube','manual')", name="ck_contents_source"),
+        CheckConstraint("source IN ('youtube','manual','chat')", name="ck_contents_source"),
         CheckConstraint(
             "status IN ('pending','extracting','ready','failed')",
             name="ck_contents_status",
