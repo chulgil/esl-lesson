@@ -86,6 +86,20 @@ def rank_players(players: list["RacerState"]) -> tuple[str | None, int | None]:
     return top.name, top.user_id
 
 
+def mastered_item_clause(user_id: int):
+    """이미 장기기억(stability 7일+)에 도달한 항목 제외 — 아직 익히는 중인
+    표현 위주로 출제 (2026-08-12 기획: 정착한 문장의 반복 노출은 지루함만 남긴다)."""
+    from app.models import ReviewCard
+    from app.services.fsrs_service import LONG_TERM_STABILITY_DAYS
+
+    return LearningItem.id.not_in(
+        select(ReviewCard.item_id).where(
+            ReviewCard.user_id == user_id,
+            ReviewCard.stability >= LONG_TERM_STABILITY_DAYS,
+        )
+    )
+
+
 async def load_sentence_pool(user_id: int) -> list[dict]:
     """가시성 규칙(공용 승인 ∪ 내 개인)을 지키는 (영문, 뜻) 문장 풀."""
     async with get_session_factory()() as db:
@@ -97,6 +111,7 @@ async def load_sentence_pool(user_id: int) -> list[dict]:
                 .where(
                     LearningItem.item_type == "sentence",
                     visible_item_clause(user_id),
+                    mastered_item_clause(user_id),
                 )
                 .distinct()
                 .limit(300)

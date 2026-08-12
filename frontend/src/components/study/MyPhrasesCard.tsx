@@ -40,8 +40,8 @@ export function MyPhrasesCard() {
     <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-blue/40 bg-white p-5 shadow-sm">
       <h2 className="font-hand text-2xl font-bold">내가 쓰는 말</h2>
       <p className="mt-1 text-xs opacity-60">
-        채팅에서 자주 쓴 말이 학습 문장이 돼요 — 복습과 타자·어순·받아쓰기
-        게임에 자동으로 나와요
+        채팅에서 두 번 이상 쓴 말이 학습 문장이 돼요 — 복습과 타자·어순·받아쓰기
+        게임에 자동으로 나와요 (이미 익힌 문장은 게임에서 빠져요)
         {data.added_now > 0 && (
           <b className="ml-1 text-brick-green">+{data.added_now} 새로 수집</b>
         )}

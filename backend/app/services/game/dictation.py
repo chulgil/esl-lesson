@@ -20,7 +20,7 @@ from app.core.db import get_session_factory
 from app.models import Content, DictationRace, ItemOccurrence, LearningItem, TranscriptSegment
 from app.services.game.manager import WordPoolError, review_items
 from app.services.game.profiles import safe_player_badges
-from app.services.game.typing_race import pick_sentences
+from app.services.game.typing_race import mastered_item_clause, pick_sentences
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,8 @@ async def load_dictation_pool(user_id: int) -> list[dict]:
                 .where(
                     LearningItem.item_type == "sentence",
                     visible_item_clause(user_id),
+                    # 장기기억 도달 문장 제외 — 익히는 중인 표현 위주 (2026-08-12)
+                    mastered_item_clause(user_id),
                     Content.youtube_video_id.is_not(None),
                     TranscriptSegment.start_ms.is_not(None),
                 )
