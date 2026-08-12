@@ -97,6 +97,11 @@ chat_reads
 - 클릭: 새 창 (`target=_blank rel=noopener noreferrer`), 행 탭 액션과 분리
   (stopPropagation). og 미리보기 카드는 미도입 — 서버 og 페치(SSRF 게이트)가
   필요해 후속 검토
+- **유튜브 링크는 새 탭 대신 앱 안 임베드 플레이어** (`VideoLightbox`,
+  youtube-nocookie embed, 2026-08-12) — 모바일 새 탭은 OS 앱 링크가 가로채
+  유튜브 앱으로 이동해 학습 동선이 끊긴다. watch/youtu.be/shorts/live/embed
+  URL 인식(재생 아이콘 표기), 배경 탭·X·Esc 로 닫기. 임베드 금지 영상은
+  플레이어 안의 "YouTube에서 보기" 폴백(이때는 앱으로 열릴 수 있음)
 
 ## 알림 기획
 

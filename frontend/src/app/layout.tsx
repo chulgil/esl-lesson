@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppNav } from "@/components/nav/AppNav";
 import { ChatWidget } from "@/components/chat/ChatWidget";
 import { ImageLightbox } from "@/components/chat/ImageLightbox";
+import { VideoLightbox } from "@/components/chat/VideoLightbox";
 import { BuildRefreshWatcher } from "@/components/nav/BuildRefreshWatcher";
 import { NotificationSetupGuide } from "@/components/chat/NotificationSetupGuide";
 import { InviteToaster } from "@/components/game/InviteToaster";
@@ -82,6 +83,8 @@ export default function RootLayout({
         <ChatWidget />
         {/* 채팅 사진 확대 — 위젯(360x480) 안에서 렌더하면 잘려 전역에 둔다 */}
         <ImageLightbox />
+        {/* 채팅 유튜브 링크 — 앱 안 임베드 재생 (앱 가로채기 회피) */}
+        <VideoLightbox />
         <BuildRefreshWatcher />
         <NotificationSetupGuide />
         <MascotPeek />
