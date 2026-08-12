@@ -5,6 +5,7 @@ import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { openImage } from "@/components/chat/ImageLightbox";
+import { LinkifiedText } from "@/components/chat/LinkifiedText";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { BackLink } from "@/components/nav/BackLink";
 import { setChatPanelVisible } from "@/lib/chat-signals";
@@ -157,7 +158,7 @@ export function NoteSkin(p: ChatSkinProps) {
                   </button>
                 )}
                 <span className="break-words whitespace-pre-wrap">
-                  {m.body}
+                  <LinkifiedText text={m.body} />
                 </span>
               </div>
             );

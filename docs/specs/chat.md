@@ -87,6 +87,17 @@ chat_reads
 - **원문 미리보기는 읽기 시점 해석** (`attach_reply_previews`) — 전송 시점 스냅샷이면 원문 삭제 후에도 내용이 남아 물리 소거 원칙과 충돌. 삭제된 원문 = 인용에도 "삭제되었습니다". 클라는 원문이 목록에 로드돼 있으면 실시간 상태 우선(삭제 즉시 반영)
 - 3개 뷰 공통 (전체 페이지 NoteSkin/ExcelSkin + 플로팅 위젯) — 인용 렌더는 `ReplyQuote` 공용 컴포넌트
 
+## 링크 표현 (카톡/페북식, 2026-08-12)
+
+- 본문의 http/https URL 을 자동 링크화 (`LinkifiedText` 공용) — 3개 뷰 공통
+  (NoteSkin/ExcelSkin/플로팅 위젯). javascript: 등 비 http 스킴은 링크화하지 않는다
+- 표시: 프로토콜·www 제거 + 호스트+경로 36자 말줄임 + 링크 아이콘 + 테마
+  링크색(text-brick-blue — 오피스 위장에선 스프레드시트 하이퍼링크처럼 보임).
+  원문 전체는 title(hover)과 href 에 보존
+- 클릭: 새 창 (`target=_blank rel=noopener noreferrer`), 행 탭 액션과 분리
+  (stopPropagation). og 미리보기 카드는 미도입 — 서버 og 페치(SSRF 게이트)가
+  필요해 후속 검토
+
 ## 알림 기획
 
 | 상황 | 동작 |
