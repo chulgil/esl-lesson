@@ -130,6 +130,10 @@ async def sync_my_phrases(
         if not translated:
             continue
         nk = translated.lower()
+        # 재사용 항목 방어 — 전역 dedup 으로 기존 항목을 재사용하면 ko_text 가
+        # 내 발화와 달라 원문 키 제외가 안 걸린다. 번역문 키(nk:)도 함께 확인
+        if f"nk:{nk}"[:200] in excluded:
+            continue
         item = (
             await db.execute(
                 select(LearningItem).where(
@@ -187,16 +191,23 @@ async def exclude_phrase(db: AsyncSession, user: User, item_id: int) -> bool:
         return False
     item = await db.get(LearningItem, item_id)
     await db.delete(occurrence)
-    if item is not None and item.ko_text:
-        key = normalize_text_key(item.ko_text)
-        exists = (
-            await db.execute(
-                select(PhraseExclusion.id).where(
-                    PhraseExclusion.user_id == user.id, PhraseExclusion.text_key == key
+    if item is not None:
+        # 이중 키 기록 — 원문 키(내 발화) + 번역문 키(nk:). 전역 dedup 으로
+        # 재사용된 항목은 ko_text 가 내 발화와 달라 원문 키만으로는 재수집을
+        # 못 막는다 (2026-08-12)
+        keys = []
+        if item.ko_text:
+            keys.append(normalize_text_key(item.ko_text))
+        keys.append(f"nk:{item.normalized_key}"[:200])
+        for key in keys:
+            exists = (
+                await db.execute(
+                    select(PhraseExclusion.id).where(
+                        PhraseExclusion.user_id == user.id, PhraseExclusion.text_key == key
+                    )
                 )
-            )
-        ).scalar_one_or_none()
-        if exists is None:
-            db.add(PhraseExclusion(user_id=user.id, text_key=key))
+            ).scalar_one_or_none()
+            if exists is None:
+                db.add(PhraseExclusion(user_id=user.id, text_key=key))
     await db.flush()
     return True
