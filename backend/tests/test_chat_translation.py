@@ -119,7 +119,8 @@ async def test_messages_translation_window_caps_at_30(client, db_session, monkey
     monkeypatch.setattr(translation_service, "_translate_via_chain", fake_chain)
     await login(client, db_session, a)
     for i in range(35):
-        await client.post("/api/chat/messages", json=send_body(b.id, f"msg number {i}", f"cid-win{i:05d}"))
+        body = send_body(b.id, f"msg number {i}", f"cid-win{i:05d}")
+        await client.post("/api/chat/messages", json=body)
     await enable_translate(db_session, a.id)
 
     res = (await client.get(f"/api/chat/with/{b.id}/messages?limit=50")).json()
