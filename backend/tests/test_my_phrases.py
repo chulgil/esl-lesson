@@ -163,6 +163,27 @@ async def test_exclude_phrase_removes_and_stays_removed(client, db_session, wire
     assert res.status_code == 404
 
 
+async def test_new_item_anonymizes_names_in_original(client, db_session, monkeypatch):
+    """학습 카드 원문의 실명은 평범한 이름으로 치환 — 직급은 유지 (2026-08-12 요청)."""
+    from app.services import translation as translation_service
+
+    async def fake_anonymize(text, lang):
+        assert lang == "ko"
+        return text.replace("혜인", "민지")
+
+    monkeypatch.setattr(translation_service, "anonymize_names", fake_anonymize)
+
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await send(client, b.id, "혜인 팀장님 오늘 회의 몇 시예요?", "cid-mp00081")
+    await seed_translation(
+        db_session, "혜인 팀장님 오늘 회의 몇 시예요?", "Hailey, what time is the meeting today?"
+    )
+
+    res = (await client.get("/api/study/my-phrases")).json()
+    assert res["recent"][0]["ko"] == "민지 팀장님 오늘 회의 몇 시예요?"  # 이름만 치환, 직급 유지
+
+
 async def test_deck_item_reuses_global_normalized_key(client, db_session):
     """같은 번역문이 이미 전역 항목으로 있으면 재사용 — Occurrence 만 연결."""
     a, b = await two_friends(client, db_session)

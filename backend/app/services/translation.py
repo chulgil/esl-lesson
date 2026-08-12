@@ -203,6 +203,12 @@ def _haiku_system(target: str) -> str:
         if target == "en"
         else f"원어민이 메신저에서 실제로 쓰는 자연스러운 {LANG_LABELS[target]} 대화체"
     )
+    # 대상 언어권의 흔한 이름으로 — 양방향 (2026-08-12 요청: 한글 방향도 동일)
+    name_examples = {
+        "en": "예: 혜인님 → Hailey, 지영씨 → Jenny, 민준 → Mason",
+        "ko": "예: Chris → 민준, Emily → 지은, Hailey → 혜린",
+        "ja": "예: 혜인 → さくら, Chris → ゆうた",
+    }[target]
     return (
         f"친구·동료 사이의 채팅 메시지를 {style}로 번역한다. "
         "한국어 채팅의 늘임말(요오·당·음)·초성(ㅋㅋ)·의성어의 뉘앙스를 이해하고 "
@@ -210,11 +216,42 @@ def _haiku_system(target: str) -> str:
         "원문의 어조를 따른다 — 존댓말이면 정중하고 다정한 캐주얼로, 반말이면 편한 캐주얼로. "
         "과한 슬랭(rn, fr, yo 등)과 원문에 없는 이모지는 넣지 않는다. "
         "평서문을 의문문으로 바꾸지 않는다 (예: 어디 안 가요 = I am not going anywhere). "
-        "사람 이름(님·씨·야 호칭 포함)은 반드시 발음이 비슷하고 성별에 맞는 흔한 영어 "
-        "이름으로 바꾼다 — 로마자 표기(Jiyoung 등)를 그대로 두지 않는다 "
-        "(예: 혜인님 → Hailey, 지영씨 → Jenny, 민준 → Mason). "
-        "같은 이름은 항상 같은 영어 이름으로 옮긴다. 번역문만 출력한다."
+        f"사람 이름(님·씨·야 호칭 포함)은 반드시 발음·성별을 고려해 {LANG_LABELS[target]}권에서 "
+        f"흔한 이름으로 바꾼다 — 로마자·원어 표기를 그대로 두지 않는다 ({name_examples}). "
+        "단, 직급·직함(팀장님·부장님·과장님 등)은 바꾸지 않고 그대로 옮긴다. "
+        "같은 이름은 항상 같은 이름으로 옮긴다. 번역문만 출력한다."
     )
+
+
+async def anonymize_names(text: str, lang: str) -> str:
+    """학습자료용 실명 치환 — 문장 속 사람 이름을 같은 언어권의 다른 평범한
+    이름으로 바꾼다 (2026-08-12 요청: 학습 카드에 지인 실명이 박제되지 않게).
+
+    직급·직함(팀장님·부장님 등)은 그대로 둔다. 이름이 없으면 원문 그대로.
+    실패·키 미설정 시 원문 반환 (학습자료 생성을 막지 않는다).
+    """
+    cfg = get_settings()
+    if not cfg.anthropic_api_key:
+        return text
+    try:
+        client = _haiku_client()
+        res = await client.messages.create(
+            model=cfg.anthropic_translate_model,
+            max_tokens=1000,
+            system=(
+                f"문장 속 사람 이름(님·씨·야 호칭 포함)을 {LANG_LABELS.get(lang, '같은 언어')}권의 "
+                "다른 평범한 이름으로 바꾼다 — 성별 유지. "
+                "직급·직함(팀장님·부장님·과장님 등)은 바꾸지 않는다. "
+                "이름이 없으면 원문을 그대로 출력한다. 그 외 어떤 것도 바꾸지 않는다. "
+                "문장만 출력한다."
+            ),
+            messages=[{"role": "user", "content": text}],
+        )
+        out = _first_text(res).strip()
+        return out or text
+    except Exception:  # noqa: BLE001 — 익명화 실패는 원문으로 진행
+        logger.warning("name anonymize failed text=%r", text[:40])
+        return text
 
 
 async def _call_haiku(text: str, target: str) -> str | None:

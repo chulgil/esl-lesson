@@ -19,6 +19,7 @@ from app.models import (
     PhraseExclusion,
 )
 from app.models.user import User, UserSettings
+from app.services import translation as translation_service
 from app.services.langs import detect_lang, normalize_text_key
 
 MIN_CHARS = 4  # "ㅋㅋ"·"네" 제외
@@ -142,10 +143,13 @@ async def sync_my_phrases(
             )
         ).scalar_one_or_none()
         if item is None:
+            # 학습 카드에 지인 실명이 박제되지 않게 원문 이름을 평범한 이름으로
+            # 치환 (2026-08-12 요청 — 직급·직함은 유지). 새 항목 1회만 호출
+            safe_original = await translation_service.anonymize_names(original, primary)
             item = LearningItem(
                 item_type="sentence",
                 en_text=translated,
-                ko_text=original,
+                ko_text=safe_original,
                 normalized_key=nk,
             )
             db.add(item)
