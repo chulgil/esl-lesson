@@ -16,8 +16,10 @@ from app.core.config import get_settings
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import ChatMessage, Conversation, LearningItem, User
+from app.models.user import UserSettings
 from app.services import chat
 from app.services import push as push_service
+from app.services import translation as translation_service
 from app.services.game.invites import invite_hub
 from app.services.visibility import visible_item_clause
 
@@ -42,6 +44,29 @@ async def unread_total(
     return {"total": await chat.unread_total(db, user.id)}
 
 
+# --- 자동번역 동봉 (docs/specs/chat-translation.md) -------------------------------
+
+TRANSLATE_WINDOW = 30  # 캐시 위주라 저비용이지만, 조회당 엔진 호출 상한은 둔다
+
+
+async def _with_translations(
+    db: AsyncSession, viewer_id: int, items: list[dict], settings: UserSettings
+) -> list[dict]:
+    """최신 30개(삭제 제외, 본문 있는 것)만 번역 동봉 — 새 dict 로 반환해 인프로세스
+    캐시(_recent)의 원본 dict 를 건드리지 않는다(뷰어마다 타깃 언어가 달라
+    공유 캐시를 오염시키면 안 됨)."""
+    candidates = [m for m in items if not m["deleted"] and m["body"]]
+    window_ids = {m["id"] for m in candidates[-TRANSLATE_WINDOW:]}
+    out = []
+    for m in items:
+        if m["id"] in window_ids:
+            t = await translation_service.translate_chat(db, viewer_id, m["body"], settings)
+            out.append({**m, "translation": t})
+        else:
+            out.append({**m, "translation": None})
+    return out
+
+
 @router.get("/with/{other_id}/messages")
 async def messages(
     other_id: int,
@@ -57,17 +82,52 @@ async def messages(
     other = await db.get(User, other_id)
     # 실명·구글 아바타 금지 (2026-07-27 결정) — 닉네임만
     peer = {"user_id": other.id, "name": other.nickname} if other is not None else None
+    viewer_settings = await db.get(UserSettings, user.id)
+    translate_on = bool(viewer_settings and viewer_settings.chat_translate)
     if conv is None:
-        return {"items": [], "reads": {}, "online": invite_hub.online(other_id), "peer": peer}
+        return {
+            "items": [],
+            "reads": {},
+            "online": invite_hub.online(other_id),
+            "peer": peer,
+            "translate": translate_on,
+        }
     items = await chat.get_messages(db, user.id, other_id, before=before, limit=limit)
     reads = await chat.get_read_positions(db, conv.id)
+    if translate_on:
+        items = await _with_translations(db, user.id, items, viewer_settings)
+        await db.commit()
     return {
         "items": items,
         # 읽음 표시 초기 렌더: 상대의 마지막 읽음 위치
         "reads": {str(uid): mid for uid, mid in reads.items()},
         "online": invite_hub.online(other_id),
         "peer": peer,
+        "translate": translate_on,
     }
+
+
+@router.get("/messages/{message_id}/translation")
+async def message_translation(
+    message_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """WS 로 막 수신한 메시지의 번역 — 목록 조회(30개 창) 밖의 개별 메시지용."""
+    msg = await db.get(ChatMessage, message_id)
+    if msg is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "message_not_found")
+    conv = await db.get(Conversation, msg.conversation_id)
+    if conv is None or user.id not in (conv.user_lo_id, conv.user_hi_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_participant")
+    viewer_settings = await db.get(UserSettings, user.id)
+    if not (viewer_settings and viewer_settings.chat_translate):
+        return {"translation": None}
+    if msg.deleted_at is not None or not msg.body:
+        return {"translation": None}
+    result = await translation_service.translate_chat(db, user.id, msg.body, viewer_settings)
+    await db.commit()
+    return {"translation": result}
 
 
 # --- 이미지 업로드 (docs/specs/chat.md 이미지 전송) ------------------------------

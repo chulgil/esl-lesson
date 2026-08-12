@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChatModeCard } from "@/components/settings/ChatModeCard";
 import { DailyGoalSetting } from "@/components/settings/DailyGoalSetting";
+import { LanguageCard } from "@/components/settings/LanguageCard";
 import { NicknameCard } from "@/components/settings/NicknameCard";
 import { NotificationCard } from "@/components/settings/NotificationCard";
 import { deleteMe } from "@/lib/api";
@@ -22,6 +23,7 @@ export default function SettingsPage() {
       <DailyGoalSetting />
       <NotificationCard />
       <ChatModeCard />
+      <LanguageCard />
       <ThemeSection />
       <ShopLinkCard />
       <DangerZone />

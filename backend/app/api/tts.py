@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.services import tts as tts_service
+from app.services.langs import SUPPORTED_LANGS
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +21,14 @@ async def get_tts(
     db: Annotated[AsyncSession, Depends(get_db)],
     _user: Annotated[object, Depends(get_current_user)],
     text: Annotated[str, Query(min_length=1, max_length=tts_service.MAX_TEXT_LEN)],
+    lang: str = tts_service.DEFAULT_LANG,
 ) -> Response:
+    if lang not in SUPPORTED_LANGS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "unsupported_lang")
     try:
-        audio = await tts_service.get_or_generate(db, text)
+        audio = await tts_service.get_or_generate(db, text, lang)
     except Exception as exc:  # 외부 TTS 실패 — 프론트가 브라우저 TTS 로 폴백
-        logger.exception("tts failed text=%r", text[:40])
+        logger.exception("tts failed text=%r lang=%s", text[:40], lang)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "tts_failed") from exc
     return Response(
         content=audio,

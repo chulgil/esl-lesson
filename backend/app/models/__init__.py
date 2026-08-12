@@ -30,6 +30,7 @@ from app.models.retention import QuestCompletion, StreakSaverUse, XpSpend
 from app.models.routine import ContentRoutineProgress, ContentSummary, ListenCheck
 from app.models.shop import ItemGrant, ItemSetting, Purchase
 from app.models.theme import ThemeGrant, ThemeRewardRule, ThemeSetting
+from app.models.translation import ChatTranslation, TranslationUsage
 from app.models.tts import TtsAudio
 from app.models.usage import UsageEvent
 from app.models.user import User, UserSettings
@@ -37,6 +38,7 @@ from app.models.user import User, UserSettings
 __all__ = [
     "Base",
     "ChatMessage",
+    "ChatTranslation",
     "ChatRead",
     "Conversation",
     "DailyPuzzlePlay",
@@ -54,6 +56,7 @@ __all__ = [
     "QuizRoyalePlayer",
     "BingoMatch",
     "ScrambleRace",
+    "TranslationUsage",
     "TypingRace",
     "ItemGrant",
     "ItemOccurrence",

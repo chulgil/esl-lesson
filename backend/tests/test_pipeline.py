@@ -47,10 +47,10 @@ EXTRACTED = {
 async def test_manual_pipeline_translate_extract_dedup(wired_db, monkeypatch):
     db = wired_db
 
-    async def fake_translate(texts):
+    async def fake_translate(texts, source_lang="en"):
         return [f"번역:{t}" for t in texts]
 
-    async def fake_extract(segments):
+    async def fake_extract(segments, source_lang="en"):
         return EXTRACTED
 
     monkeypatch.setattr(pipeline.extraction, "translate_texts", fake_translate)
@@ -99,10 +99,124 @@ async def test_manual_pipeline_translate_extract_dedup(wired_db, monkeypatch):
     assert occ_count == 4
 
 
+async def test_pipeline_youtube_transcript_uses_content_lang_priority(wired_db, monkeypatch):
+    """content.lang 기준 자막 우선순위 — ja 콘텐츠는 ("ja",) 로 1차 fetch (다국어 학습)."""
+    from app.services import youtube
+
+    db = wired_db
+    calls: list[tuple] = []
+
+    async def fake_title(video_id):
+        return "JA Title"
+
+    def fake_transcript(video_id, languages=("en",)):
+        calls.append(languages)
+        if languages == ("ja",):
+            return youtube.TranscriptResult(
+                language="ja",
+                is_generated=False,
+                snippets=[
+                    youtube.Snippet("こんにちは。", 0, 1000),
+                    youtube.Snippet("元気ですか。", 1000, 2000),
+                ],
+            )
+        raise youtube.TranscriptNotFoundError("no separate ko captions")
+
+    captured: dict = {}
+
+    async def fake_translate(texts, source_lang="en"):
+        captured["translate_source_lang"] = source_lang
+        return [f"번역:{t}" for t in texts]
+
+    async def fake_extract(segments, source_lang="en"):
+        captured["extract_source_lang"] = source_lang
+        return EXTRACTED
+
+    monkeypatch.setattr(pipeline.youtube, "fetch_title", fake_title)
+    monkeypatch.setattr(pipeline.youtube, "fetch_transcript", fake_transcript)
+    monkeypatch.setattr(pipeline.extraction, "translate_texts", fake_translate)
+    monkeypatch.setattr(pipeline.extraction, "extract_items", fake_extract)
+
+    content = Content(
+        source="youtube",
+        youtube_video_id="javid0000001",
+        title="(제목 조회 중)",
+        lang="ja",
+        youtube_license="youtube",  # 라이선스 재조회 스킵
+    )
+    db.add(content)
+    await db.commit()
+
+    await pipeline.run_pipeline(content.id)
+
+    await db.refresh(content)
+    assert content.status == "ready"
+    # 1차 fetch 는 content.lang("ja") 우선순위, en 하드코딩 아님
+    assert calls[0] == ("ja",)
+    # ja != ko 이므로 얼라인용 ko 자막도 시도(없으면 조용히 스킵)
+    assert ("ko",) in calls
+    # 번역/추출 프롬프트에도 소스 언어(ja)가 전달된다
+    assert captured["translate_source_lang"] == "ja"
+    assert captured["extract_source_lang"] == "ja"
+
+
+async def test_pipeline_ko_content_skips_translation_step(wired_db, monkeypatch):
+    """content.lang="ko" 는 번역 대상과 소스가 같아 번역 단계를 스킵한다."""
+    from app.services import youtube
+
+    db = wired_db
+    calls: list[tuple] = []
+
+    async def fake_title(video_id):
+        return "KO Title"
+
+    def fake_transcript(video_id, languages=("en",)):
+        calls.append(languages)
+        return youtube.TranscriptResult(
+            language="ko",
+            is_generated=False,
+            snippets=[youtube.Snippet("안녕하세요.", 0, 1000)],
+        )
+
+    async def fail_translate(texts, source_lang="en"):
+        raise AssertionError("ko 콘텐츠는 번역을 호출하면 안 된다")
+
+    async def fake_extract(segments, source_lang="en"):
+        return EXTRACTED
+
+    monkeypatch.setattr(pipeline.youtube, "fetch_title", fake_title)
+    monkeypatch.setattr(pipeline.youtube, "fetch_transcript", fake_transcript)
+    monkeypatch.setattr(pipeline.extraction, "translate_texts", fail_translate)
+    monkeypatch.setattr(pipeline.extraction, "extract_items", fake_extract)
+
+    content = Content(
+        source="youtube",
+        youtube_video_id="kovid0000001",
+        title="(제목 조회 중)",
+        lang="ko",
+        youtube_license="youtube",
+    )
+    db.add(content)
+    await db.commit()
+
+    await pipeline.run_pipeline(content.id)
+
+    await db.refresh(content)
+    assert content.status == "ready"
+    # 1차 fetch 만 호출 — 이미 ko 라 별도 얼라인 fetch 불필요
+    assert calls == [("ko",)]
+    segments = (
+        (await db.execute(select(TranscriptSegment).order_by(TranscriptSegment.seq)))
+        .scalars()
+        .all()
+    )
+    assert all(s.ko_text is None for s in segments)
+
+
 async def test_pipeline_marks_failed_after_retries(wired_db, monkeypatch):
     db = wired_db
 
-    async def boom(texts):
+    async def boom(texts, source_lang="en"):
         raise RuntimeError("api down")
 
     monkeypatch.setattr(pipeline.extraction, "translate_texts", boom)

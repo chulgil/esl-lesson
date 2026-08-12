@@ -23,6 +23,16 @@ const DIFFICULTY_STYLES = {
   advanced: "bg-brick-red/15 text-brick-red",
 } as const;
 
+/** 콘텐츠 언어 배지 — en 은 배지 생략해 기존 화면 유지, ja/ko 만 표시 (i18n) */
+const LANG_LABELS: Record<"ja" | "ko", string> = { ja: "일본어", ko: "한국어" };
+const LANG_FILTERS = [
+  { value: "all", label: "전체" },
+  { value: "en", label: "영어" },
+  { value: "ja", label: "일본어" },
+  { value: "ko", label: "한국어" },
+] as const;
+type LangFilter = (typeof LANG_FILTERS)[number]["value"];
+
 type Level = keyof typeof DIFFICULTY_LABELS;
 const LEVELS = Object.keys(DIFFICULTY_LABELS) as Level[];
 const LEVEL_ORDER: Record<Level, number> = {
@@ -80,6 +90,8 @@ function LibraryInner() {
     LEVELS.includes(urlLevel as Level) ? (urlLevel as Level) : "all",
   );
   const [touched, setTouched] = useState(Boolean(urlLevel));
+  // 콘텐츠 언어 필터 — 클라이언트 필터 (i18n)
+  const [langFilter, setLangFilter] = useState<LangFilter>("all");
   // "담은 것" 탭 — /my 흡수 (ux-redesign #5, ?tab=mine 딥링크·구 /my 리다이렉트 수신)
   const [tab, setTab] = useState<"all" | "mine">(
     params.get("tab") === "mine" ? "mine" : "all",
@@ -125,6 +137,7 @@ function LibraryInner() {
   // 내게 맞는 순 정렬 (fit 내림차순, 동점은 API 순서 유지) + 필터
   const visible = contents
     .filter((c) => filter === "all" || c.difficulty === filter)
+    .filter((c) => langFilter === "all" || c.lang === langFilter)
     .map((c, i) => ({ c, i, fit: fitScore(c, myLevel) }))
     .sort((a, b) => b.fit - a.fit || a.i - b.i);
 
@@ -191,6 +204,24 @@ function LibraryInner() {
             ))}
           </div>
 
+          {/* 콘텐츠 언어 필터 (i18n) — 난이도 필터와 별도 그룹 */}
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            {LANG_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => setLangFilter(f.value)}
+                className={`min-h-9 rounded-full border-2 px-3 py-1 text-xs font-bold transition ${
+                  langFilter === f.value
+                    ? "border-brick-green bg-brick-green/10 text-brick-green"
+                    : "border-ink/15 bg-white hover:border-brick-green/50"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visible.map(({ c, fit }, i) => (
               <div
@@ -220,6 +251,12 @@ function LibraryInner() {
                         className={`rounded px-1.5 py-0.5 font-bold ${DIFFICULTY_STYLES[c.difficulty]}`}
                       >
                         {DIFFICULTY_LABELS[c.difficulty]}
+                      </span>
+                    )}
+                    {/* 언어 배지 — en 은 기존 화면 유지를 위해 생략 (i18n) */}
+                    {c.lang !== "en" && (
+                      <span className="rounded bg-ink/10 px-1.5 py-0.5 font-bold">
+                        {LANG_LABELS[c.lang]}
                       </span>
                     )}
                     {/* 이해 가능 입력(i+1) 적합 — 내 레벨 ±1 + 아는 표현 60~85% */}

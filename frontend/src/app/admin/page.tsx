@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { adminApi } from "@/lib/admin-api";
+import { adminApi, type TranslationUsage } from "@/lib/admin-api";
 
 interface Stats {
   pending_items: number;
@@ -73,7 +73,48 @@ export default function AdminDashboardPage() {
           />
         </div>
       )}
+      <TranslationUsageCard />
     </section>
+  );
+}
+
+/** 번역 사용량 — 예산 소진율·엔진별 분담·오늘 호출 수 (i18n) */
+function TranslationUsageCard() {
+  const [usage, setUsage] = useState<TranslationUsage | null>(null);
+
+  useEffect(() => {
+    adminApi
+      .translationUsage()
+      .then(setUsage)
+      .catch(() => undefined);
+  }, []);
+
+  if (!usage) return null;
+
+  const pct =
+    usage.budget_chars > 0
+      ? Math.min(
+          100,
+          Math.round((usage.month_chars / usage.budget_chars) * 100),
+        )
+      : 0;
+
+  return (
+    <div className="mt-4 rounded-lg border-2 border-ink/10 bg-white p-4 shadow-sm">
+      <p className="text-xs opacity-60">번역 사용량</p>
+      <p className="mt-1 text-2xl font-bold">
+        {usage.month_chars.toLocaleString()} /{" "}
+        {usage.budget_chars.toLocaleString()}자
+        <span className="ml-2 text-sm font-normal opacity-60">
+          이번 달 · {pct}%
+        </span>
+      </p>
+      <p className="mt-2 flex flex-wrap gap-3 text-xs opacity-70">
+        <span>DeepL {usage.by_engine.deepl.toLocaleString()}자</span>
+        <span>Haiku {usage.by_engine.haiku.toLocaleString()}자</span>
+        <span>오늘 호출 {usage.today_calls}회</span>
+      </p>
+    </div>
   );
 }
 

@@ -224,6 +224,8 @@ export interface LibraryContent {
   difficulty: "beginner" | "intermediate" | "advanced" | null;
   /** 이미 내 카드가 있는 항목 비율(0~100) — 항목이 없으면 null */
   known_ratio: number | null;
+  /** 콘텐츠 언어 — 라이브러리 배지·필터 (i18n) */
+  lang: "en" | "ja" | "ko";
 }
 
 export interface AlignedWord {
@@ -239,6 +241,8 @@ export interface LibraryDetail {
   subscribed: boolean;
   youtube_license: string | null;
   youtube_video_id: string | null;
+  /** 콘텐츠 언어 (i18n) */
+  lang: "en" | "ja" | "ko";
   segments: {
     seq: number;
     start_ms: number | null;
@@ -292,6 +296,12 @@ export const studyApi = {
       featured_achievement: string | null;
       /** 내 기기 중 푸시 구독이 하나라도 있는가 — 온보딩 ③ 완료 판정 */
       push_subscribed: boolean;
+      /** 주언어 — 채팅 자동번역의 번역 대상 언어 기준 */
+      primary_lang: "ko" | "en" | "ja";
+      /** 학습언어(복수) — 주언어 제외 */
+      learning_langs: string[];
+      /** 채팅 자동번역 on/off */
+      chat_translate: boolean;
     }>("/api/settings"),
   patchSettings: (body: {
     hint_delay_seconds?: number;
@@ -300,6 +310,9 @@ export const studyApi = {
     reminder_hour?: number;
     /** 대표 업적 — "" = 해제 */
     featured_achievement?: string;
+    primary_lang?: "ko" | "en" | "ja";
+    learning_langs?: string[];
+    chat_translate?: boolean;
   }) =>
     request<{
       hint_delay_seconds: number;
@@ -309,6 +322,9 @@ export const studyApi = {
       reminder_hour: number;
       featured_achievement: string | null;
       push_subscribed: boolean;
+      primary_lang: "ko" | "en" | "ja";
+      learning_langs: string[];
+      chat_translate: boolean;
     }>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   answer: (body: {
     card_id: number;

@@ -41,6 +41,9 @@ class Content(Base, PkMixin, TimestampMixin):
     url: Mapped[str | None] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)
     title_ko: Mapped[str | None] = mapped_column(Text)
+    # 콘텐츠(자막) 언어 — en/ja/ko (docs/specs/chat-translation.md 다국어 학습).
+    # 세그먼트 en_text 필드에는 이 언어의 원문이 담긴다 (필드명은 역사적 유산)
+    lang: Mapped[str] = mapped_column(Text, default="en", server_default="en")
     status: Mapped[str] = mapped_column(Text, default="pending", server_default="pending")
     error_message: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(

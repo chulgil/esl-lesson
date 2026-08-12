@@ -37,6 +37,7 @@ from app.services import (
     vocab_network,
     weekly_report,
 )
+from app.services.langs import SUPPORTED_LANGS
 from app.services.theme_rewards import sync_theme_rewards
 from app.services.visibility import subscribed_content_ids, visible_item_clause
 
@@ -1035,6 +1036,11 @@ class SettingsPatch(BaseModel):
     levels_enabled: list[int] | None = None
     # 대표 업적 — "" = 해제 (None 은 미변경). 달성한 업적만 지정 가능
     featured_achievement: str | None = None
+    # 다국어 학습 (docs/specs/chat-translation.md) — 검증은 update_settings 에서
+    # SUPPORTED_LANGS·부분집합·primary 배제까지 함께 확인 (모델 레벨로는 표현 불가)
+    primary_lang: str | None = None
+    learning_langs: list[str] | None = None
+    chat_translate: bool | None = None
 
 
 @settings_router.get("")
@@ -1090,6 +1096,23 @@ async def update_settings(
             if body.featured_achievement not in earned:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "not_achieved")
             settings.featured_achievement = body.featured_achievement
+    if body.primary_lang is not None or body.learning_langs is not None:
+        primary = body.primary_lang if body.primary_lang is not None else settings.primary_lang
+        learning = (
+            body.learning_langs if body.learning_langs is not None else settings.learning_langs
+        )
+        invalid_learning = set(learning) - set(SUPPORTED_LANGS)
+        if (
+            primary not in SUPPORTED_LANGS
+            or invalid_learning
+            or not learning
+            or primary in learning
+        ):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_lang_settings")
+        settings.primary_lang = primary
+        settings.learning_langs = learning
+    if body.chat_translate is not None:
+        settings.chat_translate = body.chat_translate
     await db.commit()
     return _settings_dict(settings, await _push_subscribed(db, user.id))
 
@@ -1116,4 +1139,7 @@ def _settings_dict(settings: UserSettings, push_subscribed: bool) -> dict:
         "levels_enabled": settings.levels_enabled,
         "push_subscribed": push_subscribed,
         "featured_achievement": settings.featured_achievement,
+        "primary_lang": settings.primary_lang,
+        "learning_langs": settings.learning_langs,
+        "chat_translate": settings.chat_translate,
     }

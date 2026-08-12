@@ -8,6 +8,7 @@ import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
+import { TranslationLine } from "@/components/chat/TranslationLine";
 import { setChatPanelVisible } from "@/lib/chat-signals";
 import { BlankSheet, ExcelChrome, fakeFilename } from "./ExcelChrome";
 import type { ChatSkinProps } from "./types";
@@ -171,6 +172,10 @@ export function ExcelSkin(p: ChatSkinProps) {
                   <span className="break-words whitespace-pre-wrap">
                     <LinkifiedText text={m.body} />
                   </span>
+                  <TranslationLine
+                    translation={m.translation}
+                    variant="excel"
+                  />
                 </div>
               );
             })}
