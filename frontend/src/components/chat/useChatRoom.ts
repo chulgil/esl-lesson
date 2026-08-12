@@ -42,8 +42,11 @@ export function useChatRoom(otherId: number) {
   );
   const [otherRead, setOtherRead] = useState(0);
   const [typing, setTyping] = useState(false);
-  // 이 대화의 자동번역 on/off — WS 로 새로 도착한 메시지의 번역을 조회할지 판단
+  // 이 대화의 자동번역 on/off — WS 로 새로 도착한 메시지의 번역을 조회할지 판단.
+  // 범위(내 글/상대 글)는 설정에서 개별 체크 (2026-08-12)
   const [translate, setTranslate] = useState(false);
+  const [translateTheirs, setTranslateTheirs] = useState(false);
+  const [translateMine, setTranslateMine] = useState(false);
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [input, setInput] = useState("");
   const [attachedItem, setAttachedItem] = useState<ShareableItem | null>(null);
@@ -114,6 +117,8 @@ export function useChatRoom(otherId: number) {
         setMessages(res.items);
         setOnline(res.online);
         setTranslate(res.translate);
+        setTranslateMine(res.translate_mine);
+        setTranslateTheirs(res.translate_theirs);
         if (res.peer) setPeerName(res.peer.name);
         const reads = res.reads[String(otherId)];
         if (reads) setOtherRead(reads);
@@ -165,6 +170,8 @@ export function useChatRoom(otherId: number) {
         });
         setOnline(res.online);
         setTranslate(res.translate);
+        setTranslateMine(res.translate_mine);
+        setTranslateTheirs(res.translate_theirs);
         const reads = res.reads[String(otherId)];
         if (reads) setOtherRead(reads);
         // 패널을 접어둔(위장) 동안은 읽음 처리 보류 — 배지·알림이 살아야 한다
@@ -212,8 +219,9 @@ export function useChatRoom(otherId: number) {
         // 접힌(위장) 패널에서는 읽음 보류 — 다시 펼치면 chat.resync 가 처리
         if (isChatPanelVisible()) markReadAndSignal();
         if (stickBottom.current) requestAnimationFrame(scrollToBottom);
-        // WS 는 번역을 실어오지 않는다(비동기 완료 전 도착) — 켜져 있으면 1회 조회
-        if (translate) {
+        // WS 는 번역을 실어오지 않는다(비동기 완료 전 도착) — 상대 글 번역이
+        // 켜져 있을 때만 1회 조회 (범위 밖이면 서버도 null 을 주지만 호출 자체를 아낀다)
+        if (translate && translateTheirs) {
           chatApi
             .translation(msg.id)
             .then((res) => {
@@ -255,7 +263,7 @@ export function useChatRoom(otherId: number) {
         resync();
       }
     });
-  }, [otherId, scrollToBottom, markReadAndSignal, resync, translate]);
+  }, [otherId, scrollToBottom, markReadAndSignal, resync, translate, translateTheirs]);
 
   // 내 메시지 삭제 — 낙관적 치환 후 서버 확정 (실패 시 재동기화로 복원)
   const onDeleteMessage = useCallback(
@@ -412,6 +420,20 @@ export function useChatRoom(otherId: number) {
           prev.some((m) => m.id === saved.id) ? prev : [...prev, saved],
         );
         if (stickBottom.current) requestAnimationFrame(scrollToBottom);
+        // 내 글 번역 — 전송 응답에는 번역이 없다 (2026-08-12): 켜져 있으면 1회 조회
+        if (translate && translateMine) {
+          chatApi
+            .translation(saved.id)
+            .then((res) => {
+              if (!res.translation) return;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === saved.id ? { ...m, translation: res.translation } : m,
+                ),
+              );
+            })
+            .catch(() => {});
+        }
       } catch (e) {
         setPending((prev) =>
           prev.map((x) =>
@@ -423,7 +445,7 @@ export function useChatRoom(otherId: number) {
         }
       }
     },
-    [input, attachedItem, attachedImage, replyDraft, otherId, scrollToBottom],
+    [input, attachedItem, attachedImage, replyDraft, otherId, scrollToBottom, translate, translateMine],
   );
 
   const skinProps = {

@@ -61,3 +61,7 @@ class UserSettings(Base):
     learning_langs: Mapped[list[str]] = mapped_column(StrList, default=lambda: ["en"])
     # 채팅 자동번역 ON/OFF — 메시지 밑 번역 줄 + 스피커 (기본 끔, 설정에서 켬)
     chat_translate: Mapped[bool] = mapped_column(default=False, server_default="false")
+    # 번역 범위 — 내 글/상대 글 개별 체크 (2026-08-12). 기본은 내 글만:
+    # "내가 쓴 한글이 학습언어로 어떻게 되는지" 가 이 기능의 1차 목표
+    translate_mine: Mapped[bool] = mapped_column(default=True, server_default="true")
+    translate_theirs: Mapped[bool] = mapped_column(default=False, server_default="false")

@@ -302,6 +302,8 @@ export const studyApi = {
       learning_langs: string[];
       /** 채팅 자동번역 on/off */
       chat_translate: boolean;
+      translate_mine: boolean;
+      translate_theirs: boolean;
     }>("/api/settings"),
   patchSettings: (body: {
     hint_delay_seconds?: number;
@@ -313,6 +315,8 @@ export const studyApi = {
     primary_lang?: "ko" | "en" | "ja";
     learning_langs?: string[];
     chat_translate?: boolean;
+    translate_mine?: boolean;
+    translate_theirs?: boolean;
   }) =>
     request<{
       hint_delay_seconds: number;
@@ -325,6 +329,8 @@ export const studyApi = {
       primary_lang: "ko" | "en" | "ja";
       learning_langs: string[];
       chat_translate: boolean;
+      translate_mine: boolean;
+      translate_theirs: boolean;
     }>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   answer: (body: {
     card_id: number;

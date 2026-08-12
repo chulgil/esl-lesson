@@ -49,13 +49,21 @@ async def unread_total(
 TRANSLATE_WINDOW = 30  # 캐시 위주라 저비용이지만, 조회당 엔진 호출 상한은 둔다
 
 
+def _in_scope(msg: dict, viewer_id: int, settings: UserSettings) -> bool:
+    """번역 범위 — 내 글/상대 글 개별 체크 (2026-08-12 요청, 기본 내 글만)."""
+    mine = msg["sender_id"] == viewer_id
+    return settings.translate_mine if mine else settings.translate_theirs
+
+
 async def _with_translations(
     db: AsyncSession, viewer_id: int, items: list[dict], settings: UserSettings
 ) -> list[dict]:
-    """최신 30개(삭제 제외, 본문 있는 것)만 번역 동봉 — 새 dict 로 반환해 인프로세스
-    캐시(_recent)의 원본 dict 를 건드리지 않는다(뷰어마다 타깃 언어가 달라
-    공유 캐시를 오염시키면 안 됨)."""
-    candidates = [m for m in items if not m["deleted"] and m["body"]]
+    """최신 30개(삭제 제외, 본문 있는 것, 범위 내)만 번역 동봉 — 새 dict 로 반환해
+    인프로세스 캐시(_recent)의 원본 dict 를 건드리지 않는다(뷰어마다 타깃 언어가
+    달라 공유 캐시를 오염시키면 안 됨)."""
+    candidates = [
+        m for m in items if not m["deleted"] and m["body"] and _in_scope(m, viewer_id, settings)
+    ]
     window_ids = {m["id"] for m in candidates[-TRANSLATE_WINDOW:]}
     out = []
     for m in items:
@@ -84,6 +92,9 @@ async def messages(
     peer = {"user_id": other.id, "name": other.nickname} if other is not None else None
     viewer_settings = await db.get(UserSettings, user.id)
     translate_on = bool(viewer_settings and viewer_settings.chat_translate)
+    # 범위 체크가 둘 다 꺼져 있으면 실질 off — 클라이언트가 WS 수신분 조회를 스킵한다
+    scope_mine = bool(translate_on and viewer_settings.translate_mine)
+    scope_theirs = bool(translate_on and viewer_settings.translate_theirs)
     if conv is None:
         return {
             "items": [],
@@ -91,6 +102,8 @@ async def messages(
             "online": invite_hub.online(other_id),
             "peer": peer,
             "translate": translate_on,
+            "translate_mine": scope_mine,
+            "translate_theirs": scope_theirs,
         }
     items = await chat.get_messages(db, user.id, other_id, before=before, limit=limit)
     reads = await chat.get_read_positions(db, conv.id)
@@ -104,6 +117,8 @@ async def messages(
         "online": invite_hub.online(other_id),
         "peer": peer,
         "translate": translate_on,
+        "translate_mine": scope_mine,
+        "translate_theirs": scope_theirs,
     }
 
 
@@ -124,6 +139,9 @@ async def message_translation(
     if not (viewer_settings and viewer_settings.chat_translate):
         return {"translation": None}
     if msg.deleted_at is not None or not msg.body:
+        return {"translation": None}
+    # 범위 체크 — 내 글/상대 글 개별 설정 (2026-08-12)
+    if not _in_scope({"sender_id": msg.sender_id}, user.id, viewer_settings):
         return {"translation": None}
     result = await translation_service.translate_chat(db, user.id, msg.body, viewer_settings)
     await db.commit()

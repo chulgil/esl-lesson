@@ -178,6 +178,75 @@ async def test_single_message_translation_null_when_setting_off(client, db_sessi
     assert res.json()["translation"] is None
 
 
+async def test_scope_default_translates_only_my_messages(client, db_session, monkeypatch):
+    """기본 범위 = 내 글만 (2026-08-12 요청) — 상대 글은 번역이 붙지 않는다."""
+    a, b = await two_friends(client, db_session)
+    await stub_translation(
+        monkeypatch, {"mine msg": ("내 글", "haiku"), "theirs msg": ("상대 글", "haiku")}
+    )
+    await login(client, db_session, b)
+    await client.post("/api/chat/messages", json=send_body(a.id, "theirs msg", "cid-sc00001"))
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "mine msg", "cid-sc00002"))
+    await enable_translate(db_session, a.id)
+
+    res = (await client.get(f"/api/chat/with/{b.id}/messages")).json()
+    assert res["translate_mine"] is True and res["translate_theirs"] is False
+    mine = next(m for m in res["items"] if m["body"] == "mine msg")
+    theirs = next(m for m in res["items"] if m["body"] == "theirs msg")
+    assert mine["translation"] == {"lang": "ko", "text": "내 글"}
+    assert theirs["translation"] is None
+
+
+async def test_scope_checkboxes_control_each_side(client, db_session, monkeypatch):
+    """둘 다 체크 = 전체 번역 / 상대만 체크 = 상대 글만 (단건 엔드포인트 포함)."""
+    a, b = await two_friends(client, db_session)
+    await stub_translation(monkeypatch, {"mine2": ("m", "haiku"), "theirs2": ("t", "haiku")})
+    await login(client, db_session, b)
+    sent_theirs = (
+        await client.post("/api/chat/messages", json=send_body(a.id, "theirs2", "cid-sc00003"))
+    ).json()
+    await login(client, db_session, a)
+    await client.post("/api/chat/messages", json=send_body(b.id, "mine2", "cid-sc00004"))
+    settings = await enable_translate(db_session, a.id)
+
+    # 둘 다 체크 — 전체 번역 (기존 동작)
+    settings.translate_theirs = True
+    await db_session.commit()
+    res = (await client.get(f"/api/chat/with/{b.id}/messages")).json()
+    assert res["translate_theirs"] is True
+    assert all(
+        m["translation"] is not None for m in res["items"] if m["body"] in ("mine2", "theirs2")
+    )
+
+    # 상대 글만 체크 — 내 글은 번역 안 붙음, 단건 엔드포인트도 동일 규칙
+    settings.translate_mine = False
+    await db_session.commit()
+    res = (await client.get(f"/api/chat/with/{b.id}/messages")).json()
+    mine = next(m for m in res["items"] if m["body"] == "mine2")
+    assert mine["translation"] is None
+    single = await client.get(f"/api/chat/messages/{sent_theirs['id']}/translation")
+    assert single.json()["translation"] == {"lang": "ko", "text": "t"}
+
+
+async def test_single_message_translation_scope_blocks_theirs_by_default(
+    client, db_session, monkeypatch
+):
+    """WS 수신분 단건 조회 — 기본(내 글만)에서는 상대 글이 null."""
+    a, b = await two_friends(client, db_session)
+    await stub_translation(monkeypatch, {"from peer": ("상대", "haiku")})
+    await login(client, db_session, b)
+    sent = (
+        await client.post("/api/chat/messages", json=send_body(a.id, "from peer", "cid-sc00005"))
+    ).json()
+    await enable_translate(db_session, a.id)
+    await login(client, db_session, a)
+
+    res = await client.get(f"/api/chat/messages/{sent['id']}/translation")
+    assert res.status_code == 200
+    assert res.json()["translation"] is None
+
+
 async def test_single_message_translation_null_for_deleted(client, db_session, monkeypatch):
     a, b = await two_friends(client, db_session)
     await stub_translation(monkeypatch, {"del me": ("안녕", "haiku")})

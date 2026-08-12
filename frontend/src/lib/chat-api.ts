@@ -79,6 +79,8 @@ export const chatApi = {
       peer: { user_id: number; name: string } | null;
       /** 이 대화에 자동번역이 켜져 있는가 — WS 수신 메시지 번역 조회 여부 판단 */
       translate: boolean;
+      translate_mine: boolean;
+      translate_theirs: boolean;
     }>(`/api/chat/with/${userId}/messages${before ? `?before=${before}` : ""}`),
   /** WS 로 도착한 메시지의 번역 — 비동기 완료 후 1회 조회 (i18n) */
   translation: (id: number) =>

@@ -11,6 +11,8 @@
 | primary_lang | ko | 주언어(모국어) — 번역 도착지 |
 | learning_langs | ["en"] | 학습언어(복수) — 주언어 메시지의 번역 목적지(첫 항목) |
 | chat_translate | false | 채팅 자동번역 ON/OFF |
+| translate_mine | true | 내가 쓴 글 번역 (2026-08-12 — 기본, 1차 목표) |
+| translate_theirs | false | 상대가 쓴 글 번역 — 둘 다 체크하면 전체 번역 |
 
 번역 방향: 메시지 언어(휴리스틱 감지 — 한글→ko, 가나→ja, 그 외→en)가
 주언어면 → 학습언어[0], 아니면 → 주언어. 같으면 번역 없음.

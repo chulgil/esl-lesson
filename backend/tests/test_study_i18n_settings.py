@@ -10,6 +10,20 @@ async def test_settings_default_values(client, db_session):
     assert body["primary_lang"] == "ko"
     assert body["learning_langs"] == ["en"]
     assert body["chat_translate"] is False
+    # 번역 범위 기본: 내 글만 (2026-08-12 요청)
+    assert body["translate_mine"] is True
+    assert body["translate_theirs"] is False
+
+
+async def test_settings_patch_translate_scope(client, db_session):
+    await login(client, db_session)
+    res = await client.patch(
+        "/api/settings", json={"translate_mine": False, "translate_theirs": True}
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["translate_mine"] is False
+    assert body["translate_theirs"] is True
 
 
 async def test_settings_patch_updates_lang_fields(client, db_session):
