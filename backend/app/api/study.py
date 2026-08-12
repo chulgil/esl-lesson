@@ -810,6 +810,43 @@ async def get_quests(
     return await retention.compute_quests(db, user.id)
 
 
+@router.get("/my-phrases")
+async def my_phrases(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """내가 쓰는 말 덱 — lazy 동기화 후 현황 (docs/specs/my-phrases.md).
+
+    채팅 발화(번역 캐시 쌍)를 개인 콘텐츠 항목으로 합류 — 복습·문장 게임에
+    자동 출제된다. 조회 시 동기화(멱등)라 별도 배치가 없다."""
+    from app.services import my_phrases as my_phrases_service
+
+    settings = await get_user_settings(db, user)
+    deck, added = await my_phrases_service.sync_my_phrases(db, user, settings)
+    await db.commit()
+
+    total = (
+        await db.execute(
+            select(func.count(ItemOccurrence.id)).where(ItemOccurrence.content_id == deck.id)
+        )
+    ).scalar_one()
+    recent = (
+        await db.execute(
+            select(LearningItem.en_text, LearningItem.ko_text)
+            .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+            .where(ItemOccurrence.content_id == deck.id)
+            .order_by(ItemOccurrence.id.desc())
+            .limit(5)
+        )
+    ).all()
+    return {
+        "content_id": deck.id,
+        "total": total,
+        "added_now": added,
+        "recent": [{"en": en, "ko": ko or ""} for en, ko in recent],
+    }
+
+
 @router.get("/leaderboard")
 async def study_leaderboard(
     db: Annotated[AsyncSession, Depends(get_db)],

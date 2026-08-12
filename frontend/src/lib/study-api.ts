@@ -360,6 +360,14 @@ export const studyApi = {
       "/api/study/achievements",
     ),
   leaderboard: () => request<{ items: StudyRank[] }>("/api/study/leaderboard"),
+  /** 내가 쓰는 말 덱 — 조회 시 lazy 동기화 (docs/specs/my-phrases.md) */
+  myPhrases: () =>
+    request<{
+      content_id: number;
+      total: number;
+      added_now: number;
+      recent: { en: string; ko: string }[];
+    }>("/api/study/my-phrases"),
   quests: () => request<QuestBoard>("/api/study/quests"),
   stats: () => request<Stats>("/api/study/stats"),
   weeklyReport: () => request<WeeklyReport>("/api/study/weekly-report"),

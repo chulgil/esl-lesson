@@ -7,6 +7,7 @@ import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { AchievementBadges } from "@/components/study/AchievementBadges";
 import { CardCollection } from "@/components/study/CardCollection";
 import { LongTermMemoryCard } from "@/components/study/LongTermMemoryCard";
+import { MyPhrasesCard } from "@/components/study/MyPhrasesCard";
 import { WeeklyReportCard } from "@/components/study/WeeklyReportCard";
 import { examApi, type OpenExam } from "@/lib/exam-api";
 import { friendsApi } from "@/lib/friends-api";
@@ -199,6 +200,9 @@ export default function StudyHubPage() {
           )}
         </section>
       )}
+
+      {/* 내가 쓰는 말 덱 — 채팅 발화 기반 학습 (docs/specs/my-phrases.md) */}
+      <MyPhrasesCard />
 
       {/* 시험 도전 — 준비된 실력을 확인하고 XP·랭킹·업적으로 보상 (2026-07-31 goal) */}
       {openExams.length > 0 && (
