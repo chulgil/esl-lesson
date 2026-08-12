@@ -184,6 +184,38 @@ async def test_new_item_anonymizes_names_in_original(client, db_session, monkeyp
     assert res["recent"][0]["ko"] == "민지 팀장님 오늘 회의 몇 시예요?"  # 이름만 치환, 직급 유지
 
 
+async def test_refresh_updates_texts_in_place(client, db_session, monkeypatch):
+    """품질 새로고침 — 항목 ID 유지한 채 실명 치환 + 재번역으로 텍스트 갱신."""
+    from app.services import translation as translation_service
+
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await send(client, b.id, "혜인님 담에 커피 마셔요", "cid-mp00091")
+    await seed_translation(
+        db_session, "혜인님 담에 커피 마셔요", "Let's have coffee tomorrow, Hye-in"
+    )
+    first = (await client.get("/api/study/my-phrases/items")).json()["items"]
+    old_id = first[0]["item_id"]
+
+    async def fake_anonymize(text, lang):
+        return text.replace("혜인", "민지")
+
+    async def fake_chain(text, target):
+        return "Let's grab coffee next time, Hailey", "haiku"
+
+    monkeypatch.setattr(translation_service, "anonymize_names", fake_anonymize)
+    monkeypatch.setattr(translation_service, "_translate_via_chain", fake_chain)
+
+    res = await client.post("/api/study/my-phrases/refresh")
+    assert res.status_code == 200
+    assert res.json()["updated"] == 1
+
+    items = (await client.get("/api/study/my-phrases/items")).json()["items"]
+    assert items[0]["item_id"] == old_id  # ID 유지 — 복습 진행도 보존
+    assert items[0]["en"] == "Let's grab coffee next time, Hailey"
+    assert items[0]["ko"] == "민지님 담에 커피 마셔요"
+
+
 async def test_deck_item_reuses_global_normalized_key(client, db_session):
     """같은 번역문이 이미 전역 항목으로 있으면 재사용 — Occurrence 만 연결."""
     a, b = await two_friends(client, db_session)

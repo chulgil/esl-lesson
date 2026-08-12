@@ -11,6 +11,7 @@ export default function MyPhrasesEditPage() {
     { item_id: number; en: string; ko: string }[] | null
   >(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,6 +38,19 @@ export default function MyPhrasesEditPage() {
     setBusy(null);
   }
 
+  async function refresh() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await studyApi.refreshMyPhrases();
+      const res = await studyApi.myPhrasesItems();
+      setItems(res.items);
+    } catch {
+      setError("새로고침에 실패했어요 — 잠시 후 다시 시도해 주세요");
+    }
+    setRefreshing(false);
+  }
+
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-4 py-8 sm:px-10">
       <h1 className="font-hand text-3xl font-bold">
@@ -46,12 +60,23 @@ export default function MyPhrasesEditPage() {
         학습하고 싶지 않은 문장은 빼세요 — 뺀 문장은 복습·게임에서 사라지고,
         같은 말을 다시 채팅해도 다시 수집되지 않아요.
       </p>
-      <Link
-        href="/study"
-        className="mt-3 inline-flex min-h-10 items-center rounded-md border-2 border-ink/20 bg-white px-3 text-sm font-bold transition hover:border-ink/50"
-      >
-        ← 학습으로
-      </Link>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link
+          href="/study"
+          className="inline-flex min-h-10 items-center rounded-md border-2 border-ink/20 bg-white px-3 text-sm font-bold transition hover:border-ink/50"
+        >
+          ← 학습으로
+        </Link>
+        {/* 품질 새로고침 — 번역 엔진 개선분을 기존 문장에 적용 (진행도 유지) */}
+        <button
+          type="button"
+          disabled={refreshing}
+          onClick={refresh}
+          className="inline-flex min-h-10 items-center rounded-md border-2 border-brick-blue/50 bg-white px-3 text-sm font-bold text-brick-blue transition hover:border-brick-blue disabled:opacity-50"
+        >
+          {refreshing ? "새로고침 중... (수십 초)" : "번역 품질 새로고침"}
+        </button>
+      </div>
 
       {error && <p className="mt-4 text-sm text-brick-red">{error}</p>}
 

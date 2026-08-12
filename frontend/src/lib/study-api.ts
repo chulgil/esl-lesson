@@ -376,6 +376,11 @@ export const studyApi = {
     }>("/api/study/my-phrases/items"),
   removeMyPhrase: (itemId: number) =>
     request<void>(`/api/study/my-phrases/${itemId}`, { method: "DELETE" }),
+  /** 번역 품질 새로고침 — 엔진 개선분을 기존 문장에 적용 (ID 유지) */
+  refreshMyPhrases: () =>
+    request<{ updated: number }>("/api/study/my-phrases/refresh", {
+      method: "POST",
+    }),
   quests: () => request<QuestBoard>("/api/study/quests"),
   stats: () => request<Stats>("/api/study/stats"),
   weeklyReport: () => request<WeeklyReport>("/api/study/weekly-report"),
