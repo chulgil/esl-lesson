@@ -35,7 +35,9 @@
 - **멱등 동기화**: 학습 탭 카드 조회 시 lazy sync (theme_rewards 패턴).
   normalized_key(번역문 lower) get-or-create — 전역 항목 dedup 과 동일 원칙,
   이미 있으면 Occurrence 만 연결. 재실행해도 중복 없음
-- 제외하고 싶은 문장: 기존 카드 일시정지(suspend)로 학습 큐에서 제외
+- **편집(빼기)**: /study/phrases 에서 문장 빼기 — Occurrence 삭제 + 제외
+  원장(phrase_exclusions, 원문 정규화 키)에 기록되어 **재동기화에도 돌아오지
+  않는다** (2026-08-12 요청). 복습 큐·게임 풀에서도 가시성 규칙상 함께 제외
 
 ## 데이터 모델 (신규 테이블 없음)
 

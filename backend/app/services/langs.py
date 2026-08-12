@@ -41,3 +41,15 @@ def detect_lang(text: str) -> str:
 def normalize_text_key(text: str, max_len: int = 200) -> str:
     """공백 접기 + 소문자 + 절단 — tts_audio.text_key 와 같은 원칙의 캐시 키."""
     return re.sub(r"\s+", " ", text).strip().lower()[:max_len]
+
+
+_TRANSLATABLE = re.compile(r"[가-힣぀-ヿ一-鿿]|[A-Za-z]{2,}")
+
+
+def has_translatable_text(text: str) -> bool:
+    """이모티콘·초성(ㅋㅋ)·기호만 있는 메시지는 번역 대상이 아니다.
+
+    2026-08-12 실측: "(๑˃ᴗ˂)ﻭ"·"ㅋㅋㅋㅋ" 까지 번역을 시도해 캐시가 깨진
+    음차로 오염됐다. CJK 문자 1개 이상 또는 연속 라틴 2자 이상이 있어야 문장.
+    """
+    return bool(_TRANSLATABLE.search(text))

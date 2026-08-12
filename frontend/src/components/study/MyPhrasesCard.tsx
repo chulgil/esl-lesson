@@ -65,6 +65,13 @@ export function MyPhrasesCard() {
             >
               내 말투로 학습 ({data.total}문장)
             </Link>
+            {/* 편집 — 빼고 싶은 문장 관리 (2026-08-12 요청) */}
+            <Link
+              href="/study/phrases"
+              className="inline-flex min-h-10 items-center rounded-md border-2 border-ink/20 bg-white px-3 text-sm font-bold transition hover:border-ink/50"
+            >
+              편집
+            </Link>
             <span className="text-xs opacity-50">
               게임에도 자동 출제 — 어제 내가 한 말이 문제로 나와요
             </span>

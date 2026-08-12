@@ -146,47 +146,58 @@ async def test_daily_user_limit_exceeded_returns_none(db_session, monkeypatch):
     assert result2 == {"lang": "ko", "text": "x"}
 
 
-# --- 엔진 체인: DeepL → Haiku 폴백 -------------------------------------------------
+# --- 엔진 체인: Haiku 우선 → DeepL 폴백 (2026-08-12 실측 감사로 교체) --------------
 
 
-async def test_deepl_used_when_configured(db_session, monkeypatch):
+async def test_haiku_used_first(db_session, monkeypatch):
+    """품질 우선 — 학습 재료가 되는 번역이라 LLM(원어민 캐주얼 프롬프트)이 1순위."""
     monkeypatch.setattr(get_settings(), "deepl_api_key", "test-key")
 
-    async def fake_deepl(text, target, api_key):
-        assert api_key == "test-key"
+    async def fake_haiku(text, target):
         return "hi"
 
-    async def boom_haiku(text, target):
-        raise AssertionError("haiku should not be called when deepl succeeds")
+    async def boom_deepl(text, target, api_key):
+        raise AssertionError("deepl should not be called when haiku succeeds")
 
-    monkeypatch.setattr(translation, "_call_deepl", fake_deepl)
-    monkeypatch.setattr(translation, "_call_haiku", boom_haiku)
+    monkeypatch.setattr(translation, "_call_haiku", fake_haiku)
+    monkeypatch.setattr(translation, "_call_deepl", boom_deepl)
 
     result = await translation.translate_chat(db_session, 7, "안녕", settings_of())
     assert result == {"lang": "en", "text": "hi"}
 
     row = (await db_session.execute(select(ChatTranslation))).scalar_one()
-    assert row.engine == "deepl"
+    assert row.engine == "haiku"
     usage = (await db_session.execute(select(TranslationUsage))).scalar_one()
-    assert usage.engine == "deepl" and usage.user_id == 7 and usage.chars == len("안녕")
+    assert usage.engine == "haiku" and usage.user_id == 7 and usage.chars == len("안녕")
 
 
-async def test_deepl_failure_falls_back_to_haiku(db_session, monkeypatch):
+async def test_haiku_failure_falls_back_to_deepl(db_session, monkeypatch):
     monkeypatch.setattr(get_settings(), "deepl_api_key", "test-key")
 
-    async def failing_deepl(text, target, api_key):
-        raise RuntimeError("deepl down")
+    async def failing_haiku(text, target):
+        raise RuntimeError("anthropic down")
 
-    async def fake_haiku(text, target):
+    async def fake_deepl(text, target, api_key):
         return "hi"
 
-    monkeypatch.setattr(translation, "_call_deepl", failing_deepl)
-    monkeypatch.setattr(translation, "_call_haiku", fake_haiku)
+    monkeypatch.setattr(translation, "_call_haiku", failing_haiku)
+    monkeypatch.setattr(translation, "_call_deepl", fake_deepl)
 
     result = await translation.translate_chat(db_session, 1, "안녕", settings_of())
     assert result == {"lang": "en", "text": "hi"}
     row = (await db_session.execute(select(ChatTranslation))).scalar_one()
-    assert row.engine == "haiku"
+    assert row.engine == "deepl"
+
+
+async def test_emoji_and_jamo_only_skipped(db_session, monkeypatch):
+    """이모티콘·초성 전용 메시지는 번역하지 않는다 (2026-08-12 실측 — 음차 오염)."""
+
+    async def boom_chain(text, target):
+        raise AssertionError("engine must not be called for non-translatable text")
+
+    monkeypatch.setattr(translation, "_translate_via_chain", boom_chain)
+    for text in ["(๑˃ᴗ˂)ﻭ", "ㅋㅋㅋㅋㅋ", "♥", "T_T"]:
+        assert await translation.translate_chat(db_session, 1, text, settings_of()) is None
 
 
 async def test_no_deepl_key_goes_straight_to_haiku(db_session, monkeypatch):

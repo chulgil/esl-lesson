@@ -16,6 +16,7 @@ from app.models import (
     ContentSubscription,
     ItemOccurrence,
     LearningItem,
+    PhraseExclusion,
 )
 from app.models.user import User, UserSettings
 from app.services.langs import detect_lang, normalize_text_key
@@ -95,10 +96,18 @@ async def sync_my_phrases(
         first, n = counts.get(key, (text, 0))
         counts[key] = (first, n + 1)
 
+    # 사용자가 뺀 문장은 재수집하지 않는다 (my-phrases.md 편집)
+    excluded = set(
+        (
+            await db.execute(
+                select(PhraseExclusion.text_key).where(PhraseExclusion.user_id == user.id)
+            )
+        ).scalars()
+    )
     accepted = [
         (key, original)
         for key, (original, n) in counts.items()
-        if n >= 2 or len(original) >= SOLO_MIN_CHARS
+        if key not in excluded and (n >= 2 or len(original) >= SOLO_MIN_CHARS)
     ][:CANDIDATE_CAP]
     if not accepted:
         return deck, 0
@@ -151,3 +160,43 @@ async def sync_my_phrases(
     if added:
         await db.flush()
     return deck, added
+
+
+async def exclude_phrase(db: AsyncSession, user: User, item_id: int) -> bool:
+    """덱에서 문장 빼기 — Occurrence 삭제 + 원문 키를 제외 원장에 기록.
+
+    제외 키는 원문(ko_text) 정규화 키 — 번역이 바뀌어도 같은 발화는 계속
+    제외된다. 카드(FSRS)는 남지만 항목이 내 콘텐츠에서 빠져 가시성 규칙상
+    복습 큐·게임 풀에서 함께 사라진다. 커밋은 호출자 책임.
+    """
+    deck = (
+        await db.execute(
+            select(Content).where(Content.source == "chat", Content.created_by == user.id)
+        )
+    ).scalar_one_or_none()
+    if deck is None:
+        return False
+    occurrence = (
+        await db.execute(
+            select(ItemOccurrence).where(
+                ItemOccurrence.item_id == item_id, ItemOccurrence.content_id == deck.id
+            )
+        )
+    ).scalar_one_or_none()
+    if occurrence is None:
+        return False
+    item = await db.get(LearningItem, item_id)
+    await db.delete(occurrence)
+    if item is not None and item.ko_text:
+        key = normalize_text_key(item.ko_text)
+        exists = (
+            await db.execute(
+                select(PhraseExclusion.id).where(
+                    PhraseExclusion.user_id == user.id, PhraseExclusion.text_key == key
+                )
+            )
+        ).scalar_one_or_none()
+        if exists is None:
+            db.add(PhraseExclusion(user_id=user.id, text_key=key))
+    await db.flush()
+    return True

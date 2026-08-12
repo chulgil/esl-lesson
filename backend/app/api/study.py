@@ -99,6 +99,11 @@ async def get_queue(
         content = await get_subscribed_content(db, content_id, user)
         deck = {"content_id": content.id, "title": content.title}
         deck_scope = [content_item_clause(content.id)]
+        if content.source == "chat":
+            # 내가 쓰는 말 덱은 전부 문장(레벨 4) — 기본 학습 레벨(1·2)이
+            # 걸러내면 항상 빈 세션이 된다 (2026-08-12 보고). 이 덱 한정
+            # 학습은 레벨 필터를 풀어 덱의 항목을 그대로 낸다
+            types = list(ITEM_TYPE_LEVEL.keys())
 
     if not types:
         return {"questions": [], "total_due": 0, "introduced_today": 0, "deck": deck}
@@ -845,6 +850,46 @@ async def my_phrases(
         "added_now": added,
         "recent": [{"en": en, "ko": ko or ""} for en, ko in recent],
     }
+
+
+@router.get("/my-phrases/items")
+async def my_phrases_items(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """편집용 전체 목록 — 문장 빼기 화면 (my-phrases.md 편집)."""
+    from app.services import my_phrases as my_phrases_service
+
+    settings = await get_user_settings(db, user)
+    deck, _ = await my_phrases_service.sync_my_phrases(db, user, settings)
+    await db.commit()
+    rows = (
+        await db.execute(
+            select(LearningItem.id, LearningItem.en_text, LearningItem.ko_text)
+            .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+            .where(ItemOccurrence.content_id == deck.id)
+            .order_by(ItemOccurrence.id.desc())
+        )
+    ).all()
+    return {
+        "content_id": deck.id,
+        "items": [{"item_id": i, "en": en, "ko": ko or ""} for i, en, ko in rows],
+    }
+
+
+@router.delete("/my-phrases/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_my_phrase(
+    item_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """문장 빼기 — 제외 원장에 기록되어 재동기화에도 돌아오지 않는다."""
+    from app.services import my_phrases as my_phrases_service
+
+    removed = await my_phrases_service.exclude_phrase(db, user, item_id)
+    if not removed:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "phrase_not_found")
+    await db.commit()
 
 
 @router.get("/leaderboard")
