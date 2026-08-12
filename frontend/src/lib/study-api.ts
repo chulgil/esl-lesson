@@ -263,6 +263,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const detail = await res.json().catch(() => null);
     throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`);
   }
+  // 204 No Content — 본문이 없어 json() 이 던진다 (2026-08-12 "빼기 미반영"
+  // 실원인: 삭제 성공이 파싱 실패로 실패 처리됨)
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return (await res.json()) as T;
 }
 

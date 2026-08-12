@@ -23,7 +23,9 @@ from app.services import translation as translation_service
 from app.services.langs import detect_lang, normalize_text_key
 
 MIN_CHARS = 4  # "ㅋㅋ"·"네" 제외
-SOLO_MIN_CHARS = 6  # 1회 사용도 채택되는 문장 길이 — 그 미만은 빈도 2회 필요
+# 채택 = 빈도 2회 이상 — "자주 쓰는 말"의 이름값 (2026-08-12 기획 점검:
+# 길이 조건으로 1회 발화가 올라가던 규칙 제거. 한 번 쓴 말은 아직 '내 말'이 아니다)
+MIN_FREQUENCY = 2
 CANDIDATE_CAP = 200  # 동기화당 채택 상한 (폭주 방지)
 MESSAGE_SCAN_LIMIT = 2000  # 최근 메시지 스캔 창
 DECK_TITLE = "내가 쓰는 말"
@@ -108,7 +110,7 @@ async def sync_my_phrases(
     accepted = [
         (key, original)
         for key, (original, n) in counts.items()
-        if key not in excluded and (n >= 2 or len(original) >= SOLO_MIN_CHARS)
+        if key not in excluded and n >= MIN_FREQUENCY
     ][:CANDIDATE_CAP]
     if not accepted:
         return deck, 0

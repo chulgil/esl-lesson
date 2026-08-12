@@ -32,6 +32,7 @@ async def test_sync_creates_deck_and_is_idempotent(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "오늘 저녁에 뭐 먹을까?", "cid-mp00001")
+    await send(client, b.id, "오늘 저녁에 뭐 먹을까?", "cid-mp00001b")
     await seed_translation(db_session, "오늘 저녁에 뭐 먹을까?", "What should we eat tonight?")
 
     res = await client.get("/api/study/my-phrases")
@@ -66,8 +67,10 @@ async def test_collect_filters_noise(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "네", "cid-mp00011")  # 4자 미만
+    await send(client, b.id, "네", "cid-mp00011b")
     await seed_translation(db_session, "네", "Yes")
     await send(client, b.id, "여기 봐 http://x.com 링크야", "cid-mp00012")  # 링크
+    await send(client, b.id, "여기 봐 http://x.com 링크야", "cid-mp00012b")
     await seed_translation(db_session, "여기 봐 http://x.com 링크야", "See this link")
     await send(client, b.id, "번역 캐시가 없는 문장입니다", "cid-mp00013")  # 캐시 없음
 
@@ -76,7 +79,7 @@ async def test_collect_filters_noise(client, db_session):
 
 
 async def test_short_phrase_needs_frequency_two(client, db_session):
-    """4~5자 문장은 2회 이상 써야 채택 — "자주 쓰는 말" 우선."""
+    """길이와 무관하게 2회 이상 써야 채택 — "자주 쓰는 말"의 이름값 (2026-08-12 기획)."""
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "고마워요", "cid-mp00021")  # 4자, 1회
@@ -95,6 +98,7 @@ async def test_items_flow_into_typing_pool_privately(client, db_session, wired_d
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "이번 주말에 등산 갈래?", "cid-mp00031")
+    await send(client, b.id, "이번 주말에 등산 갈래?", "cid-mp00031b")
     await seed_translation(db_session, "이번 주말에 등산 갈래?", "Wanna go hiking this weekend?")
     assert (await client.get("/api/study/my-phrases")).json()["total"] == 1
 
@@ -109,6 +113,7 @@ async def test_queue_introduces_my_phrases(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "내일 회의 몇 시에 시작해?", "cid-mp00041")
+    await send(client, b.id, "내일 회의 몇 시에 시작해?", "cid-mp00041b")
     await seed_translation(
         db_session, "내일 회의 몇 시에 시작해?", "What time does the meeting start tomorrow?"
     )
@@ -127,6 +132,7 @@ async def test_deck_study_works_with_default_levels(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-mp00061")
+    await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-mp00061b")
     await seed_translation(
         db_session, "오늘 야근해야 할 것 같아", "I think I have to work late today"
     )
@@ -143,6 +149,7 @@ async def test_exclude_phrase_removes_and_stays_removed(client, db_session, wire
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "이 문장은 빼고 싶어요", "cid-mp00071")
+    await send(client, b.id, "이 문장은 빼고 싶어요", "cid-mp00071b")
     await seed_translation(db_session, "이 문장은 빼고 싶어요", "I want to remove this one")
     items = (await client.get("/api/study/my-phrases/items")).json()["items"]
     assert len(items) == 1
@@ -176,6 +183,7 @@ async def test_new_item_anonymizes_names_in_original(client, db_session, monkeyp
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "혜인 팀장님 오늘 회의 몇 시예요?", "cid-mp00081")
+    await send(client, b.id, "혜인 팀장님 오늘 회의 몇 시예요?", "cid-mp00081b")
     await seed_translation(
         db_session, "혜인 팀장님 오늘 회의 몇 시예요?", "Hailey, what time is the meeting today?"
     )
@@ -191,6 +199,7 @@ async def test_refresh_updates_texts_in_place(client, db_session, monkeypatch):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "혜인님 담에 커피 마셔요", "cid-mp00091")
+    await send(client, b.id, "혜인님 담에 커피 마셔요", "cid-mp00091b")
     await seed_translation(
         db_session, "혜인님 담에 커피 마셔요", "Let's have coffee tomorrow, Hye-in"
     )
@@ -230,6 +239,7 @@ async def test_deck_item_reuses_global_normalized_key(client, db_session):
     await db_session.commit()
     await login(client, db_session, a)
     await send(client, b.id, "정말 고마워 친구야", "cid-mp00051")
+    await send(client, b.id, "정말 고마워 친구야", "cid-mp00051b")
     await seed_translation(db_session, "정말 고마워 친구야", "Thank you so much!")
     await client.get("/api/study/my-phrases")
 
@@ -243,3 +253,44 @@ async def test_deck_item_reuses_global_normalized_key(client, db_session):
         .all()
     )
     assert len(items) == 1  # 중복 생성 없음
+
+async def test_one_time_message_not_collected(client, db_session):
+    """길어도 1회 발화는 미채택 — 빈도 2회 이상만 (2026-08-12 기획 점검)."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await send(client, b.id, "이 문장은 충분히 길지만 한 번만 쓴 말입니다", "cid-mp00101")
+    await seed_translation(
+        db_session, "이 문장은 충분히 길지만 한 번만 쓴 말입니다", "Long but said only once"
+    )
+    assert (await client.get("/api/study/my-phrases")).json()["total"] == 0
+
+
+async def test_game_pool_excludes_long_term_mastered(client, db_session, wired_db):  # noqa: F811
+    """장기기억(stability 7일+) 도달 문장은 게임 풀에서 제외 (2026-08-12 기획)."""
+    from datetime import UTC, datetime
+
+    from app.models import ReviewCard
+
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await send(client, b.id, "이 표현은 이미 익혔어요", "cid-mp00111")
+    await send(client, b.id, "이 표현은 이미 익혔어요", "cid-mp00111b")
+    await seed_translation(db_session, "이 표현은 이미 익혔어요", "I already mastered this one")
+    assert (await client.get("/api/study/my-phrases")).json()["total"] == 1
+
+    pool = await load_sentence_pool(a.id)
+    target = next(s for s in pool if s["en"] == "I already mastered this one")
+
+    # 장기기억 도달 (stability 8일) — 풀에서 빠진다
+    db_session.add(
+        ReviewCard(
+            user_id=a.id,
+            item_id=target["item_id"],
+            state="review",
+            stability=8.0,
+            due_at=datetime.now(UTC),
+        )
+    )
+    await db_session.commit()
+    pool_after = await load_sentence_pool(a.id)
+    assert not any(s["en"] == "I already mastered this one" for s in pool_after)
