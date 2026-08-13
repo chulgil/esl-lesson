@@ -43,6 +43,49 @@ def test_grade_sentence_allows_near_miss():
     assert not correct
 
 
+def test_word_question_choice_refs_map_every_real_choice():
+    """보기 텍스트 → 출처 항목 매핑 — 피드백 화면 '다른 보기 단어 정보' 진입
+    (docs/specs/word-insight.md)."""
+    item = make_item(id=1)
+    pool = [
+        item,
+        make_item(id=2, en="robust", ko="튼튼한"),
+        make_item(id=3, en="fragile", ko="깨지기 쉬운"),
+        make_item(id=4, en="steady", ko="꾸준한"),
+    ]
+    q = build_question(item, pool)
+    refs = {r["text"]: r for r in q["choice_refs"]}
+    for choice in q["choices"]:
+        assert choice in refs
+    field = "ko_text" if q["quiz_mode"] == "choice_en2ko" else "en_text"
+    answer_ref = refs[getattr(item, field)]
+    assert answer_ref["item_id"] == 1
+    assert answer_ref["en_text"] == "resilient"
+    assert answer_ref["ko_text"] == "회복력 있는"
+
+
+def test_choice_refs_use_similar_item_ids_when_preferred():
+    item = make_item(id=1)
+    pool = [item, make_item(id=2, en="robust", ko="튼튼한")]
+    similar = [
+        {"id": 9, "en_text": "tough", "ko_text": "강인한", "distance": 0.1},
+        {"id": 10, "en_text": "sturdy", "ko_text": "단단한", "distance": 0.2},
+    ]
+    q = build_question(item, pool, similar)
+    by_id = {r["item_id"]: r for r in q["choice_refs"]}
+    field = "ko_text" if q["quiz_mode"] == "choice_en2ko" else "en_text"
+    # 유사단어 보기(우선 2개 배치)는 임베딩 이웃의 항목 id 로 역추적된다
+    assert 9 in by_id and by_id[9][field] in q["choices"]
+    assert 10 in by_id
+
+
+def test_choice_refs_skip_fallback_dummies():
+    item = make_item(id=1)
+    q = build_question(item, [item])
+    # 풀이 없어 더미 폴백으로 채운 보기는 출처가 없다 — 정답 항목만 남는다
+    assert [r["item_id"] for r in q["choice_refs"]] == [1]
+
+
 def test_grade_by_mode():
     word = make_item()
     assert grade(word, "choice_en2ko", "회복력 있는")

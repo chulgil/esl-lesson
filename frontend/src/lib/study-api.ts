@@ -12,6 +12,14 @@ export interface Question {
   prompt?: string;
   prompt_ko?: string;
   choices?: string[];
+  /** 보기 텍스트 → 출처 항목 매핑 (word/idiom 선다) — 피드백 화면 "다른 보기
+   *  단어 정보" 진입용. 더미 폴백 보기는 출처가 없어 빠진다 (word-insight.md) */
+  choice_refs?: {
+    text: string;
+    item_id: number;
+    en_text: string;
+    ko_text: string;
+  }[];
   chips?: string[];
   template?: string;
   /** 밑줄(___)이 한글 해석의 어느 부분인지 — 패턴 문항 (2026-07-14) */

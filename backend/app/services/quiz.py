@@ -231,6 +231,39 @@ def _distractors(
     return picked
 
 
+def _choice_refs(
+    item: LearningItem,
+    choices: list[str],
+    field: str,
+    pool: list[LearningItem],
+    preferred: list[dict] | None = None,
+) -> list[dict]:
+    """보기 텍스트 → 출처 항목 매핑 — 피드백 화면 '다른 보기 단어 정보' 진입용
+    (docs/specs/word-insight.md). 더미 폴백 보기는 출처 항목이 없어 제외된다."""
+    wanted = set(choices)
+    by_text: dict[str, dict] = {}
+    for cand in preferred or []:
+        value = cand.get(field)
+        if value in wanted and value not in by_text and cand.get("id") is not None:
+            # similar_items 는 id/en/ko 를 항상 주지만, 호출자가 최소 키만 줄 수도 있다
+            by_text[value] = {
+                "item_id": cand["id"],
+                "en_text": cand.get("en_text", ""),
+                "ko_text": cand.get("ko_text", ""),
+            }
+    for p in pool:
+        value = getattr(p, field)
+        if value in wanted and value not in by_text:
+            by_text[value] = {"item_id": p.id, "en_text": p.en_text, "ko_text": p.ko_text}
+    # 정답 텍스트는 항상 출제 항목 자신으로 — 풀에 같은 표기가 있어도 덮는다
+    by_text[getattr(item, field)] = {
+        "item_id": item.id,
+        "en_text": item.en_text,
+        "ko_text": item.ko_text,
+    }
+    return [{"text": c, **by_text[c]} for c in choices if c in by_text]
+
+
 def _mask_context(context: str | None, target: str) -> str | None:
     if not context:
         return None
@@ -259,6 +292,7 @@ def _word_question(
         "hint_answer": getattr(item, answer_field),
         "prompt": prompt,
         "choices": choices,
+        "choice_refs": _choice_refs(item, choices, answer_field, pool, similar),
         "context": _mask_context(context, item.en_text),
     }
 
@@ -280,6 +314,7 @@ def _idiom_question(
             "prompt": masked,
             "prompt_ko": item.ko_text,
             "choices": choices,
+            "choice_refs": _choice_refs(item, choices, "en_text", pool, similar),
             "context": None,
         }
     # 문맥이 없으면 뜻 매칭 선다로 폴백
@@ -291,6 +326,7 @@ def _idiom_question(
         "hint_answer": item.ko_text,
         "prompt": item.en_text,
         "choices": choices,
+        "choice_refs": _choice_refs(item, choices, "ko_text", pool, similar),
         "context": None,
     }
 
