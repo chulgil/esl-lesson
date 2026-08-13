@@ -16,7 +16,8 @@
 | 노출 | **기본 숨김** — 공지가 있을 때만 헤더 아래·함께 목표 바 위에 접이식 바 |
 | 변경 인지 | 채팅 흐름 안 시스템 줄 ("OO님이 공지를 등록했어요") — 별도 푸시·벨 없음 |
 | 진입점 | 대화방 헤더 케밥 메뉴(신설) → "공지 쓰기/수정/내리기" |
-| 한도 | 500자, 줄바꿈 허용. 공백만이면 422 |
+| 구조 | **제목 + 내용** (2026-08-13 사용자 지적 — "첫 줄 = 제목" 암묵 규칙은 알 수 없다). 접힌 바·시스템 줄 미리보기 = 제목 |
+| 한도 | 제목 필수(한 줄, 80자 — 공백만/줄바꿈/초과 422), 내용 선택(500자, 줄바꿈 허용) |
 
 기각: 목표 보드 내 메모 칸(사용자 선택으로 기각), 메시지 고정 방식(공동 편집
 불가), conversations 컬럼 추가(대화방 스코프 공유 행 패턴이 이미 있음).
@@ -24,12 +25,12 @@
 ## 데이터 모델 (새 테이블 없음)
 
 - **공지 본문**: `shared_goals` 에 `kind="notice"` 행 (대화당 1행 —
-  `weekly_reviews` 패턴). `text`=본문, `created_by`=마지막 편집자,
-  `updated_at`=편집 시각. kind 는 CHECK 제약이 없어 마이그레이션 불필요.
+  `weekly_reviews` 패턴). `title`=제목(String(80), 마이그레이션 c6d7e8f9a0b1,
+  2026-08-13), `text`=내용, `created_by`=마지막 편집자, `updated_at`=편집 시각.
   테이블명은 역사적 유산 — "대화방 스코프 공유 행" 범용 (shared-goals.md 참조)
 - **시스템 줄**: `chat_messages.kind String(16) NULL` 컬럼 신설 (마이그레이션
-  1건, NULL=일반 메시지). `kind="notice_set"`(등록·수정, body=공지 첫 줄
-  스냅샷) / `"notice_clear"`(내리기, body=""). sender=편집자,
+  1건, NULL=일반 메시지). `kind="notice_set"`(등록·수정, body=**제목** 스냅샷)
+  / `"notice_clear"`(내리기, body=""). sender=편집자,
   client_msg_id 는 서버 생성(uuid)
 
 ## API (참가자만 — 함께 목표와 동일 게이트)
@@ -37,7 +38,7 @@
 | 메서드/경로 | 역할 |
 |---|---|
 | GET `/api/chat/with/{other_id}/notice` | `{text, updated_at, updated_by_name}` — 없으면 `{text: null}`. 대화 없으면 친구 검증 후 null (goals get_view 패턴) |
-| PUT `/api/chat/with/{other_id}/notice` | `{text}` upsert — 빈 문자열/공백만/500자 초과 422. 대화 없으면 친구 검증 후 생성 |
+| PUT `/api/chat/with/{other_id}/notice` | `{title, text?}` upsert — invalid_title(공백만·줄바꿈)/title_too_long(80)/text_too_long(500) 422. 대화 없으면 친구 검증 후 생성. 응답·GET 은 `{title, text, updated_at, updated_by_name}` (없으면 title/text null). title 도입(2026-08-13) 전 레거시 행은 title null + text 만 — 조회 성립, 바 제목은 text 첫 줄 폴백 |
 | DELETE `/api/chat/with/{other_id}/notice` | 공지 내리기 — 멱등 204 (없어도 204) |
 
 - **친구 해제 후**: 조회는 유지, PUT/DELETE 는 403 `not_friends` — 공동 편집
@@ -60,12 +61,12 @@ unread 배지·대화 목록 미리보기에는 일반 메시지처럼 포함 (�
 
 ## 프론트 (3뷰 공통 — GoalBoard 와 동일 배치 원칙)
 
-- **NoticeBar**: 헤더 아래·GoalBoard 위. 공지 없으면 렌더 안 함. 접힘=첫 줄만
-  ("[공지] 첫줄…"), 펼침=전문. **[수정]/[내리기]는 바 줄의 접기 토글([+]) 옆**
+- **NoticeBar**: 헤더 아래·GoalBoard 위. 공지 없으면 렌더 안 함. 접힘=제목만
+  ("[공지] **제목**"), 펼침=제목(굵게)+내용. **[수정]/[내리기]는 바 줄의 접기 토글([+]) 옆**
   (2026-08-13 사용자 피드백 — 펼쳐야 보이는 하단 배치는 못 찾는다). 접힘
   상태는 기기 로컬 기억 (localStorage `esl:chat-notice:fold:{otherId}`) — 기본 접힘
-- **헤더 케밥 메뉴 신설**: "공지 쓰기"(있으면 "공지 수정") → textarea 시트
-  (500자 카운터). "함께 목표" 항목도 여기서 진입 (shared-goals.md 2026-08-13
+- **헤더 케밥 메뉴 신설**: "공지 쓰기"(있으면 "공지 수정") → 제목 입력(80자)
+  + 내용 textarea(500자 카운터) 시트. "함께 목표" 항목도 여기서 진입 (shared-goals.md 2026-08-13
   기본 숨김 전환) — 대화방 설정 항목의 공용 진입점
 - **시스템 줄**: 중앙 정렬 회색 한 줄 — `notice_set` → "OO님이 공지를
   등록했어요: {첫줄}", `notice_clear` → "OO님이 공지를 내렸어요". 말풍선 아님.
@@ -79,7 +80,7 @@ unread 배지·대화 목록 미리보기에는 일반 메시지처럼 포함 (�
 ## 테스트 계약 (성공 기준)
 
 - PUT → GET 반영, 재 PUT 교체(1행 유지), DELETE 멱등 204 → GET null
-- 422: 공백만·500자 초과 / 404: 비친구+대화 없음 / 403: 친구 해제 후 PUT·DELETE
+- 422: 제목 공백만·줄바꿈·80자 초과, 내용 500자 초과 / 404: 비친구+대화 없음 / 403: 친구 해제 후 PUT·DELETE
 - 시스템 줄: PUT 시 `kind="notice_set"` 행 적재 + 양쪽 WS 푸시,
   my-phrases 동기화가 kind 행을 수집하지 않음
 - 프론트: 공지 없으면 바 미렌더, 등록 후 표시, tsc·lint 통과

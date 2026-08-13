@@ -425,7 +425,8 @@ async def _push_notice_sync(conv: Conversation) -> None:
 
 
 class NoticeBody(BaseModel):
-    text: str
+    title: str
+    text: str = ""
 
 
 @router.get("/with/{other_id}/notice")
@@ -444,7 +445,9 @@ async def put_notice(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
-    notice, system_line, conv = await notice_service.set_notice(db, user.id, other_id, payload.text)
+    notice, system_line, conv = await notice_service.set_notice(
+        db, user.id, other_id, payload.title, payload.text
+    )
     await _push_notice_system_line(conv, system_line, user.nickname)
     await _push_notice_sync(conv)
     return notice

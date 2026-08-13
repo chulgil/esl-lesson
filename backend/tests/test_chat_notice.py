@@ -1,4 +1,4 @@
-"""대화방 공지 — 자유 텍스트 고정 공지 (docs/specs/chat-notice.md)."""
+"""대화방 공지 — 제목+내용 고정 공지 (docs/specs/chat-notice.md)."""
 
 import pytest
 from sqlalchemy import select
@@ -47,20 +47,24 @@ async def test_get_notice_null_before_any_set(client, db_session):
 
     res = await client.get(f"/api/chat/with/{b.id}/notice")
     assert res.status_code == 200
-    assert res.json() == {"text": None}
+    assert res.json() == {"title": None, "text": None}
 
 
 # --- PUT → GET 반영, 교체 -----------------------------------------------------------
 
 
-async def test_put_then_get_reflects_text(client, db_session):
+async def test_put_then_get_reflects_title_and_text(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
 
-    put = await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "8월엔 매일 30분"})
+    put = await client.put(
+        f"/api/chat/with/{b.id}/notice",
+        json={"title": "8월 목표", "text": "매일 30분씩 복습하기"},
+    )
     assert put.status_code == 200
     body = put.json()
-    assert body["text"] == "8월엔 매일 30분"
+    assert body["title"] == "8월 목표"
+    assert body["text"] == "매일 30분씩 복습하기"
     assert body["updated_by_name"] == a.nickname
     assert body["updated_at"] is not None
 
@@ -68,14 +72,27 @@ async def test_put_then_get_reflects_text(client, db_session):
     assert got.json() == body
 
 
+async def test_put_title_only_is_allowed(client, db_session):
+    """내용 없는 한 줄 공지 — 제목만으로도 성립한다."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    put = await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "내일 쉬어요"})
+    assert put.status_code == 200
+    assert put.json()["title"] == "내일 쉬어요"
+    assert put.json()["text"] == ""
+
+
 async def test_put_replaces_keeps_single_row(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
 
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "초안"})
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "초안", "text": "본문"})
     await login(client, db_session, b)
-    replaced = await client.put(f"/api/chat/with/{a.id}/notice", json={"text": "수정된 공지"})
-    assert replaced.json()["text"] == "수정된 공지"
+    replaced = await client.put(
+        f"/api/chat/with/{a.id}/notice", json={"title": "수정된 공지", "text": "새 본문"}
+    )
+    assert replaced.json()["title"] == "수정된 공지"
     assert replaced.json()["updated_by_name"] == b.nickname
 
     rows = (
@@ -84,7 +101,8 @@ async def test_put_replaces_keeps_single_row(client, db_session):
         .all()
     )
     assert len(rows) == 1
-    assert rows[0].text == "수정된 공지"
+    assert rows[0].title == "수정된 공지"
+    assert rows[0].text == "새 본문"
 
 
 # --- DELETE 멱등 -------------------------------------------------------------------
@@ -93,13 +111,13 @@ async def test_put_replaces_keeps_single_row(client, db_session):
 async def test_delete_then_get_null_and_idempotent(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "지울 공지"})
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "지울 공지"})
 
     res = await client.delete(f"/api/chat/with/{b.id}/notice")
     assert res.status_code == 204
 
     got = await client.get(f"/api/chat/with/{b.id}/notice")
-    assert got.json() == {"text": None}
+    assert got.json() == {"title": None, "text": None}
 
     again = await client.delete(f"/api/chat/with/{b.id}/notice")
     assert again.status_code == 204
@@ -121,20 +139,40 @@ async def test_delete_noop_when_never_set_does_not_push(client, db_session, monk
 # --- 422 검증 ------------------------------------------------------------------------
 
 
-async def test_put_rejects_blank_text(client, db_session):
+async def test_put_rejects_blank_title(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
 
-    res = await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "   "})
+    res = await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "   ", "text": "본문"})
     assert res.status_code == 422
-    assert res.json()["detail"] == "invalid_text"
+    assert res.json()["detail"] == "invalid_title"
+
+
+async def test_put_rejects_multiline_title(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    res = await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "첫줄\n둘째줄"})
+    assert res.status_code == 422
+    assert res.json()["detail"] == "invalid_title"
+
+
+async def test_put_rejects_title_over_80_chars(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    res = await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "가" * 81})
+    assert res.status_code == 422
+    assert res.json()["detail"] == "title_too_long"
 
 
 async def test_put_rejects_text_over_500_chars(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
 
-    res = await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "가" * 501})
+    res = await client.put(
+        f"/api/chat/with/{b.id}/notice", json={"title": "제목", "text": "가" * 501}
+    )
     assert res.status_code == 422
     assert res.json()["detail"] == "text_too_long"
 
@@ -147,14 +185,14 @@ async def test_put_requires_friend_when_no_conversation(client, db_session):
     stranger = await login_as(client, db_session, "n-x2@example.com")
     await login(client, db_session, a)
 
-    res = await client.put(f"/api/chat/with/{stranger.id}/notice", json={"text": "공지"})
+    res = await client.put(f"/api/chat/with/{stranger.id}/notice", json={"title": "공지"})
     assert res.status_code == 404
 
 
 async def test_unfriend_blocks_put_and_delete_but_keeps_view(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "남는 공지"})
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "남는 공지", "text": "본문"})
 
     row = (await db_session.execute(select(Friendship))).scalar_one()
     await db_session.delete(row)
@@ -162,9 +200,9 @@ async def test_unfriend_blocks_put_and_delete_but_keeps_view(client, db_session)
 
     view = await client.get(f"/api/chat/with/{b.id}/notice")
     assert view.status_code == 200
-    assert view.json()["text"] == "남는 공지"
+    assert view.json()["title"] == "남는 공지"
 
-    put = await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "바꿔치기"})
+    put = await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "바꿔치기"})
     assert put.status_code == 403
     assert put.json()["detail"] == "not_friends"
 
@@ -176,17 +214,20 @@ async def test_unfriend_blocks_put_and_delete_but_keeps_view(client, db_session)
 # --- 시스템 줄 적재 + WS 푸시 ---------------------------------------------------------
 
 
-async def test_put_records_system_line_and_pushes_both(client, db_session, monkeypatch):
+async def test_put_records_system_line_with_title_preview(client, db_session, monkeypatch):
     a, b = await two_friends(client, db_session)
     pushed = await _fake_deliver(monkeypatch)
     await login(client, db_session, a)
 
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "매일 10문제\n둘째줄"})
+    await client.put(
+        f"/api/chat/with/{b.id}/notice",
+        json={"title": "매일 10문제", "text": "본문은 스냅샷에 안 들어간다"},
+    )
 
     rows = (await db_session.execute(select(ChatMessage))).scalars().all()
     assert len(rows) == 1
     assert rows[0].kind == "notice_set"
-    assert rows[0].body == "매일 10문제"  # 첫 줄만 스냅샷
+    assert rows[0].body == "매일 10문제"  # 제목이 곧 미리보기
     assert rows[0].sender_id == a.id
 
     receivers = {uid for uid, _ in pushed}
@@ -200,21 +241,10 @@ async def test_put_records_system_line_and_pushes_both(client, db_session, monke
     assert all("conversation_id" in e for e in notice_sync_events)
 
 
-async def test_put_preview_truncated_to_80_chars(client, db_session):
-    a, b = await two_friends(client, db_session)
-    await login(client, db_session, a)
-
-    long_text = "가" * 200
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": long_text})
-
-    row = (await db_session.execute(select(ChatMessage))).scalar_one()
-    assert row.body == "가" * 80
-
-
 async def test_delete_records_system_line_kind_notice_clear(client, db_session, monkeypatch):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "내릴 공지"})
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "내릴 공지"})
 
     pushed = await _fake_deliver(monkeypatch)
     await client.delete(f"/api/chat/with/{b.id}/notice")
@@ -230,13 +260,33 @@ async def test_delete_records_system_line_kind_notice_clear(client, db_session, 
     assert all(e["kind"] == "notice_clear" for e in system_events)
 
 
+# --- 레거시 행 (제목 없던 시절 데이터) ------------------------------------------------
+
+
+async def test_legacy_notice_without_title_still_readable(client, db_session):
+    """title 컬럼 도입(2026-08-13) 이전 행 — 내용만 있어도 조회는 성립한다."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "임시"})
+    row = (
+        await db_session.execute(select(SharedGoal).where(SharedGoal.kind == "notice"))
+    ).scalar_one()
+    row.title = None
+    row.text = "구버전 공지 본문"
+    await db_session.commit()
+
+    got = await client.get(f"/api/chat/with/{b.id}/notice")
+    assert got.json()["title"] is None
+    assert got.json()["text"] == "구버전 공지 본문"
+
+
 # --- 기존 메시지 조회 API 가 kind 를 포함 --------------------------------------------
 
 
 async def test_messages_endpoint_includes_kind_field(client, db_session):
     a, b = await two_friends(client, db_session)
     await login(client, db_session, a)
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "공지 확인용"})
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "공지 확인용"})
 
     res = await client.get(f"/api/chat/with/{b.id}/messages")
     items = res.json()["items"]
@@ -252,8 +302,8 @@ async def test_my_phrases_does_not_collect_notice_system_lines(client, db_sessio
     await login(client, db_session, a)
 
     text = "오늘 회의 있어요"
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": text})
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": text})  # 빈도 2회 조건도 충족
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"title": text})
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"title": text})  # 빈도 2회 조건도 충족
     await seed_translation(db_session, text, "We have a meeting today")
 
     res = await client.get("/api/study/my-phrases")
