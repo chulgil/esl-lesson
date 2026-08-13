@@ -41,10 +41,11 @@
 
 | 경로 | 역할 |
 |---|---|
-| GET /api/chat/with/{other_id}/goals | {items:[check...], weekly:{target, mine, theirs}} — weekly 진행은 ReviewLog 주간 집계 |
+| GET /api/chat/with/{other_id}/goals | {items:[check...], weekly:{target, mine, theirs}, weekly_configured} — weekly 진행은 ReviewLog 주간 집계, weekly_configured 는 보드 노출 판정용 |
 | POST /api/chat/with/{other_id}/goals | 체크 목표 추가 (max 20 — 422) |
 | PATCH /api/chat/goals/{id} | text / done(done_by 기록) / target_value |
 | DELETE /api/chat/goals/{id} | 삭제 |
+| DELETE /api/chat/with/{other_id}/goals | 보드 내리기 — check+weekly 행 전부 삭제 (공지 행 유지, 멱등 204) |
 
 모든 변경은 두 참가자에게 WS `{"t":"goal.sync","conversation_id"}` 푸시
 (chat.deliver_ws 재사용) — 클라이언트는 재조회.
@@ -58,8 +59,16 @@
 
 ## UX·위장
 
-- 3뷰 공통 `GoalBoard` — 대화방 헤더 아래 접이식 바 "함께 목표 n/m"
-  (기본 접힘 — 채팅 시야 방해 금지). 펼치면 주간 달성표 + 체크리스트
+- 3뷰 공통 `GoalBoard` — 대화방 헤더 아래 접이식 바 "함께 목표 n/m".
+  **기본 숨김 (2026-08-13 전환)**: 목표가 없으면(체크 0개 + 주간 목표 미설정)
+  바 자체를 렌더하지 않는다 — 공지 바와 동일 모델. 진입은 헤더 케밥 메뉴
+  "함께 목표" (빈 보드를 열어 첫 목표 작성). `weekly_configured`(주간 목표
+  행 존재)가 노출 판정의 절반 — 기본값 300 과 명시 설정을 구분한다
+- **내리기**: 바 줄의 접기 토글([+]) 옆 "내리기" 버튼 — 체크리스트+주간 목표
+  행 전부 삭제(멱등), 양쪽 모두에서 보드가 사라진다. 같은 테이블의 공지
+  (kind="notice") 행은 유지. 액션 버튼은 바 줄에 배치 — 펼쳐야 보이는 하단
+  배치 금지 (2026-08-13 사용자 피드백)
+- 펼치면 주간 달성표 + 체크리스트
 - 오피스 위장(excel): "공동 시트" 풍 플레인 테이블 — 말풍선·캐릭터 금지
   계약 유지 (chat.md)
 - 유니코드 이모지 금지 — 달성은 "달성!" 텍스트 뱃지

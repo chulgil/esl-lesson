@@ -6,7 +6,7 @@ import { ChatHeaderMenu } from "@/components/chat/ChatHeaderMenu";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
-import { GoalBoard } from "@/components/chat/GoalBoard";
+import { GoalBoard, type GoalBoardHandle } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
 import { NoticeBar, type NoticeBarHandle } from "@/components/chat/NoticeBar";
@@ -29,6 +29,7 @@ const COLS = ["A", "B", "C", "D"];
 export function ExcelSkin(p: ChatSkinProps & { otherId: number }) {
   const router = useRouter();
   const noticeRef = useRef<NoticeBarHandle>(null);
+  const goalsRef = useRef<GoalBoardHandle>(null);
   // 빈 시트 클릭 = 채팅 레일 토글 (위장 강화, 2026-07-31)
   const [railHidden, setRailHidden] = useState(false);
   // 접힘 = "안 보는 중" — 배지·알림 유지, 펼치면 읽음 (2026-08-10 버그 픽스)
@@ -67,13 +68,22 @@ export function ExcelSkin(p: ChatSkinProps & { otherId: number }) {
               label: noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
               onClick: () => noticeRef.current?.openEditor(),
             },
+            {
+              label: "함께 목표",
+              onClick: () => goalsRef.current?.open(),
+            },
           ]}
         />
       }
       blank={<BlankSheet cols={COLS} />}
     >
       <NoticeBar otherId={p.otherId} excel apiRef={noticeRef} />
-      <GoalBoard otherId={p.otherId} excel peerName={p.peerName} />
+      <GoalBoard
+        otherId={p.otherId}
+        excel
+        peerName={p.peerName}
+        apiRef={goalsRef}
+      />
       <div className="flex min-h-0 flex-1">
         {/* 좌측 — 실제 시트처럼 보이는 채움 영역 (위장, 모바일에서는 숨김).
             클릭 = 채팅 레일 토글 — 빈 시트만 남겨 위장 강화 (2026-07-31) */}

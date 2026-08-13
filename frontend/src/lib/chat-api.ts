@@ -73,6 +73,8 @@ export interface GoalWeekly {
 export interface GoalsResponse {
   items: GoalItem[];
   weekly: GoalWeekly;
+  /** 주간 목표를 명시 설정했는가 — 보드 노출 판정 (2026-08-13 기본 숨김 전환) */
+  weekly_configured: boolean;
 }
 
 /** 대화방 공지 — 대화당 1개, 두 참가자 모두 수정 가능 (docs/specs/chat-notice.md) */
@@ -173,6 +175,8 @@ export const chatApi = {
     }),
   deleteGoal: (id: number) =>
     request<void>(`/api/chat/goals/${id}`, { method: "DELETE" }),
+  clearGoalBoard: (otherId: number) =>
+    request<void>(`/api/chat/with/${otherId}/goals`, { method: "DELETE" }),
 
   // --- 대화방 공지 (docs/specs/chat-notice.md) ---
   notice: (otherId: number) =>

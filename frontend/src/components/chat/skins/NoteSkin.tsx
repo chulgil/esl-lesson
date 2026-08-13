@@ -5,7 +5,7 @@ import { ChatHeaderMenu } from "@/components/chat/ChatHeaderMenu";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
-import { GoalBoard } from "@/components/chat/GoalBoard";
+import { GoalBoard, type GoalBoardHandle } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
 import { NoticeBar, type NoticeBarHandle } from "@/components/chat/NoticeBar";
@@ -24,6 +24,7 @@ export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
   const [panelHidden, setPanelHidden] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const noticeRef = useRef<NoticeBarHandle>(null);
+  const goalsRef = useRef<GoalBoardHandle>(null);
   // 접힘 상태를 전역 신호로 — 접힌 동안은 "안 보는 중"이라 배지·알림이 살아야
   // 하고, 다시 펼치면 밀린 메시지를 읽음 처리한다 (2026-08-10 버그 픽스)
   function togglePanel() {
@@ -69,12 +70,21 @@ export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
                 label: noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
                 onClick: () => noticeRef.current?.openEditor(),
               },
+              {
+                label: "함께 목표",
+                onClick: () => goalsRef.current?.open(),
+              },
             ]}
           />
         </header>
 
         <NoticeBar otherId={p.otherId} excel={false} apiRef={noticeRef} />
-        <GoalBoard otherId={p.otherId} excel={false} peerName={p.peerName} />
+        <GoalBoard
+          otherId={p.otherId}
+          excel={false}
+          peerName={p.peerName}
+          apiRef={goalsRef}
+        />
 
         {p.error && <p className="mb-2 text-sm text-brick-red">{p.error}</p>}
 

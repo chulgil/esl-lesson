@@ -382,6 +382,18 @@ async def delete_goal(
     await _push_goal_sync(conv)
 
 
+@router.delete("/with/{other_id}/goals", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_goal_board(
+    other_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """보드 내리기 — 체크리스트+주간 목표 전부 삭제 (공지는 유지, 멱등)."""
+    conv = await goals_service.clear_board(db, user.id, other_id)
+    if conv is not None:
+        await _push_goal_sync(conv)
+
+
 @router.patch("/with/{other_id}/goals/weekly")
 async def patch_weekly_goal(
     other_id: int,

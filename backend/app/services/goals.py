@@ -8,7 +8,7 @@ kind="check" 행은 자유 체크리스트(대화당 최대 20개), kind="weekly
 from datetime import UTC, datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Conversation, ReviewLog, SharedGoal, User
@@ -138,15 +138,43 @@ async def _weekly_dict(db: AsyncSession, conv: Conversation, user_id: int) -> di
 
 
 async def get_view(db: AsyncSession, user_id: int, other_id: int) -> dict:
-    """GET /with/{other_id}/goals — 대화가 없으면 친구 검증 후 빈 응답."""
+    """GET /with/{other_id}/goals — 대화가 없으면 친구 검증 후 빈 응답.
+
+    weekly_configured: 주간 목표를 명시 설정한 행이 있는가 — 보드 노출 판정용
+    (2026-08-13 기본 숨김 전환: 내용이 있을 때만 바 노출)."""
     conv = await chat_service.get_conversation(db, user_id, other_id)
     if conv is None:
         await chat_service.require_friend(db, user_id, other_id)
-        return {"items": [], "weekly": {"target": DEFAULT_WEEKLY_TARGET, "mine": 0, "theirs": 0}}
+        return {
+            "items": [],
+            "weekly": {"target": DEFAULT_WEEKLY_TARGET, "mine": 0, "theirs": 0},
+            "weekly_configured": False,
+        }
     return {
         "items": await _list_checks(db, conv.id),
         "weekly": await _weekly_dict(db, conv, user_id),
+        "weekly_configured": await _weekly_row(db, conv.id) is not None,
     }
+
+
+async def clear_board(db: AsyncSession, user_id: int, other_id: int) -> Conversation | None:
+    """보드 내리기 — 체크리스트+주간 목표 행 전부 삭제 (멱등).
+
+    같은 테이블의 공지(kind="notice") 행은 별도 표면이라 건드리지 않는다
+    (docs/specs/chat-notice.md). 친구 해제 후에는 다른 변경과 동일하게 403."""
+    conv = await chat_service.get_conversation(db, user_id, other_id)
+    if conv is None:
+        await chat_service.require_friend(db, user_id, other_id)
+        return None
+    await _require_mutable(db, conv, user_id)
+    await db.execute(
+        delete(SharedGoal).where(
+            SharedGoal.conversation_id == conv.id,
+            SharedGoal.kind.in_(("check", "weekly_reviews")),
+        )
+    )
+    await db.commit()
+    return conv
 
 
 async def add_check(

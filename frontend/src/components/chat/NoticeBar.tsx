@@ -174,52 +174,59 @@ export function NoticeBar({
 
   return (
     <section className={wrapClass}>
-      <button
-        type="button"
-        onClick={() => persistFold(!folded)}
-        aria-expanded={!folded}
-        className={
-          excel
-            ? "flex min-h-11 w-full items-center gap-2 px-3 text-left hover:bg-[#f6f8f9]"
-            : "flex min-h-11 w-full items-center gap-2 px-3 text-left hover:bg-white"
-        }
-      >
-        <span className="min-w-0 flex-1 truncate text-xs">
-          [공지] {firstLine}
-        </span>
-        <span
-          className={`ml-auto shrink-0 text-xs ${excel ? "text-[#999]" : "opacity-50"}`}
+      {/* 액션은 접기 토글 옆에 — 펼쳐야 보이는 하단 배치는 못 찾는다 (2026-08-13) */}
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => persistFold(!folded)}
+          aria-expanded={!folded}
+          className={
+            excel
+              ? "flex min-h-11 min-w-0 flex-1 items-center px-3 text-left hover:bg-[#f6f8f9]"
+              : "flex min-h-11 min-w-0 flex-1 items-center px-3 text-left hover:bg-white"
+          }
+        >
+          <span className="min-w-0 flex-1 truncate text-xs">
+            [공지] {firstLine}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={openEditor}
+          className={`shrink-0 text-xs font-bold underline underline-offset-2 ${
+            excel ? "text-[#217346]" : "text-brick-blue"
+          }`}
+        >
+          수정
+        </button>
+        <DeleteMessageButton
+          label="내리기"
+          confirmLabel="정말 내리기?"
+          ariaLabel="공지 내리기"
+          onDelete={onClear}
+          className={`ml-3 shrink-0 text-xs font-bold ${
+            excel
+              ? "text-[#c0504d]"
+              : "text-brick-red opacity-60 hover:opacity-100"
+          }`}
+        />
+        <button
+          type="button"
+          onClick={() => persistFold(!folded)}
+          aria-expanded={!folded}
+          aria-label={folded ? "공지 펼치기" : "공지 접기"}
+          className={`min-h-11 shrink-0 px-3 text-xs ${excel ? "text-[#999]" : "opacity-50"}`}
         >
           {folded ? "[+]" : "[-]"}
-        </span>
-      </button>
+        </button>
+      </div>
 
       {!folded && (
         <div className="px-3 pb-3">
           {error && <p className={errClass}>{error}</p>}
-          <p className="mb-2 text-sm break-words whitespace-pre-wrap">
+          <p className="text-sm break-words whitespace-pre-wrap">
             {notice.text}
           </p>
-          <div className="flex items-center gap-3 text-xs">
-            <button
-              type="button"
-              onClick={openEditor}
-              className={`font-bold underline underline-offset-2 ${
-                excel ? "text-[#217346]" : "text-brick-blue"
-              }`}
-            >
-              수정
-            </button>
-            <DeleteMessageButton
-              label="내리기"
-              confirmLabel="정말 내리기?"
-              ariaLabel="공지 내리기"
-              onDelete={onClear}
-              className={
-                excel ? "font-bold text-[#c0504d]" : "font-bold text-brick-red"
-              }
-            />
-          </div>
         </div>
       )}
     </section>
