@@ -166,6 +166,59 @@ async def test_add_goal_requires_friend(client, db_session):
     assert res.status_code == 404
 
 
+# --- 노출 판정·보드 내리기 (2026-08-13 기본 숨김 전환) ------------------------------
+
+
+async def test_weekly_configured_flag_reflects_explicit_target(client, db_session):
+    """보드 노출 판정용 — 주간 목표를 명시 설정했는지 (기본값 300과 구분)."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    before = (await client.get(f"/api/chat/with/{b.id}/goals")).json()
+    assert before["weekly_configured"] is False
+
+    await client.patch(f"/api/chat/with/{b.id}/goals/weekly", json={"target_value": 400})
+    after = (await client.get(f"/api/chat/with/{b.id}/goals")).json()
+    assert after["weekly_configured"] is True
+
+
+async def test_clear_board_removes_goals_but_keeps_notice(client, db_session):
+    """보드 내리기 — 체크리스트+주간 목표 행 삭제. 같은 테이블의 공지 행은 유지."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await client.post(f"/api/chat/with/{b.id}/goals", json={"text": "지울 목표"})
+    await client.patch(f"/api/chat/with/{b.id}/goals/weekly", json={"target_value": 400})
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "공지는 남아야 함"})
+
+    res = await client.delete(f"/api/chat/with/{b.id}/goals")
+    assert res.status_code == 204
+
+    view = (await client.get(f"/api/chat/with/{b.id}/goals")).json()
+    assert view["items"] == []
+    assert view["weekly_configured"] is False
+    assert view["weekly"]["target"] == 300  # 기본값 복귀
+
+    notice = (await client.get(f"/api/chat/with/{b.id}/notice")).json()
+    assert notice["text"] == "공지는 남아야 함"
+
+    # 멱등 — 빈 보드 재내리기도 204
+    assert (await client.delete(f"/api/chat/with/{b.id}/goals")).status_code == 204
+
+
+async def test_clear_board_blocked_after_unfriend(client, db_session):
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    await client.post(f"/api/chat/with/{b.id}/goals", json={"text": "목표"})
+
+    row = (await db_session.execute(select(Friendship))).scalar_one()
+    await db_session.delete(row)
+    await db_session.commit()
+
+    res = await client.delete(f"/api/chat/with/{b.id}/goals")
+    assert res.status_code == 403
+    assert res.json()["detail"] == "not_friends"
+
+
 # --- 체크리스트 상한 ---------------------------------------------------------------
 
 

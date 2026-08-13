@@ -211,7 +211,9 @@ export function useChatRoom(otherId: number) {
   // WS 이벤트 구독
   useEffect(() => {
     return onChatEvent((msg) => {
-      if (msg.t === "chat.message" && msg.sender_id === otherId) {
+      // 상대가 보낸 메시지 + 시스템 줄(kind — 내 공지 수정도 WS 로만 도착.
+      // 일반 내 글은 HTTP 응답으로 붙지만 시스템 줄은 이 경로가 유일, 2026-08-13)
+      if (msg.t === "chat.message" && (msg.sender_id === otherId || msg.kind)) {
         setMessages((prev) =>
           prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
         );

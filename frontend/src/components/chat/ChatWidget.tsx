@@ -7,7 +7,7 @@ import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
-import { GoalBoard } from "@/components/chat/GoalBoard";
+import { GoalBoard, type GoalBoardHandle } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
@@ -59,6 +59,7 @@ export function ChatWidget() {
   const panelRef = useRef<HTMLDivElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const noticeRef = useRef<NoticeBarHandle>(null);
+  const goalsRef = useRef<GoalBoardHandle>(null);
   // 플로팅 위치 — null = 기본(우하단). 드래그로 바뀌면 좌표 고정 + 저장
   const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(
     null,
@@ -363,6 +364,10 @@ export function ChatWidget() {
                       : "공지 쓰기",
                     onClick: () => noticeRef.current?.openEditor(),
                   },
+                  {
+                    label: "함께 목표",
+                    onClick: () => goalsRef.current?.open(),
+                  },
                 ]}
               />
             )}
@@ -385,6 +390,7 @@ export function ChatWidget() {
               userId={room.userId}
               excel={excel}
               noticeRef={noticeRef}
+              goalsRef={goalsRef}
             />
           ) : (
             <WidgetList
@@ -546,17 +552,24 @@ function WidgetRoom({
   userId,
   excel,
   noticeRef,
+  goalsRef,
 }: {
   userId: number;
   excel: boolean;
   noticeRef: RefObject<NoticeBarHandle | null>;
+  goalsRef: RefObject<GoalBoardHandle | null>;
 }) {
   const p = useChatRoom(userId);
 
   return (
     <>
       <NoticeBar otherId={userId} excel={excel} apiRef={noticeRef} />
-      <GoalBoard otherId={userId} excel={excel} peerName={p.peerName} />
+      <GoalBoard
+        otherId={userId}
+        excel={excel}
+        peerName={p.peerName}
+        apiRef={goalsRef}
+      />
       <div
         ref={p.listRef}
         onScroll={p.onScroll}

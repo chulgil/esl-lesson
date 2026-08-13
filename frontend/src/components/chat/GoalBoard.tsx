@@ -1,15 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type RefObject } from "react";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { chatApi, type GoalItem, type GoalWeekly } from "@/lib/chat-api";
 import { onChatEvent } from "@/lib/chat-signals";
 
 const MAX_ITEMS = 20;
 
+export interface GoalBoardHandle {
+  /** 헤더 케밥 메뉴가 빈 보드를 여는 통로 — 목표가 없어도 새로 쓸 수 있어야 한다 */
+  open: () => void;
+}
+
 /** 함께 목표 보드 — 대화방 헤더 아래 접이식 (docs/specs/shared-goals.md).
  *  주간 달성표(자동 집계, ReviewLog 기반) + 체크리스트(수동 약속)를 상대와
- *  공유한다. 기본 접힘 — 채팅 시야를 가리지 않는다.
+ *  공유한다. **목표가 없으면 렌더하지 않는다** (2026-08-13 기본 숨김 전환 —
+ *  공지 바와 동일 모델, 진입은 헤더 케밥 메뉴 "함께 목표").
  *
  *  오피스 위장(excel)에서는 "공동 시트" 풍 플레인 테이블로, 그 외 테마는
  *  노트 컨셉(brick 토큰)으로 렌더한다. 두 경우 모두 말풍선·이모지·캐릭터는
@@ -18,13 +24,17 @@ export function GoalBoard({
   otherId,
   excel,
   peerName,
+  apiRef,
 }: {
   otherId: number;
   excel: boolean;
   peerName?: string;
+  apiRef?: RefObject<GoalBoardHandle | null>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [opened, setOpened] = useState(false); // 케밥 메뉴로 강제 오픈 (빈 보드)
   const [items, setItems] = useState<GoalItem[]>([]);
+  const [weeklyConfigured, setWeeklyConfigured] = useState(false);
   const [weekly, setWeekly] = useState<GoalWeekly>({
     target: 300,
     mine: 0,
@@ -42,6 +52,7 @@ export function GoalBoard({
       .then((res) => {
         setItems(res.items);
         setWeekly(res.weekly);
+        setWeeklyConfigured(res.weekly_configured);
       })
       .catch(() => {});
   }, [otherId]);
@@ -128,6 +139,36 @@ export function GoalBoard({
   const achieved = weekly.target > 0 && sum >= weekly.target;
   const peerLabel = peerName || "상대";
   const atMax = items.length >= MAX_ITEMS;
+  const hasContent = items.length > 0 || weeklyConfigured;
+
+  const onClearBoard = useCallback(() => {
+    chatApi
+      .clearGoalBoard(otherId)
+      .then(() => {
+        setItems([]);
+        setWeekly({ target: 300, mine: 0, theirs: 0 });
+        setWeeklyConfigured(false);
+        setOpened(false);
+        setExpanded(false);
+      })
+      .catch(() => {
+        setError("내리지 못했어요");
+        load();
+      });
+  }, [otherId, load]);
+
+  useEffect(() => {
+    if (!apiRef) return;
+    apiRef.current = {
+      open: () => {
+        setOpened(true);
+        setExpanded(true);
+      },
+    };
+  }, [apiRef]);
+
+  // 목표가 없으면 숨김 — 케밥 메뉴 "함께 목표"로 연 경우만 빈 보드 표시
+  if (!hasContent && !opened) return null;
 
   return (
     <section
@@ -137,39 +178,59 @@ export function GoalBoard({
           : "shrink-0 border-b-2 border-ink/10 bg-white/70"
       }
     >
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        className={
-          excel
-            ? "flex min-h-11 w-full items-center gap-2 px-3 text-left hover:bg-[#f6f8f9]"
-            : "flex min-h-11 w-full items-center gap-2 px-3 text-left hover:bg-white"
-        }
-      >
-        <span className={excel ? "font-bold" : "font-hand text-base font-bold"}>
-          함께 목표 {doneCount}/{items.length}
-        </span>
-        <span className={excel ? "text-[#666]" : "opacity-60"}>
-          이번 주 {sum}/{weekly.target}회
-        </span>
-        {achieved && (
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className={
+            excel
+              ? "flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3 text-left hover:bg-[#f6f8f9]"
+              : "flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3 text-left hover:bg-white"
+          }
+        >
           <span
-            className={
-              excel
-                ? "rounded-sm border border-[#217346] px-1 text-[11px] font-bold text-[#217346]"
-                : "rounded-full border-2 border-brick-green px-1.5 text-[11px] font-bold text-brick-green"
-            }
+            className={excel ? "font-bold" : "font-hand text-base font-bold"}
           >
-            달성!
+            함께 목표 {doneCount}/{items.length}
           </span>
-        )}
-        <span
-          className={`ml-auto text-xs ${excel ? "text-[#999]" : "opacity-50"}`}
+          <span className={excel ? "text-[#666]" : "opacity-60"}>
+            이번 주 {sum}/{weekly.target}회
+          </span>
+          {achieved && (
+            <span
+              className={
+                excel
+                  ? "rounded-sm border border-[#217346] px-1 text-[11px] font-bold text-[#217346]"
+                  : "rounded-full border-2 border-brick-green px-1.5 text-[11px] font-bold text-brick-green"
+              }
+            >
+              달성!
+            </span>
+          )}
+        </button>
+        {/* 액션은 접기 토글 옆에 — 펼쳐야 보이는 하단 배치는 못 찾는다 (2026-08-13) */}
+        <DeleteMessageButton
+          label="내리기"
+          confirmLabel="정말 내리기?"
+          ariaLabel="함께 목표 보드 내리기"
+          onDelete={onClearBoard}
+          className={`shrink-0 text-xs ${
+            excel
+              ? "text-[#c0504d]"
+              : "font-bold text-brick-red opacity-60 hover:opacity-100"
+          }`}
+        />
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-label={expanded ? "함께 목표 접기" : "함께 목표 펼치기"}
+          className={`min-h-11 shrink-0 px-3 text-xs ${excel ? "text-[#999]" : "opacity-50"}`}
         >
           {expanded ? "[-]" : "[+]"}
-        </span>
-      </button>
+        </button>
+      </div>
 
       {expanded && (
         <div className="px-3 pb-3">
