@@ -19,6 +19,7 @@ from app.models import ChatMessage, Conversation, LearningItem, User
 from app.models.user import UserSettings
 from app.services import chat
 from app.services import goals as goals_service
+from app.services import notice as notice_service
 from app.services import push as push_service
 from app.services import translation as translation_service
 from app.services.game.invites import invite_hub
@@ -63,7 +64,12 @@ async def _with_translations(
     인프로세스 캐시(_recent)의 원본 dict 를 건드리지 않는다(뷰어마다 타깃 언어가
     달라 공유 캐시를 오염시키면 안 됨)."""
     candidates = [
-        m for m in items if not m["deleted"] and m["body"] and _in_scope(m, viewer_id, settings)
+        m
+        for m in items
+        if not m["deleted"]
+        and not m.get("kind")  # 시스템 줄 제외 (docs/specs/chat-notice.md)
+        and m["body"]
+        and _in_scope(m, viewer_id, settings)
     ]
     window_ids = {m["id"] for m in candidates[-TRANSLATE_WINDOW:]}
     out = []
@@ -140,6 +146,8 @@ async def message_translation(
     if not (viewer_settings and viewer_settings.chat_translate):
         return {"translation": None}
     if msg.deleted_at is not None or not msg.body:
+        return {"translation": None}
+    if msg.kind is not None:  # 시스템 줄 제외 (docs/specs/chat-notice.md)
         return {"translation": None}
     # 범위 체크 — 내 글/상대 글 개별 설정 (2026-08-12)
     if not _in_scope({"sender_id": msg.sender_id}, user.id, viewer_settings):
@@ -386,3 +394,57 @@ async def patch_weekly_goal(
     )
     await _push_goal_sync(conv)
     return weekly
+
+
+# --- 대화방 공지 (docs/specs/chat-notice.md) --------------------------------------
+
+
+async def _push_notice_system_line(conv: Conversation, msg: dict, from_name: str) -> None:
+    """시스템 줄을 기존 메시지 푸시 형식으로 — send 경로(chat.message)와 동일."""
+    event = {"t": "chat.message", "from_name": from_name, **msg}
+    await chat.deliver_ws(conv.user_lo_id, event)
+    await chat.deliver_ws(conv.user_hi_id, event)
+
+
+async def _push_notice_sync(conv: Conversation) -> None:
+    event = {"t": "chat.notice", "conversation_id": conv.id}
+    await chat.deliver_ws(conv.user_lo_id, event)
+    await chat.deliver_ws(conv.user_hi_id, event)
+
+
+class NoticeBody(BaseModel):
+    text: str
+
+
+@router.get("/with/{other_id}/notice")
+async def get_notice(
+    other_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    return await notice_service.get_notice(db, user.id, other_id)
+
+
+@router.put("/with/{other_id}/notice")
+async def put_notice(
+    other_id: int,
+    payload: NoticeBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    notice, system_line, conv = await notice_service.set_notice(db, user.id, other_id, payload.text)
+    await _push_notice_system_line(conv, system_line, user.nickname)
+    await _push_notice_sync(conv)
+    return notice
+
+
+@router.delete("/with/{other_id}/notice", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_notice(
+    other_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    system_line, conv = await notice_service.clear_notice(db, user.id, other_id)
+    if conv is not None and system_line is not None:
+        await _push_notice_system_line(conv, system_line, user.nickname)
+        await _push_notice_sync(conv)

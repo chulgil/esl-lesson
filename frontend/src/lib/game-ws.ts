@@ -403,6 +403,8 @@ export type ChatServerMsg =
       deleted: boolean;
       client_msg_id: string;
       created_at: string | null;
+      /** 공지 변경 시스템 줄 (docs/specs/chat-notice.md) — null/미정의면 일반 메시지 */
+      kind?: "notice_set" | "notice_clear" | null;
     }
   | {
       t: "chat.read";
@@ -416,6 +418,8 @@ export type ChatServerMsg =
   // 함께 목표 변경(추가·체크·삭제·주간 목표 수정) 브로드캐스트 — 클라는 재조회
   // (docs/specs/shared-goals.md)
   | { t: "goal.sync"; conversation_id: number }
+  // 공지 등록/수정/내리기 브로드캐스트 — 클라는 재조회 (docs/specs/chat-notice.md)
+  | { t: "chat.notice"; conversation_id: number }
   // 클라 합성 신호 (서버 발신 아님) — WS 재접속 시 열린 대화방 재동기화 트리거
   | { t: "chat.resync" };
 

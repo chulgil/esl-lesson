@@ -32,6 +32,9 @@ export interface ChatMessage {
   } | null;
   /** 자동 번역 — WS 로 갓 도착한 메시지는 비어 있다가 별도 조회로 채워진다 */
   translation?: Translation | null;
+  /** 공지 변경 시스템 줄 (docs/specs/chat-notice.md) — null/미정의면 일반 메시지.
+   *  notice_set 의 body 는 공지 첫 줄 스냅샷, notice_clear 의 body 는 빈 문자열 */
+  kind?: "notice_set" | "notice_clear" | null;
 }
 
 export interface ChatConversation {
@@ -70,6 +73,13 @@ export interface GoalWeekly {
 export interface GoalsResponse {
   items: GoalItem[];
   weekly: GoalWeekly;
+}
+
+/** 대화방 공지 — 대화당 1개, 두 참가자 모두 수정 가능 (docs/specs/chat-notice.md) */
+export interface ChatNotice {
+  text: string | null;
+  updated_at?: string | null;
+  updated_by_name?: string | null;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -163,6 +173,17 @@ export const chatApi = {
     }),
   deleteGoal: (id: number) =>
     request<void>(`/api/chat/goals/${id}`, { method: "DELETE" }),
+
+  // --- 대화방 공지 (docs/specs/chat-notice.md) ---
+  notice: (otherId: number) =>
+    request<ChatNotice>(`/api/chat/with/${otherId}/notice`),
+  setNotice: (otherId: number, text: string) =>
+    request<ChatNotice>(`/api/chat/with/${otherId}/notice`, {
+      method: "PUT",
+      body: JSON.stringify({ text }),
+    }),
+  clearNotice: (otherId: number) =>
+    request<void>(`/api/chat/with/${otherId}/notice`, { method: "DELETE" }),
 };
 
 /** 멱등키 — 재시도해도 서버에 한 건만 저장된다 */

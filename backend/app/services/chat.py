@@ -49,6 +49,16 @@ def _invalidate_unread(*user_ids: int) -> None:
         _unread.pop(uid, None)
 
 
+def cache_append(conversation_id: int, data: dict) -> None:
+    """다른 서비스가 생성한 메시지(공지 시스템 줄 등)를 최근 캐시에 반영.
+
+    캐시가 아직 워밍되지 않았으면(콜드 스타트) no-op — 다음 조회가 DB 에서
+    읽어 자연히 최신 상태가 된다."""
+    buf = _recent.get(conversation_id)
+    if buf is not None:
+        buf.append(data)
+
+
 def message_dict(m: ChatMessage) -> dict:
     deleted = m.deleted_at is not None
     return {
@@ -66,6 +76,8 @@ def message_dict(m: ChatMessage) -> dict:
         "deleted": deleted,
         # 답장 인용 대상 — 미리보기(reply_to)는 읽기 시점에 attach_reply_previews 로
         "reply_to_id": None if deleted else m.reply_to_id,
+        # 시스템 줄 표식 (docs/specs/chat-notice.md) — NULL=일반 메시지
+        "kind": m.kind,
     }
 
 
@@ -186,10 +198,11 @@ async def send_message(
     item_ref = await snapshot_item(db, sender.id, item_id) if item_id is not None else None
     conv = await get_or_create_conversation(db, sender.id, to_user_id)
 
-    # 답장 대상 검증 — 반드시 같은 대화의 메시지 (타 대화 인용 = 정보 유출 경로)
+    # 답장 대상 검증 — 반드시 같은 대화의 메시지 (타 대화 인용 = 정보 유출 경로).
+    # 시스템 줄(kind 있음)은 인용 대상이 아님 (docs/specs/chat-notice.md)
     if reply_to_id is not None:
         target = await db.get(ChatMessage, reply_to_id)
-        if target is None or target.conversation_id != conv.id:
+        if target is None or target.conversation_id != conv.id or target.kind is not None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "reply_target_not_found")
 
     existing = (
