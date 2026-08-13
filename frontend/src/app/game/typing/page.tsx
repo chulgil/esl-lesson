@@ -96,6 +96,7 @@ function TypingRaceInner() {
   const [end, setEnd] = useState<{
     results: TpResult[];
     winner: string | null;
+    aborted: boolean;
   } | null>(null);
   const [review, setReview] = useState<GameReviewItem[]>([]);
   // 플레이어 배지 (이름 -> 마스코트·칭호) — 대기실·결과에 표시
@@ -200,7 +201,11 @@ function TypingRaceInner() {
         setReview(msg.items);
         break;
       case "tp.end":
-        setEnd({ results: msg.results, winner: msg.winner });
+        setEnd({
+          results: msg.results,
+          winner: msg.winner,
+          aborted: msg.aborted,
+        });
         setPhase("ended");
         break;
       case "error":
@@ -488,6 +493,7 @@ function TypingRaceInner() {
               color="yellow"
               onClick={() => {
                 socketRef.current?.tpLeave();
+                setRoom(null);
                 setPhase("lobby");
               }}
             >
@@ -642,6 +648,11 @@ function TypingRaceInner() {
               "기록 완료!"
             )}
           </h2>
+          {end.aborted && (
+            <p className="text-sm font-bold text-brick-red">
+              상대가 중간에 나가 대전이 종료됐어요
+            </p>
+          )}
           {end.results.map((r) => (
             <div
               key={r.name}
@@ -676,10 +687,11 @@ function TypingRaceInner() {
               color="green"
               onClick={() => {
                 setError(null);
+                setRoom(null);
                 socketRef.current?.tpSolo();
               }}
             >
-              한 번 더
+              {room ? "혼자 한 번 더" : "한 번 더"}
             </Brick>
             <Brick color="blue" href="/game">
               게임 메뉴로

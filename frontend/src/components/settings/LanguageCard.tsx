@@ -78,7 +78,11 @@ export function LanguageCard() {
     patch({ learning_langs: next });
   }
 
-  if (primaryLang === null) return null;
+  if (primaryLang === null) {
+    return (
+      <div className="mt-10 h-60 max-w-lg animate-pulse rounded-lg bg-ink/5" />
+    );
+  }
 
   return (
     <section className="mt-10 max-w-lg">

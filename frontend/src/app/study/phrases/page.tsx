@@ -103,7 +103,7 @@ export default function MyPhrasesEditPage() {
                 type="button"
                 disabled={busy !== null}
                 onClick={() => remove(p.item_id)}
-                className="min-h-9 shrink-0 rounded-full border-2 border-brick-red/40 bg-white px-3 text-xs font-bold text-brick-red transition hover:border-brick-red disabled:opacity-50"
+                className="min-h-11 shrink-0 rounded-full border-2 border-brick-red/40 bg-white px-3 text-xs font-bold text-brick-red transition hover:border-brick-red disabled:opacity-50"
               >
                 {busy === p.item_id ? "빼는 중..." : "빼기"}
               </button>

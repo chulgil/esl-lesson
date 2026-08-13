@@ -306,7 +306,7 @@ export default function LibraryDetailPage() {
                     <button
                       type="button"
                       onClick={() => setPeek(true)}
-                      className="cursor-pointer rounded-full border-2 border-ink/20 bg-white px-3 py-1 text-xs font-bold opacity-70 hover:opacity-100"
+                      className="min-h-11 cursor-pointer rounded-full border-2 border-ink/20 bg-white px-3 py-1 text-xs font-bold opacity-70 hover:opacity-100"
                     >
                       잠깐 보기
                     </button>

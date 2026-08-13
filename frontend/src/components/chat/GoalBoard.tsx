@@ -7,6 +7,20 @@ import { onChatEvent } from "@/lib/chat-signals";
 
 const MAX_ITEMS = 20;
 
+/** 서버 에러 코드(backend/app/services/goals.py) → 사용자 문구.
+ *  미매핑 코드는 호출부의 기존 일반 문구로 폴백한다. */
+const GOAL_ERROR_MESSAGES: Record<string, string> = {
+  not_friends: "친구 관계가 끊어져 수정할 수 없어요",
+  invalid_text: "내용을 입력해주세요",
+  goals_full: "목표는 20개까지예요",
+  invalid_target: "목표 횟수를 확인해주세요",
+};
+
+function goalErrorMessage(e: unknown, fallback: string): string {
+  const code = e instanceof Error ? e.message : "";
+  return GOAL_ERROR_MESSAGES[code] ?? fallback;
+}
+
 export interface GoalBoardHandle {
   /** 헤더 케밥 메뉴가 빈 보드를 여는 통로 — 목표가 없어도 새로 쓸 수 있어야 한다 */
   open: () => void;
@@ -44,6 +58,8 @@ export function GoalBoard({
   const [error, setError] = useState<string | null>(null);
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetInput, setTargetInput] = useState("");
+  // 목표 추가·주간 목표 저장·보드 내리기 요청 중 중복 클릭 방지
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     if (!Number.isFinite(otherId)) return;
@@ -87,8 +103,8 @@ export function GoalBoard({
       chatApi
         .patchGoal(item.id, { done })
         .then(load) // done_by_name 등 서버 확정값 반영
-        .catch(() => {
-          setError("변경하지 못했어요");
+        .catch((e) => {
+          setError(goalErrorMessage(e, "변경하지 못했어요"));
           load();
         });
     },
@@ -98,8 +114,8 @@ export function GoalBoard({
   const onDelete = useCallback(
     (id: number) => {
       setItems((prev) => prev.filter((g) => g.id !== id));
-      chatApi.deleteGoal(id).catch(() => {
-        setError("삭제하지 못했어요");
+      chatApi.deleteGoal(id).catch((e) => {
+        setError(goalErrorMessage(e, "삭제하지 못했어요"));
         load();
       });
     },
@@ -110,10 +126,12 @@ export function GoalBoard({
     const t = text.trim();
     if (!t || t.length > 100 || items.length >= MAX_ITEMS) return;
     setText("");
+    setBusy(true);
     chatApi
       .addGoal(otherId, t)
       .then(load)
-      .catch(() => setError("추가하지 못했어요"));
+      .catch((e) => setError(goalErrorMessage(e, "추가하지 못했어요")))
+      .finally(() => setBusy(false));
   }, [text, items.length, otherId, load]);
 
   const onSaveTarget = useCallback(() => {
@@ -121,13 +139,15 @@ export function GoalBoard({
     setEditingTarget(false);
     if (!Number.isFinite(v) || v <= 0) return;
     setWeekly((prev) => ({ ...prev, target: v }));
+    setBusy(true);
     chatApi
       .setWeeklyTarget(otherId, v)
       .then(load)
-      .catch(() => {
-        setError("목표 저장에 실패했어요");
+      .catch((e) => {
+        setError(goalErrorMessage(e, "목표 저장에 실패했어요"));
         load();
-      });
+      })
+      .finally(() => setBusy(false));
   }, [targetInput, otherId, load]);
 
   const doneCount = items.filter((g) => g.done).length;
@@ -142,6 +162,7 @@ export function GoalBoard({
   const hasContent = items.length > 0 || weeklyConfigured;
 
   const onClearBoard = useCallback(() => {
+    setBusy(true);
     chatApi
       .clearGoalBoard(otherId)
       .then(() => {
@@ -151,10 +172,11 @@ export function GoalBoard({
         setOpened(false);
         setExpanded(false);
       })
-      .catch(() => {
-        setError("내리지 못했어요");
+      .catch((e) => {
+        setError(goalErrorMessage(e, "내리지 못했어요"));
         load();
-      });
+      })
+      .finally(() => setBusy(false));
   }, [otherId, load]);
 
   useEffect(() => {
@@ -189,20 +211,22 @@ export function GoalBoard({
               : "flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3 text-left hover:bg-white"
           }
         >
-          <span
-            className={excel ? "font-bold" : "font-hand text-base font-bold"}
-          >
-            함께 목표 {doneCount}/{items.length}
-          </span>
-          <span className={excel ? "text-[#666]" : "opacity-60"}>
-            이번 주 {sum}/{weekly.target}회
+          <span className="min-w-0 flex-1 truncate">
+            <span
+              className={excel ? "font-bold" : "font-hand text-base font-bold"}
+            >
+              함께 목표 {doneCount}/{items.length}
+            </span>{" "}
+            <span className={excel ? "text-[#666]" : "opacity-60"}>
+              이번 주 {sum}/{weekly.target}회
+            </span>
           </span>
           {achieved && (
             <span
               className={
                 excel
-                  ? "rounded-sm border border-[#217346] px-1 text-[11px] font-bold text-[#217346]"
-                  : "rounded-full border-2 border-brick-green px-1.5 text-[11px] font-bold text-brick-green"
+                  ? "shrink-0 rounded-sm border border-[#217346] px-1 text-[11px] font-bold text-[#217346]"
+                  : "shrink-0 rounded-full border-2 border-brick-green px-1.5 text-[11px] font-bold text-brick-green"
               }
             >
               달성!
@@ -215,6 +239,7 @@ export function GoalBoard({
           confirmLabel="정말 내리기?"
           ariaLabel="함께 목표 보드 내리기"
           onDelete={onClearBoard}
+          disabled={busy}
           className={`shrink-0 text-xs ${
             excel
               ? "text-[#c0504d]"
@@ -233,7 +258,7 @@ export function GoalBoard({
       </div>
 
       {expanded && (
-        <div className="px-3 pb-3">
+        <div className="max-h-52 overflow-y-auto px-3 pb-3">
           {error && (
             <p
               className={
@@ -286,7 +311,8 @@ export function GoalBoard({
                   <button
                     type="button"
                     onClick={onSaveTarget}
-                    className={`font-bold underline underline-offset-2 ${excel ? "text-[#217346]" : "text-brick-blue"}`}
+                    disabled={busy}
+                    className={`font-bold underline underline-offset-2 disabled:opacity-40 ${excel ? "text-[#217346]" : "text-brick-blue"}`}
                   >
                     저장
                   </button>
@@ -390,7 +416,7 @@ export function GoalBoard({
             <button
               type="button"
               onClick={onAdd}
-              disabled={!text.trim() || atMax}
+              disabled={!text.trim() || atMax || busy}
               className={
                 excel
                   ? "min-h-10 shrink-0 rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] px-2.5 text-xs hover:bg-[#e2efda] disabled:opacity-40"

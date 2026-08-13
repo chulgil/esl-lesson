@@ -192,13 +192,13 @@ function ThemeSection() {
                       tabIndex={0}
                       onClick={(e) => {
                         e.stopPropagation();
-                        window.location.href = "/shop";
+                        window.location.href = `/shop?highlight=${t.key}`;
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
                           e.stopPropagation();
-                          window.location.href = "/shop";
+                          window.location.href = `/shop?highlight=${t.key}`;
                         }
                       }}
                       className="cursor-pointer rounded-full border-2 border-brick-blue bg-brick-blue/10 px-3 py-1 text-xs font-bold text-brick-blue transition hover:-translate-y-0.5"

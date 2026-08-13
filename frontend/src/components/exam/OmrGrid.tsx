@@ -37,7 +37,7 @@ export function OmrGrid({
                 onClick={() => onJump(idx)}
                 aria-current={active}
                 aria-label={`${idx + 1}번 문항${marked ? " (마킹됨)" : ""}`}
-                className={`flex h-8 w-full items-center justify-center text-xs font-bold transition sm:h-9 ${
+                className={`flex min-h-11 w-full items-center justify-center text-xs font-bold transition ${
                   active
                     ? skin.omrCellActive
                     : marked

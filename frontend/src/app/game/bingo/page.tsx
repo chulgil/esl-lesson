@@ -65,6 +65,7 @@ function BingoInner() {
   const [end, setEnd] = useState<{
     results: BgResult[];
     winner: string | null;
+    aborted: boolean;
   } | null>(null);
   const [review, setReview] = useState<GameReviewItem[]>([]);
   const [profiles, setProfiles] = useState<Record<string, PlayerProfile>>({});
@@ -127,7 +128,11 @@ function BingoInner() {
         setReview(msg.items);
         break;
       case "bg.end":
-        setEnd({ results: msg.results, winner: msg.winner });
+        setEnd({
+          results: msg.results,
+          winner: msg.winner,
+          aborted: msg.aborted,
+        });
         setPhase("ended");
         break;
       case "error":
@@ -319,6 +324,7 @@ function BingoInner() {
               color="yellow"
               onClick={() => {
                 socketRef.current?.bgLeave();
+                setRoom(null);
                 setPhase("lobby");
               }}
             >
@@ -392,7 +398,7 @@ function BingoInner() {
                       : "border-ink/15 bg-white hover:-translate-y-0.5 hover:border-brick-blue active:scale-95"
                   }`}
                 >
-                  {done ? "✓ " : ""}
+                  {done ? "[v] " : ""}
                   {cell.en}
                 </button>
               );
@@ -429,6 +435,11 @@ function BingoInner() {
               "듣기 기록 완료!"
             )}
           </h2>
+          {end.aborted && (
+            <p className="text-sm font-bold text-brick-red">
+              상대가 중간에 나가 대전이 종료됐어요
+            </p>
+          )}
           {end.results.map((r) => (
             <div
               key={r.name}
@@ -461,10 +472,11 @@ function BingoInner() {
               color="green"
               onClick={() => {
                 setError(null);
+                setRoom(null);
                 socketRef.current?.bgSolo();
               }}
             >
-              한 번 더
+              {room ? "혼자 한 번 더" : "한 번 더"}
             </Brick>
             <Brick color="blue" href="/game">
               게임 메뉴로

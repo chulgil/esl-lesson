@@ -34,6 +34,7 @@ export default function VocabNetworkPage() {
   const [showInsight, setShowInsight] = useState(false);
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
   const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState(false);
   const [hasContents, setHasContents] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -99,11 +100,13 @@ export default function VocabNetworkPage() {
 
   async function addToDeck(itemId: number) {
     setAdding(true);
+    setAddError(false);
     try {
       await studyApi.addCard(itemId);
       setAddedIds((prev) => new Set(prev).add(itemId));
     } catch {
       // 실패 시 상태 유지 — 버튼 다시 활성화
+      setAddError(true);
     } finally {
       setAdding(false);
     }
@@ -223,6 +226,11 @@ export default function VocabNetworkPage() {
                     ×
                   </button>
                 </div>
+                {addError && (
+                  <p className="w-full text-xs font-bold text-brick-red">
+                    추가하지 못했어요 — 다시 시도해 주세요
+                  </p>
+                )}
               </div>
             )}
           </div>

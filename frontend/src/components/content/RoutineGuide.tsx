@@ -99,6 +99,7 @@ export function RoutineGuide({
   const [submitting, setSubmitting] = useState(false);
   const [busyStep, setBusyStep] = useState<number | null>(null);
   const [listenBusy, setListenBusy] = useState(false);
+  const [actionError, setActionError] = useState(false);
 
   useEffect(() => {
     studyApi
@@ -133,8 +134,9 @@ export function RoutineGuide({
             ),
           },
       );
+      setActionError(false);
     } catch {
-      // 실패는 조용히 — 다음 탭에서 재시도
+      setActionError(true);
     }
     setBusyStep(null);
   }
@@ -155,8 +157,9 @@ export function RoutineGuide({
                 : { ...prev.listen, after: res.score },
           },
       );
+      setActionError(false);
     } catch {
-      // 실패는 조용히 — 다시 누르면 재시도
+      setActionError(true);
     }
     setListenBusy(false);
   }
@@ -168,8 +171,9 @@ export function RoutineGuide({
       await studyApi.submitSummary(contentId, summaryText.trim());
       setSummaryText("");
       setRoutine(await studyApi.routine(contentId));
+      setActionError(false);
     } catch {
-      // 실패는 조용히
+      setActionError(true);
     }
     setSubmitting(false);
   }
@@ -187,6 +191,12 @@ export function RoutineGuide({
           </span>
         )}
       </div>
+
+      {actionError && (
+        <p className="mt-2 text-xs font-bold text-brick-red">
+          저장하지 못했어요 — 다시 시도해 주세요
+        </p>
+      )}
 
       {/* 진행 브릭 6칸 */}
       <div className="mt-3 flex gap-1" aria-label="루틴 진행">

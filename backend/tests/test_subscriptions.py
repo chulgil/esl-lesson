@@ -365,6 +365,42 @@ async def test_game_pool_allows_subscribed_content(wired_db):
         await load_word_pool_from_contents(c.id, [content.id])
 
 
+async def test_game_pool_public_content_excludes_unapproved(wired_db):
+    """콘텐츠 선택 대전 풀 — 공용은 approved 만, 개인은 rejected 만 제외
+    (visible_item_clause 와 동일 규칙, content-governance.md)."""
+    from app.models import ItemOccurrence, User
+    from app.services.game.manager import load_word_pool_from_contents
+
+    u = User(google_sub="g-p", email="p@x.com", name="P")
+    wired_db.add(u)
+    await wired_db.flush()
+
+    content = Content(
+        source="manual", title="공용 소재", status="ready", visibility="public", created_by=u.id
+    )
+    wired_db.add(content)
+    await wired_db.flush()
+    wired_db.add(ContentSubscription(content_id=content.id, user_id=u.id))
+    for i, status_ in enumerate(["approved"] * 12 + ["pending", "rejected"]):
+        item = LearningItem(
+            item_type="word",
+            en_text=f"pubw{i}",
+            ko_text=f"공뜻{i}",
+            normalized_key=f"pubw{i}",
+            review_status=status_,
+        )
+        wired_db.add(item)
+        await wired_db.flush()
+        wired_db.add(ItemOccurrence(item_id=item.id, content_id=content.id))
+    await wired_db.commit()
+
+    pool = await load_word_pool_from_contents(u.id, [content.id])
+    assert len(pool) == 12  # pending·rejected 제외
+    pool_words = {en for _, en, _ in pool}
+    assert "pubw12" not in pool_words  # pending
+    assert "pubw13" not in pool_words  # rejected
+
+
 async def test_private_promotion_preserves_subscriber_visibility(client, db_session):
     """개인→공용 일괄 승격 시맨틱 (마이그레이션 a6b7c8d9e0f1 과 동일 SQL) —
     pending 항목을 먼저 승인해야 기존 구독자의 학습 재료가 사라지지 않는다."""

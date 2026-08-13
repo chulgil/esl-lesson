@@ -68,6 +68,7 @@ function DictationInner() {
   const [end, setEnd] = useState<{
     results: DtResult[];
     winner: string | null;
+    aborted: boolean;
   } | null>(null);
   const [review, setReview] = useState<GameReviewItem[]>([]);
   const [profiles, setProfiles] = useState<Record<string, PlayerProfile>>({});
@@ -129,7 +130,11 @@ function DictationInner() {
         setReview(msg.items);
         break;
       case "dt.end":
-        setEnd({ results: msg.results, winner: msg.winner });
+        setEnd({
+          results: msg.results,
+          winner: msg.winner,
+          aborted: msg.aborted,
+        });
         setPhase("ended");
         break;
       case "error":
@@ -261,19 +266,31 @@ function DictationInner() {
               socketRef.current?.invite(uid, "dictation", room.code)
             }
           />
-          {room.host === myName ? (
+          <div className="flex flex-wrap items-center gap-3">
+            {room.host === myName ? (
+              <Brick
+                color="green"
+                disabled={room.players.length < 2}
+                onClick={() => socketRef.current?.dtBegin()}
+              >
+                {room.players.length < 2 ? "친구를 기다리는 중..." : "시작!"}
+              </Brick>
+            ) : (
+              <p className="animate-pulse text-sm opacity-60">
+                방장이 시작하면 바로 출발해요...
+              </p>
+            )}
             <Brick
-              color="green"
-              disabled={room.players.length < 2}
-              onClick={() => socketRef.current?.dtBegin()}
+              color="yellow"
+              onClick={() => {
+                socketRef.current?.dtLeave();
+                setRoom(null);
+                setPhase("lobby");
+              }}
             >
-              {room.players.length < 2 ? "친구를 기다리는 중..." : "시작!"}
+              나가기
             </Brick>
-          ) : (
-            <p className="animate-pulse text-sm opacity-60">
-              방장이 시작하면 바로 출발해요...
-            </p>
-          )}
+          </div>
         </section>
       )}
 
@@ -403,6 +420,11 @@ function DictationInner() {
               "기록 완료!"
             )}
           </h2>
+          {end.aborted && (
+            <p className="text-sm font-bold text-brick-red">
+              상대가 중간에 나가 대전이 종료됐어요
+            </p>
+          )}
           {[...end.results]
             .sort((a, b) => b.score - a.score)
             .map((r) => (
@@ -433,10 +455,11 @@ function DictationInner() {
               onClick={() => {
                 setEnd(null);
                 setMyScore(0);
+                setRoom(null);
                 connect((s) => s.dtSolo());
               }}
             >
-              한 번 더
+              {room ? "혼자 한 번 더" : "한 번 더"}
             </Brick>
             <Brick color="blue" href="/game">
               게임 메뉴로

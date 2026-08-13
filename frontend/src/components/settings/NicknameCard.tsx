@@ -26,13 +26,20 @@ export function NicknameCard() {
       const me = await updateNickname(nickname);
       setNickname(me.nickname);
       setMessage("닉네임을 바꿨어요 — 친구·랭킹·게임에 바로 반영돼요.");
-    } catch {
-      setMessage("2~16자로 입력해주세요.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      setMessage(
+        msg.includes("chars")
+          ? "2~16자로 입력해주세요."
+          : "저장에 실패했어요 — 잠시 후 다시 시도해주세요.",
+      );
     }
     setBusy(false);
   }
 
-  if (!loaded) return null;
+  if (!loaded) {
+    return <div className="h-28 max-w-lg animate-pulse rounded-lg bg-ink/5" />;
+  }
 
   return (
     <section className="max-w-lg">

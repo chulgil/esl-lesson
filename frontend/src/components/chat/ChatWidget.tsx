@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ChatHeaderMenu } from "@/components/chat/ChatHeaderMenu";
@@ -359,9 +360,8 @@ export function ChatWidget() {
                 excel={excel}
                 items={[
                   {
-                    label: noticeRef.current?.hasNotice
-                      ? "공지 수정"
-                      : "공지 쓰기",
+                    label: () =>
+                      noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
                     onClick: () => noticeRef.current?.openEditor(),
                   },
                   {
@@ -537,9 +537,14 @@ function WidgetList({
         <p
           className={`px-4 py-8 text-center text-xs ${excel ? "text-[#999]" : "opacity-50"}`}
         >
-          {excel
-            ? "공유된 문서가 없습니다"
-            : "친구 화면에서 첫 노트를 시작해보세요"}
+          {excel ? "공유된 문서가 없습니다. " : "아직 노트가 없어요. "}
+          <Link
+            href="/friends"
+            className={`font-bold ${excel ? "text-[#217346]" : "text-brick-blue"}`}
+          >
+            친구 목록
+          </Link>
+          에서 시작해보세요
         </p>
       )}
     </div>

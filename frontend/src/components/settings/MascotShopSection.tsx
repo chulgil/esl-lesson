@@ -42,7 +42,9 @@ export function MascotShopSection() {
         insufficient_xp: "XP가 부족해요 — 복습·게임으로 더 모을 수 있어요",
         already_owned: "이미 보유한 아이템이에요",
         saver_full: "책갈피는 최대 2개까지 보관돼요",
-      }[code] ?? code,
+        item_not_found: "존재하지 않는 아이템이에요",
+        event_only_item: "이벤트로만 받을 수 있는 아이템이에요",
+      }[code] ?? "구매에 실패했어요 — 잠시 후 다시 시도해주세요.",
     );
   }
 
@@ -93,94 +95,111 @@ export function MascotShopSection() {
       {notice && <p className="mb-2 text-xs text-brick-red">{notice}</p>}
 
       {/* 마스코트 — 미리보기 + 구매/활성. 수집 도감식: 보유/미보유가 한눈에 */}
-      <div className="flex flex-wrap gap-3">
-        {shop.mascots.map((m) => {
-          const active = shop.active_mascot === m.key;
-          return (
-            <div
-              key={m.key}
-              className={`flex w-40 flex-col items-center gap-2 rounded-lg border-2 bg-white p-3 ${
-                active ? "border-brick-blue" : "border-ink/10"
-              }`}
-            >
+      {shop.mascots.length === 0 ? (
+        <p className="rounded-lg border-2 border-ink/10 bg-white p-3 text-xs opacity-60">
+          지금은 판매 중인 캐릭터가 없어요
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-3">
+          {shop.mascots.map((m) => {
+            const active = shop.active_mascot === m.key;
+            return (
               <div
-                className={`origin-bottom scale-90 ${m.owned ? "" : "opacity-40 grayscale"}`}
+                key={m.key}
+                className={`flex w-40 flex-col items-center gap-2 rounded-lg border-2 bg-white p-3 ${
+                  active ? "border-brick-blue" : "border-ink/10"
+                }`}
               >
-                <MascotSvg kind={m.key} outfits={m.owned ? ownedOutfits : []} />
+                <div
+                  className={`origin-bottom scale-90 ${m.owned ? "" : "opacity-40 grayscale"}`}
+                >
+                  <MascotSvg
+                    kind={m.key}
+                    outfits={m.owned ? ownedOutfits : []}
+                  />
+                </div>
+                <p className="text-sm font-bold">{m.label}</p>
+                {m.owned ? (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => activate(active ? null : m.key)}
+                    className={`min-h-9 w-full rounded-full border-2 text-xs font-bold transition ${
+                      active
+                        ? "border-ink/20 bg-ink/5"
+                        : "border-brick-blue bg-brick-blue/10 text-brick-blue hover:-translate-y-0.5"
+                    }`}
+                  >
+                    {active ? "쉬게 하기" : "데려오기"}
+                  </button>
+                ) : m.sale === "event" ? (
+                  <span className="grid min-h-9 w-full place-items-center rounded-full border-2 border-brick-yellow/60 bg-highlight/40 text-xs font-bold">
+                    이벤트 한정
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => buy(`mascot:${m.key}`)}
+                    className={`min-h-9 w-full rounded-full border-2 text-xs font-bold transition ${
+                      shop.available_xp >= m.price_xp
+                        ? "border-brick-blue bg-brick-blue/10 text-brick-blue hover:-translate-y-0.5"
+                        : "border-ink/15 opacity-50"
+                    }`}
+                  >
+                    {busy === `mascot:${m.key}`
+                      ? "구매 중..."
+                      : shop.available_xp >= m.price_xp
+                        ? `${m.price_xp.toLocaleString()} XP`
+                        : `${m.price_xp.toLocaleString()} XP · ${(m.price_xp - shop.available_xp).toLocaleString()} 부족`}
+                  </button>
+                )}
               </div>
-              <p className="text-sm font-bold">{m.label}</p>
-              {m.owned ? (
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => activate(active ? null : m.key)}
-                  className={`min-h-9 w-full rounded-full border-2 text-xs font-bold transition ${
-                    active
-                      ? "border-ink/20 bg-ink/5"
-                      : "border-brick-blue bg-brick-blue/10 text-brick-blue hover:-translate-y-0.5"
-                  }`}
-                >
-                  {active ? "쉬게 하기" : "데려오기"}
-                </button>
-              ) : m.sale === "event" ? (
-                <span className="grid min-h-9 w-full place-items-center rounded-full border-2 border-brick-yellow/60 bg-highlight/40 text-xs font-bold">
-                  이벤트 한정
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => buy(`mascot:${m.key}`)}
-                  className={`min-h-9 w-full rounded-full border-2 text-xs font-bold transition ${
-                    shop.available_xp >= m.price_xp
-                      ? "border-brick-blue bg-brick-blue/10 text-brick-blue hover:-translate-y-0.5"
-                      : "border-ink/15 opacity-50"
-                  }`}
-                >
-                  {busy === `mascot:${m.key}`
-                    ? "구매 중..."
-                    : shop.available_xp >= m.price_xp
-                      ? `${m.price_xp.toLocaleString()} XP`
-                      : `${m.price_xp.toLocaleString()} XP · ${(m.price_xp - shop.available_xp).toLocaleString()} 부족`}
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* 악세사리 — all-on: 사면 캐릭터가 전부 착용한다 */}
       <p className="mt-4 mb-1 text-xs font-bold opacity-70">
         악세사리 — 사면 캐릭터가 바로 착용해요 (보유한 것 전부)
       </p>
-      <div className="flex flex-wrap gap-2">
-        {shop.outfits.map((o) => (
-          <button
-            key={o.key}
-            type="button"
-            disabled={o.owned || busy !== null || o.sale === "event"}
-            onClick={() => buy(`outfit:${o.key}`)}
-            className={`min-h-9 rounded-full border-2 px-3 text-xs font-bold transition ${
-              o.owned
-                ? "border-brick-green/50 bg-brick-green/10 text-brick-green"
+      {shop.outfits.length === 0 ? (
+        <p className="rounded-lg border-2 border-ink/10 bg-white p-3 text-xs opacity-60">
+          악세사리가 없어요
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {shop.outfits.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              disabled={o.owned || busy !== null || o.sale === "event"}
+              onClick={() => buy(`outfit:${o.key}`)}
+              className={`min-h-9 rounded-full border-2 px-3 text-xs font-bold transition ${
+                o.owned
+                  ? "border-brick-green/50 bg-brick-green/10 text-brick-green"
+                  : o.sale === "event"
+                    ? "border-brick-yellow/60 bg-highlight/40"
+                    : shop.available_xp >= o.price_xp
+                      ? "border-brick-blue/50 bg-white text-brick-blue hover:-translate-y-0.5"
+                      : "border-ink/15 opacity-50"
+              }`}
+            >
+              {o.label}{" "}
+              {o.owned
+                ? "착용 중"
                 : o.sale === "event"
-                  ? "border-brick-yellow/60 bg-highlight/40"
-                  : shop.available_xp >= o.price_xp
-                    ? "border-brick-blue/50 bg-white text-brick-blue hover:-translate-y-0.5"
-                    : "border-ink/15 opacity-50"
-            }`}
-          >
-            {o.label}{" "}
-            {o.owned
-              ? "착용 중"
-              : o.sale === "event"
-                ? "이벤트 한정"
-                : busy === `outfit:${o.key}`
-                  ? "구매 중..."
-                  : `${o.price_xp.toLocaleString()} XP`}
-          </button>
-        ))}
-      </div>
+                  ? "이벤트 한정"
+                  : busy === `outfit:${o.key}`
+                    ? "구매 중..."
+                    : shop.available_xp >= o.price_xp
+                      ? `${o.price_xp.toLocaleString()} XP`
+                      : `${o.price_xp.toLocaleString()} XP · ${(o.price_xp - shop.available_xp).toLocaleString()} 부족`}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 책갈피 충전 — 손실 회피 상품 (벤치마크 1순위) */}
       <p className="mt-4 mb-1 text-xs font-bold opacity-70">책갈피 충전</p>
@@ -205,7 +224,9 @@ export function MascotShopSection() {
         >
           {busy === "saver"
             ? "구매 중..."
-            : `${shop.streak_saver.price_xp} XP로 1개 충전`}
+            : shop.available_xp >= shop.streak_saver.price_xp
+              ? `${shop.streak_saver.price_xp} XP로 1개 충전`
+              : `${shop.streak_saver.price_xp} XP · ${(shop.streak_saver.price_xp - shop.available_xp).toLocaleString()} 부족`}
         </button>
       </div>
     </section>

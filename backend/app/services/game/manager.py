@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from app.core.db import get_session_factory
 from app.models import (
@@ -647,10 +647,23 @@ async def load_word_pool_from_contents(
                 await db.execute(
                     select(LearningItem)
                     .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+                    .join(Content, Content.id == ItemOccurrence.content_id)
                     .where(
                         ItemOccurrence.content_id.in_(content_ids),
                         LearningItem.item_type == "word",
-                        LearningItem.review_status != "rejected",
+                        # 가시성 규칙과 동일 — 공용은 approved 만, 개인은 rejected 만
+                        # 제외 (2026-08-13 flow 감사 F1: 일괄 != rejected 라
+                        # 공용 콘텐츠의 pending/재검수 회수 항목이 노출되던 문제)
+                        or_(
+                            and_(
+                                Content.visibility == "public",
+                                LearningItem.review_status == "approved",
+                            ),
+                            and_(
+                                Content.visibility == "private",
+                                LearningItem.review_status != "rejected",
+                            ),
+                        ),
                     )
                     .distinct()
                 )

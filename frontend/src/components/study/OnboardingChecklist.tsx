@@ -162,7 +162,7 @@ export function OnboardingChecklist({
               key={choice.studyLevel}
               type="button"
               onClick={() => pickLevel(choice.studyLevel)}
-              className={`min-h-8 rounded-full border-2 px-2.5 py-0.5 font-bold transition ${
+              className={`min-h-11 rounded-full border-2 px-2.5 py-0.5 font-bold transition ${
                 levelBand(studyLevel) === choice.studyLevel
                   ? "border-brick-blue bg-brick-blue/10 text-brick-blue"
                   : "border-ink/15 bg-white hover:border-brick-blue/50"

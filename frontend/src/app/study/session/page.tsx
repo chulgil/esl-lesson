@@ -267,9 +267,13 @@ function StudySessionInner() {
                   hint_delay_seconds: hintDelay,
                   study_level: studyLevel,
                 })
-                .catch(() => undefined);
-              setShowSettings(false);
-              window.location.reload();
+                .then(() => {
+                  setShowSettings(false);
+                  window.location.reload();
+                })
+                .catch(() =>
+                  setError("설정을 저장하지 못했어요 — 다시 시도해 주세요"),
+                );
             }}
             className="min-h-11 self-start rounded-md bg-brick-green px-4 py-2 font-bold text-brick-label transition-colors hover:bg-brick-green/85"
           >

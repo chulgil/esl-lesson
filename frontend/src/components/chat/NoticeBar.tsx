@@ -8,6 +8,20 @@ import { onChatEvent } from "@/lib/chat-signals";
 const MAX_LEN = 500;
 const TITLE_MAX = 80;
 
+/** 서버 에러 코드(backend/app/services/notice.py) → 사용자 문구.
+ *  미매핑 코드는 호출부의 기존 일반 문구로 폴백한다. */
+const NOTICE_ERROR_MESSAGES: Record<string, string> = {
+  not_friends: "친구 관계가 끊어져 수정할 수 없어요",
+  invalid_title: "제목을 입력해주세요",
+  title_too_long: "제목이 너무 길어요",
+  text_too_long: "내용이 너무 길어요",
+};
+
+function noticeErrorMessage(e: unknown, fallback: string): string {
+  const code = e instanceof Error ? e.message : "";
+  return NOTICE_ERROR_MESSAGES[code] ?? fallback;
+}
+
 export interface NoticeBarHandle {
   /** 헤더 케밥 메뉴가 편집 시트를 여는 통로 — 공지 유무와 무관하게 호출 가능 */
   openEditor: () => void;
@@ -37,6 +51,8 @@ export function NoticeBar({
   const [titleDraft, setTitleDraft] = useState("");
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // 공지 저장·내리기 요청 중 중복 클릭 방지
+  const [busy, setBusy] = useState(false);
 
   const foldKey = `esl:chat-notice:fold:${otherId}`;
 
@@ -111,6 +127,7 @@ export function NoticeBar({
     const title = titleDraft.trim();
     const t = draft.trim();
     if (!title || title.length > TITLE_MAX || t.length > MAX_LEN) return;
+    setBusy(true);
     chatApi
       .setNotice(otherId, title, t)
       .then((res) => {
@@ -118,14 +135,17 @@ export function NoticeBar({
         setEditing(false);
         persistFold(false); // 방금 쓴 공지는 펼쳐서 바로 확인
       })
-      .catch(() => setError("공지를 저장하지 못했어요"));
+      .catch((e) => setError(noticeErrorMessage(e, "공지를 저장하지 못했어요")))
+      .finally(() => setBusy(false));
   }
 
   function onClear() {
+    setBusy(true);
     chatApi
       .clearNotice(otherId)
       .then(() => setNotice({ title: null, text: null }))
-      .catch(() => setError("공지를 내리지 못했어요"));
+      .catch((e) => setError(noticeErrorMessage(e, "공지를 내리지 못했어요")))
+      .finally(() => setBusy(false));
   }
 
   const wrapClass = excel
@@ -142,6 +162,9 @@ export function NoticeBar({
         <input
           value={titleDraft}
           onChange={(e) => setTitleDraft(e.target.value.slice(0, TITLE_MAX))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSave();
+          }}
           placeholder="공지 제목"
           aria-label="공지 제목"
           className={
@@ -178,7 +201,7 @@ export function NoticeBar({
           <button
             type="button"
             onClick={onSave}
-            disabled={!titleDraft.trim()}
+            disabled={!titleDraft.trim() || busy}
             className={`text-xs font-bold disabled:opacity-40 ${
               excel ? "text-[#217346]" : "text-brick-blue"
             }`}
@@ -227,6 +250,7 @@ export function NoticeBar({
           confirmLabel="정말 내리기?"
           ariaLabel="공지 내리기"
           onDelete={onClear}
+          disabled={busy}
           className={`ml-3 shrink-0 text-xs font-bold ${
             excel
               ? "text-[#c0504d]"
@@ -245,7 +269,7 @@ export function NoticeBar({
       </div>
 
       {!folded && (
-        <div className="px-3 pb-3">
+        <div className="max-h-52 overflow-y-auto px-3 pb-3">
           {error && <p className={errClass}>{error}</p>}
           {/* 레거시 행(title null)은 text 첫 줄이 바 제목이라 본문만 보여준다 */}
           {notice.title && (

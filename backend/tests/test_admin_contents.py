@@ -267,6 +267,51 @@ async def test_sentence_approval_requires_thinking_hint(admin_client, db_session
     assert res.json()["review_status"] == "approved"
 
 
+async def test_patch_item_text_change_invalidates_insight_and_embedding(
+    admin_client, db_session, monkeypatch
+):
+    """항목 텍스트 정정 시 파생 캐시 무효화 — 인사이트 삭제 + 임베딩 드롭
+    (2026-08-13 flow 감사 F2·F3: 정정 후에도 옛 텍스트 기반 캐시가 영구 잔존하던 문제)."""
+    from app.models import WordInsight
+
+    dropped: list[int] = []
+
+    async def fake_drop(db, item_id):
+        dropped.append(item_id)
+
+    import app.api.admin_contents as admin_module
+
+    monkeypatch.setattr(admin_module.embeddings, "drop_item_embedding", fake_drop)
+
+    item = LearningItem(
+        item_type="word", en_text="resilient", ko_text="회복력 있는", normalized_key="resilient"
+    )
+    db_session.add(item)
+    await db_session.flush()
+    db_session.add(WordInsight(item_id=item.id, payload={"ipa": "old"}, model="test"))
+    await db_session.commit()
+
+    # 텍스트와 무관한 변경(review_status)은 캐시 유지
+    res = await admin_client.patch(
+        f"/api/admin/items/{item.id}", json={"review_status": "approved"}
+    )
+    assert res.status_code == 200
+    kept = (
+        await db_session.execute(select(WordInsight).where(WordInsight.item_id == item.id))
+    ).scalar_one_or_none()
+    assert kept is not None
+    assert dropped == []
+
+    # en_text 정정 → 인사이트 삭제 + 임베딩 드롭
+    res = await admin_client.patch(f"/api/admin/items/{item.id}", json={"en_text": "resilience"})
+    assert res.status_code == 200
+    gone = (
+        await db_session.execute(select(WordInsight).where(WordInsight.item_id == item.id))
+    ).scalar_one_or_none()
+    assert gone is None
+    assert dropped == [item.id]
+
+
 async def test_approve_all_skips_hintless_sentences(admin_client, db_session):
     content = Content(source="manual", title="T")
     db_session.add(content)
