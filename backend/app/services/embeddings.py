@@ -111,6 +111,14 @@ async def similar_items(db: AsyncSession, item_id: int, k: int = 5) -> list[dict
     ]
 
 
+async def drop_item_embedding(db: AsyncSession, item_id: int) -> None:
+    """항목 텍스트 정정 시 stale 벡터 제거 — 다음 파이프라인 embed 단계가
+    missing 으로 보고 자연 재생성한다 (2026-08-13 flow 감사 F3)."""
+    if not enabled(db):
+        return
+    await db.execute(text("DELETE FROM item_embeddings WHERE item_id = :id"), {"id": item_id})
+
+
 async def embed_items(db: AsyncSession, items: list) -> int:
     """(id, en_text) 를 가진 항목들을 배치 임베딩 후 저장. 저장 건수 반환."""
     if not items or not enabled(db):

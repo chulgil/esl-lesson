@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
@@ -17,9 +17,10 @@ from app.models import (
     ItemOccurrence,
     LearningItem,
     TranscriptSegment,
+    WordInsight,
 )
 from app.models.user import User
-from app.services import youtube
+from app.services import embeddings, youtube
 from app.services.content_difficulty import difficulty_by_content
 from app.services.content_service import (
     ContentCreate,
@@ -279,10 +280,18 @@ async def patch_item(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 "sentence item requires hint_thinking before approval",
             )
+    text_changed = False
     for field in ("en_text", "ko_text", "hint_thinking", "review_status"):
         value = getattr(body, field)
         if value is not None:
+            if field in ("en_text", "ko_text") and value != getattr(item, field):
+                text_changed = True
             setattr(item, field, value)
+    if text_changed:
+        # 파생 캐시 무효화 — 옛 텍스트 기반 인사이트·임베딩이 영구 잔존하던 문제
+        # (2026-08-13 flow 감사 F2·F3). 다음 조회/파이프라인이 자연 재생성한다.
+        await db.execute(delete(WordInsight).where(WordInsight.item_id == item.id))
+        await embeddings.drop_item_embedding(db, item.id)
     await db.commit()
     return {"id": item.id, "review_status": item.review_status}
 
