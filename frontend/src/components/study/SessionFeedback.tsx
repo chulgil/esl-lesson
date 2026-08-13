@@ -53,7 +53,10 @@ export function SessionFeedback({
 }) {
   const skin = useSurfaceSkin();
   const [submitting, setSubmitting] = useState(false);
-  const [showInsight, setShowInsight] = useState(false);
+  const [insight, setInsight] = useState<{
+    itemId: number;
+    word: string;
+  } | null>(null);
   const [closeAdded, setCloseAdded] = useState(false);
 
   // 헷갈린 유사단어를 원탭으로 학습 큐에 추가 — 어휘망 확장 루프 (P3)
@@ -85,6 +88,12 @@ export function SessionFeedback({
 
   const againMin = result.interval_previews?.["1"];
 
+  // 다른 보기 단어 정보 진입 — 정답(출제 항목)은 위 [단어 정보] 버튼이 담당
+  // (2026-08-13 사용자 요청: 오답 보기 단어의 뜻도 이 자리에서 배우게)
+  const otherRefs = (question.choice_refs ?? []).filter(
+    (r) => r.item_id !== question.item_id,
+  );
+
   return (
     <div
       className={`mt-4 max-w-xl p-4 ${
@@ -111,7 +120,9 @@ export function SessionFeedback({
           // 단어/숙어만 인사이트 제공 (패턴/문장은 문장 단위라 제외 — P1)
           <button
             type="button"
-            onClick={() => setShowInsight(true)}
+            onClick={() =>
+              setInsight({ itemId: question.item_id, word: enWord })
+            }
             className="min-h-10 cursor-pointer rounded-full border-2 border-brick-blue/40 bg-white px-3.5 py-1 text-xs font-bold text-brick-blue transition hover:border-brick-blue active:scale-95"
           >
             단어 정보
@@ -150,7 +161,9 @@ export function SessionFeedback({
             {question.level <= 2 && (
               <button
                 type="button"
-                onClick={() => setShowInsight(true)}
+                onClick={() =>
+                  setInsight({ itemId: question.item_id, word: enWord })
+                }
                 className="min-h-10 cursor-pointer rounded-full border-2 border-brick-yellow bg-white px-3.5 py-1 text-xs font-bold transition hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
               >
                 두 단어 차이 자세히 보기
@@ -166,6 +179,30 @@ export function SessionFeedback({
                 ? "학습 큐에 추가됨!"
                 : `"${result.close_match.en_text}" 도 학습에 추가`}
             </button>
+          </div>
+        </div>
+      )}
+
+      {question.level <= 2 && otherRefs.length > 0 && (
+        // 오답 보기도 학습 재료 — 탭하면 그 단어의 인사이트 카드로
+        <div className="mt-3">
+          <p className="text-xs opacity-60">다른 보기 단어도 알아보기</p>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            {otherRefs.map((r) => (
+              <button
+                key={r.item_id}
+                type="button"
+                onClick={() =>
+                  setInsight({ itemId: r.item_id, word: r.en_text })
+                }
+                className="min-h-10 cursor-pointer rounded-full border-2 border-ink/20 bg-white px-3.5 py-1 text-xs font-bold transition hover:border-brick-blue hover:text-brick-blue active:scale-95"
+              >
+                {r.en_text}
+                <span className="ml-1.5 font-normal opacity-60">
+                  {r.ko_text}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -224,11 +261,11 @@ export function SessionFeedback({
         </div>
       )}
 
-      {showInsight && (
+      {insight && (
         <InsightSheet
-          itemId={question.item_id}
-          word={enWord}
-          onClose={() => setShowInsight(false)}
+          itemId={insight.itemId}
+          word={insight.word}
+          onClose={() => setInsight(null)}
         />
       )}
     </div>
