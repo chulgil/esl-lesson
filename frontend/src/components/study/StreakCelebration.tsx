@@ -64,7 +64,7 @@ export function StreakCelebration({ streakDays }: { streakDays: number }) {
           type="button"
           aria-label="닫기"
           onClick={() => setMilestone(null)}
-          className="flex h-9 w-9 items-center justify-center rounded-md text-ink/50 hover:text-ink"
+          className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-ink/50 hover:text-ink"
         >
           <svg
             width="16"

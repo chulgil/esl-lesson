@@ -305,8 +305,15 @@ function TetrisInner() {
           ) : (
             <p className="animate-pulse">상대를 찾는 중...</p>
           )}
-          <Brick color="yellow" onClick={() => window.location.reload()}>
-            취소
+          <Brick
+            color="yellow"
+            onClick={() => {
+              socketRef.current?.leaveQueue();
+              setMyRoomCode(null);
+              setPhase("lobby");
+            }}
+          >
+            나가기
           </Brick>
         </section>
       )}
@@ -563,6 +570,11 @@ function ResultPanel({
       >
         {titles[result.winner]}
       </h2>
+      {result.aborted && (
+        <p className="mt-1 text-sm font-bold text-brick-red">
+          상대가 중간에 나가 대전이 종료됐어요
+        </p>
+      )}
       {/* 최종 점수 비교 — "왜 이 결과인지"를 한눈에 (전적 인지 버그 수정 2026-07-14) */}
       <p className="mt-2 font-hand text-3xl font-bold">
         <span
@@ -607,8 +619,8 @@ function ResultPanel({
         <Brick color="green" onClick={onAgain}>
           다시 하기
         </Brick>
-        <Brick color="blue" href="/">
-          홈으로
+        <Brick color="blue" href="/game">
+          게임 메뉴로
         </Brick>
         <ShareResultButton
           data={{

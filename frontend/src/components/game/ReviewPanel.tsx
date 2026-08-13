@@ -22,6 +22,7 @@ export function ReviewPanel({
   heading?: string;
 }) {
   const [added, setAdded] = useState<Record<number, boolean>>({});
+  const [failed, setFailed] = useState<Record<number, boolean>>({});
 
   if (items.length === 0) return null;
 
@@ -29,9 +30,11 @@ export function ReviewPanel({
     try {
       await studyApi.addCard(itemId);
       setAdded((prev) => ({ ...prev, [itemId]: true }));
+      setFailed((prev) => ({ ...prev, [itemId]: false }));
       logUsage("review_add", { game: source });
     } catch {
-      // 실패 시 버튼 유지 — 다시 탭해 재시도
+      // 실패 시 버튼 유지 — 다시 탭해 재시도, 인라인으로 실패 안내
+      setFailed((prev) => ({ ...prev, [itemId]: true }));
     }
   }
 
@@ -51,7 +54,7 @@ export function ReviewPanel({
           <button
             type="button"
             onClick={addAll}
-            className="shrink-0 rounded-md border-2 border-brick-blue bg-brick-blue/10 px-3 py-1.5 text-sm font-bold transition hover:-translate-y-0.5"
+            className="min-h-11 shrink-0 rounded-md border-2 border-brick-blue bg-brick-blue/10 px-3 py-1.5 text-sm font-bold transition hover:-translate-y-0.5"
           >
             모두 학습 추가
           </button>
@@ -63,26 +66,30 @@ export function ReviewPanel({
       </div>
       <ul className="flex flex-col gap-1.5">
         {items.map((item) => (
-          <li
-            key={item.item_id}
-            className="flex items-start justify-between gap-2"
-          >
-            <span className="min-w-0">
-              <b>{item.en}</b>
-              {item.ko && <span className="ml-2 opacity-60">{item.ko}</span>}
-            </span>
-            {added[item.item_id] ? (
-              <span className="shrink-0 text-xs font-bold text-brick-green">
-                추가됨
+          <li key={item.item_id} className="flex flex-col gap-1">
+            <div className="flex items-start justify-between gap-2">
+              <span className="min-w-0">
+                <b>{item.en}</b>
+                {item.ko && <span className="ml-2 opacity-60">{item.ko}</span>}
               </span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => addToStudy(item.item_id)}
-                className="shrink-0 rounded-md border-2 border-brick-blue/40 px-2.5 py-1 text-xs font-bold transition hover:bg-brick-blue/10"
-              >
-                학습 추가
-              </button>
+              {added[item.item_id] ? (
+                <span className="shrink-0 text-xs font-bold text-brick-green">
+                  추가됨
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => addToStudy(item.item_id)}
+                  className="min-h-11 shrink-0 rounded-md border-2 border-brick-blue/40 px-2.5 py-1 text-xs font-bold transition hover:bg-brick-blue/10"
+                >
+                  학습 추가
+                </button>
+              )}
+            </div>
+            {failed[item.item_id] && !added[item.item_id] && (
+              <p className="text-xs text-brick-red">
+                추가하지 못했어요 — 다시 탭해 주세요
+              </p>
             )}
           </li>
         ))}

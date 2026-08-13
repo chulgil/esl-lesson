@@ -11,6 +11,7 @@ export function DeleteMessageButton({
   className,
   onDelete,
   ariaLabel = "메시지 삭제",
+  disabled = false,
 }: {
   label: string;
   confirmLabel: string;
@@ -18,6 +19,8 @@ export function DeleteMessageButton({
   onDelete: () => void;
   /** 메시지 외 다른 대상(목표 항목 등)에 재사용할 때의 접근성 라벨 */
   ariaLabel?: string;
+  /** 요청 진행 중 등 — 중복 클릭 방지용 (기본 false) */
+  disabled?: boolean;
 }) {
   const [asking, setAsking] = useState(false);
 
@@ -30,6 +33,7 @@ export function DeleteMessageButton({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => {
         if (asking) {
           setAsking(false);
@@ -39,7 +43,7 @@ export function DeleteMessageButton({
         }
       }}
       aria-label={ariaLabel}
-      className={`${className} ${asking ? "font-bold text-brick-red opacity-100" : ""}`}
+      className={`${className} ${asking ? "font-bold text-brick-red opacity-100" : ""} disabled:opacity-40`}
     >
       {asking ? confirmLabel : label}
     </button>

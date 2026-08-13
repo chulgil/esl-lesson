@@ -40,7 +40,10 @@ export function WeeklyReportBanner() {
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border-2 border-brick-yellow/60 bg-highlight/30 px-4 py-2.5 text-sm">
-      <UsageBeacon kind="weekly_report_view" meta={{ surface: "home_banner" }} />
+      <UsageBeacon
+        kind="weekly_report_view"
+        meta={{ surface: "home_banner" }}
+      />
       <span>
         지난주 성적표가 나왔어요 — 복습 <b>{report.reviews}개</b>
         {report.reviews_delta !== 0 && (
@@ -63,7 +66,7 @@ export function WeeklyReportBanner() {
         type="button"
         aria-label="닫기"
         onClick={() => setReport(null)}
-        className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-ink/50 hover:text-ink"
+        className="ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-md text-ink/50 hover:text-ink"
       >
         <svg
           width="16"

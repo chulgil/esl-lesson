@@ -109,7 +109,14 @@ export function NotificationCard() {
     setBusy(false);
   }
 
-  if (state === "loading" || state === "disabled") return null;
+  // "disabled" 는 서버 VAPID 미설정(영구 상태) — 스켈레톤 없이 그대로 숨김.
+  // "loading" 만 일시적이라 팝인 방지 스켈레톤을 보여준다.
+  if (state === "loading") {
+    return (
+      <div className="mt-10 h-72 max-w-lg animate-pulse rounded-lg bg-ink/5" />
+    );
+  }
+  if (state === "disabled") return null;
 
   return (
     <section className="mt-10 max-w-lg">

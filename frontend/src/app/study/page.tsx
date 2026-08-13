@@ -26,11 +26,11 @@ export default function StudyHubPage() {
     studying: number;
     incoming: number;
   } | null>(null);
-  const [ranks, setRanks] = useState<StudyRank[]>([]);
-  const [badges, setBadges] = useState<Achievement[]>([]);
   // null = 아직 로딩/실패 (섹션 숨김) — 빈 배열은 "덱 0개" 빈 상태를 렌더링
+  const [ranks, setRanks] = useState<StudyRank[] | null>(null);
+  const [badges, setBadges] = useState<Achievement[] | null>(null);
   const [decks, setDecks] = useState<StudyDeck[] | null>(null);
-  const [openExams, setOpenExams] = useState<OpenExam[]>([]);
+  const [openExams, setOpenExams] = useState<OpenExam[] | null>(null);
 
   useEffect(() => {
     examApi
@@ -205,7 +205,7 @@ export default function StudyHubPage() {
       <MyPhrasesCard />
 
       {/* 시험 도전 — 준비된 실력을 확인하고 XP·랭킹·업적으로 보상 (2026-07-31 goal) */}
-      {openExams.length > 0 && (
+      {openExams !== null && openExams.length > 0 && (
         <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-red/40 bg-white p-5 shadow-sm">
           <h2 className="font-hand text-2xl font-bold">시험 도전</h2>
           <p className="mt-1 text-xs opacity-60">
@@ -328,7 +328,7 @@ export default function StudyHubPage() {
       </div>
 
       {/* 주간 랭킹 — 친구와의 학습량 경쟁 (P1 데일리 루프) */}
-      {ranks.length > 0 && (
+      {ranks !== null && ranks.length > 0 && (
         <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-yellow/50 bg-white p-5 shadow-sm">
           <h2 className="font-hand text-2xl font-bold">이번 주 학습 랭킹</h2>
           <p className="mt-1 text-xs opacity-60">
@@ -366,7 +366,7 @@ export default function StudyHubPage() {
       )}
 
       {/* 업적 스티커 — 소급 반영, 진행률 표시 (P3) */}
-      {badges.length > 0 && (
+      {badges !== null && badges.length > 0 && (
         <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-green/40 bg-white p-5 shadow-sm">
           <h2 className="font-hand text-2xl font-bold">
             업적 스티커

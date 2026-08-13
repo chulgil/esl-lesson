@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { MascotShopSection } from "@/components/settings/MascotShopSection";
 import { PurchaseHistory } from "@/components/settings/PurchaseHistory";
 import { XpWallet } from "@/components/settings/XpWallet";
@@ -11,6 +11,16 @@ import { SHOP_EVENT, shopApi } from "@/lib/shop-api";
  *  설정에 섞여 있던 구매 UI 를 한곳에 모아 지갑이 항상 위에 보이게 한다.
  *  진입: 프로필 메뉴 "상점", 설정의 바로가기. */
 export default function ShopPage() {
+  return (
+    // ThemeShopSection 이 ?highlight= 읽기용 useSearchParams 를 쓴다 — Suspense 경계 필요
+    // (study/session, library 페이지와 동일 패턴)
+    <Suspense>
+      <ShopPageInner />
+    </Suspense>
+  );
+}
+
+function ShopPageInner() {
   const [availableXp, setAvailableXp] = useState<number | null>(null);
 
   useEffect(() => {

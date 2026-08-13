@@ -43,7 +43,7 @@ export function StreakSaverThanks({
         type="button"
         aria-label="닫기"
         onClick={() => setShownDay(null)}
-        className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-ink/50 hover:text-ink"
+        className="ml-auto flex min-h-11 min-w-11 items-center justify-center rounded-md text-ink/50 hover:text-ink"
       >
         <svg
           width="16"

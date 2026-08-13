@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { SHOP_EVENT, dispatchShopUpdated } from "@/lib/shop-api";
 import { studyApi } from "@/lib/study-api";
 import { APP_THEMES, setAppTheme, useAppTheme } from "@/lib/theme";
@@ -11,6 +12,11 @@ import { themeApi } from "@/lib/theme-api";
  *  구매 성공 시 즉시 그 테마로 전환(보상 체감). 지갑 갱신은 SHOP_EVENT. */
 export function ThemeShopSection() {
   const theme = useAppTheme();
+  // 설정 화면 "상점에서 N XP로 열기" 진입 시 그 테마로 스크롤 + 짧은 강조
+  // (?highlight=<themeKey>, 2026-08-13)
+  const highlightParam = useSearchParams().get("highlight");
+  const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [allowed, setAllowed] = useState<Set<string> | null>(null);
   const [unlocks, setUnlocks] = useState<
     Record<string, { title: string; key: string }>
@@ -69,6 +75,17 @@ export function ThemeShopSection() {
     return () => window.removeEventListener(SHOP_EVENT, load);
   }, []);
 
+  useEffect(() => {
+    if (!highlightParam) return;
+    itemRefs.current[highlightParam]?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    setHighlightKey(highlightParam);
+    const timer = setTimeout(() => setHighlightKey(null), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightParam]);
+
   // XP 구매 — 성공 시 즉시 해금 + 그 테마로 전환 (구매의 보상을 바로 체감)
   async function buyTheme(key: string) {
     if (buying) return;
@@ -87,7 +104,9 @@ export function ThemeShopSection() {
           insufficient_xp: "XP가 부족해요 — 복습·게임으로 더 모을 수 있어요",
           already_owned: "이미 보유한 테마예요",
           theme_not_for_sale: "지금은 판매하지 않는 테마예요",
-        }[message] ?? message,
+          theme_not_found: "존재하지 않는 테마예요",
+          theme_not_restricted: "이미 사용할 수 있는 테마예요",
+        }[message] ?? "구매에 실패했어요 — 잠시 후 다시 시도해주세요.",
       );
     }
     setBuying(null);
@@ -110,9 +129,12 @@ export function ThemeShopSection() {
           return (
             <div
               key={t.key}
-              className={`flex min-h-14 items-center gap-4 rounded-lg border-2 bg-white px-4 py-3 ${
+              ref={(el) => {
+                itemRefs.current[t.key] = el;
+              }}
+              className={`flex min-h-14 items-center gap-4 rounded-lg border-2 bg-white px-4 py-3 transition-shadow ${
                 locked ? "border-ink/10" : "border-ink/15 shadow-sm"
-              }`}
+              } ${highlightKey === t.key ? "ring-2 ring-brick-blue ring-offset-2" : ""}`}
             >
               <span
                 className={`inline-block h-8 w-8 shrink-0 rounded-full border-2 border-ink/15 ${
@@ -149,7 +171,9 @@ export function ThemeShopSection() {
                     >
                       {buying === t.key
                         ? "구매 중..."
-                        : `${prices[t.key].toLocaleString()} XP로 열기`}
+                        : availableXp !== null && availableXp < prices[t.key]
+                          ? `${prices[t.key].toLocaleString()} XP · ${(prices[t.key] - availableXp).toLocaleString()} 부족`
+                          : `${prices[t.key].toLocaleString()} XP로 열기`}
                     </button>
                   )}
                   {unlocks[t.key] && progress[unlocks[t.key].key] && (

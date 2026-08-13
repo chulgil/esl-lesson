@@ -34,7 +34,11 @@ export function DailyGoalSetting() {
     setBusy(false);
   }
 
-  if (goal === null) return null;
+  if (goal === null) {
+    return (
+      <div className="mt-10 h-56 max-w-lg animate-pulse rounded-lg bg-ink/5" />
+    );
+  }
 
   return (
     <section className="mt-10 max-w-lg">

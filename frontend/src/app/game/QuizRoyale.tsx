@@ -26,12 +26,14 @@ export function QuizRoyale({
   onStart,
   onExit,
   onInvite,
+  onPlayAgain,
 }: {
   registerHandler: (handler: (msg: QrMsg) => void) => void;
   onAnswer: (answer: string) => void;
   onStart: () => void;
   onExit: () => void;
   onInvite?: (userId: number, code: string) => void;
+  onPlayAgain: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>("waiting");
   // 초대 입장(?theme=)이면 게임 동안 초대자 테마 — 종료/이탈 시 자동 복원
@@ -276,6 +278,11 @@ export function QuizRoyale({
               <span className="hl">{end.ranking[0].name} 우승!</span>
             )}
           </h2>
+          {end.aborted && (
+            <p className="text-sm font-bold text-brick-red">
+              상대가 중간에 나가 대전이 종료됐어요
+            </p>
+          )}
           <ol className="flex flex-col gap-2">
             {end.ranking.map((r) => (
               <li
@@ -298,8 +305,11 @@ export function QuizRoyale({
           </ol>
           <ReviewPanel items={review} source="quiz" />
           <div className="flex flex-wrap items-center gap-3">
+            <Brick color="green" onClick={onPlayAgain}>
+              {room?.mode === "solo" ? "한 번 더" : "혼자 한 번 더"}
+            </Brick>
             <Brick color="blue" onClick={onExit}>
-              로비로
+              게임 메뉴로
             </Brick>
             {end.ranking[0] && (
               <ShareResultButton

@@ -570,7 +570,7 @@ function draw(
       ctx.fillStyle = "#3E8FD8";
       ctx.font = `bold ${Math.min(20, width / 12)}px ${handFont}`;
       ctx.textAlign = "center";
-      ctx.fillText("❄ FREEZE", width / 2, 22);
+      ctx.fillText("FREEZE!", width / 2, 22);
     }
 
     // KO 오버레이

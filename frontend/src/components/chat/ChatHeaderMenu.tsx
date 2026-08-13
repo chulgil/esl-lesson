@@ -11,7 +11,9 @@ export function ChatHeaderMenu({
   className = "",
 }: {
   excel: boolean;
-  items: { label: string; onClick: () => void }[];
+  /** label 을 함수로 주면 메뉴가 열릴 때(렌더 시점)마다 재평가된다 —
+   *  ref 기반 상태(예: hasNotice)가 stale 라벨로 보이는 문제 방지 */
+  items: { label: string | (() => string); onClick: () => void }[];
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -35,7 +37,7 @@ export function ChatHeaderMenu({
         aria-expanded={open}
         className={
           excel
-            ? "flex min-h-8 min-w-8 items-center justify-center rounded-sm text-sm font-bold text-white/80 hover:bg-white/10 hover:text-white"
+            ? "flex min-h-11 min-w-11 items-center justify-center rounded-sm text-sm font-bold text-white/80 hover:bg-white/10 hover:text-white"
             : "flex min-h-11 min-w-11 items-center justify-center text-lg font-bold opacity-60 hover:opacity-100"
         }
       >
@@ -50,9 +52,9 @@ export function ChatHeaderMenu({
               : "absolute top-full right-0 z-30 mt-1 min-w-32 rounded-md border-2 border-ink/15 bg-white py-1 text-sm whitespace-nowrap shadow-xl"
           }
         >
-          {items.map((item) => (
+          {items.map((item, i) => (
             <button
-              key={item.label}
+              key={i}
               type="button"
               onClick={() => {
                 setOpen(false);
@@ -60,11 +62,11 @@ export function ChatHeaderMenu({
               }}
               className={
                 excel
-                  ? "block min-h-8 w-full px-3 py-1.5 text-left hover:bg-[#f6f8f9]"
+                  ? "block min-h-11 w-full px-3 py-1.5 text-left hover:bg-[#f6f8f9]"
                   : "block min-h-11 w-full px-3 py-2 text-left font-bold hover:bg-highlight/40"
               }
             >
-              {item.label}
+              {typeof item.label === "function" ? item.label() : item.label}
             </button>
           ))}
         </div>

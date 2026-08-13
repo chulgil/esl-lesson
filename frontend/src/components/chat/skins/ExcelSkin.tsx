@@ -65,7 +65,8 @@ export function ExcelSkin(p: ChatSkinProps & { otherId: number }) {
           excel
           items={[
             {
-              label: noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
+              label: () =>
+                noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
               onClick: () => noticeRef.current?.openEditor(),
             },
             {

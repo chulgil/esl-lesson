@@ -64,7 +64,11 @@ export default function ExamPage() {
   const marksKey = (id: number) => `exam-marks-${id}`;
 
   function enterTaking(
-    started: { attempt_id: number; started_at: string; questions: typeof questions },
+    started: {
+      attempt_id: number;
+      started_at: string;
+      questions: typeof questions;
+    },
     restoreMarks: boolean,
   ) {
     setAttemptId(started.attempt_id);
@@ -74,7 +78,8 @@ export default function ExamPage() {
       try {
         const raw = localStorage.getItem(marksKey(started.attempt_id));
         const parsed = raw ? (JSON.parse(raw) as (number | null)[]) : null;
-        if (parsed && parsed.length === started.questions.length) restored = parsed;
+        if (parsed && parsed.length === started.questions.length)
+          restored = parsed;
       } catch {
         // 복원 실패는 빈 답안으로 진행
       }
@@ -303,14 +308,14 @@ export default function ExamPage() {
                   <button
                     type="button"
                     onClick={abandon}
-                    className="min-h-9 flex-1 rounded-md border-2 border-brick-red bg-white text-xs font-bold text-brick-red transition hover:bg-brick-red hover:text-brick-label"
+                    className="min-h-11 flex-1 rounded-md border-2 border-brick-red bg-white text-xs font-bold text-brick-red transition hover:bg-brick-red hover:text-brick-label"
                   >
                     정말 포기 (경과 초기화)
                   </button>
                   <button
                     type="button"
                     onClick={() => setAbandonAsk(false)}
-                    className="min-h-9 flex-1 rounded-md border-2 border-ink/20 bg-white text-xs font-bold"
+                    className="min-h-11 flex-1 rounded-md border-2 border-ink/20 bg-white text-xs font-bold"
                   >
                     계속 풀기
                   </button>
@@ -319,7 +324,7 @@ export default function ExamPage() {
                 <button
                   type="button"
                   onClick={() => setAbandonAsk(true)}
-                  className="mt-1.5 min-h-9 w-full text-xs opacity-50 hover:underline hover:opacity-80"
+                  className="mt-1.5 min-h-11 w-full text-xs opacity-50 hover:underline hover:opacity-80"
                 >
                   포기하기 (경과 초기화)
                 </button>

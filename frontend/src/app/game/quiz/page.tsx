@@ -96,6 +96,10 @@ function QuizRoyaleInner() {
             setPlaying(false);
           }}
           onInvite={(uid, code) => socketRef.current?.invite(uid, "quiz", code)}
+          onPlayAgain={() => {
+            setError(null);
+            socketRef.current?.qrSolo(botLevel, bots, contentIds, variant);
+          }}
         />
       ) : (
         <section className="flex max-w-lg flex-col gap-6">
