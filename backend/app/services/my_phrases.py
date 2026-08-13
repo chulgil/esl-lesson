@@ -78,6 +78,8 @@ async def sync_my_phrases(
                     ChatMessage.sender_id == user.id,
                     ChatMessage.deleted_at.is_(None),
                     ChatMessage.body != "",
+                    # 시스템 줄(공지 등) 제외 (docs/specs/chat-notice.md)
+                    ChatMessage.kind.is_(None),
                 )
                 .order_by(ChatMessage.id.desc())
                 .limit(MESSAGE_SCAN_LIMIT)

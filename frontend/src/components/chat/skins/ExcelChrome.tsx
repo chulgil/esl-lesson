@@ -31,6 +31,7 @@ export function ExcelChrome({
   statusRight,
   online = false,
   onFilenameClick,
+  titleExtra,
   blank,
   children,
 }: {
@@ -42,6 +43,8 @@ export function ExcelChrome({
   statusRight?: ReactNode;
   online?: boolean;
   onFilenameClick?: () => void;
+  /** 타이틀바 우측 끝에 붙는 추가 액션 (예: 대화방 케밥 메뉴) */
+  titleExtra?: ReactNode;
   blank: ReactNode;
   children: ReactNode;
 }) {
@@ -107,6 +110,7 @@ export function ExcelChrome({
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-[10px]">
           H
         </span>
+        {titleExtra}
       </div>
 
       {/* 리본 탭줄 (접힌 리본) */}

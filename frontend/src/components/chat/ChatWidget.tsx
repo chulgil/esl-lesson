@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { ChatHeaderMenu } from "@/components/chat/ChatHeaderMenu";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
@@ -10,6 +11,8 @@ import { GoalBoard } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
+import { NoticeBar, type NoticeBarHandle } from "@/components/chat/NoticeBar";
+import { NoticeSystemLine } from "@/components/chat/NoticeSystemLine";
 import { TranslationLine } from "@/components/chat/TranslationLine";
 import { useChatRoom } from "@/components/chat/useChatRoom";
 import { MascotSvg } from "@/components/theme/mascots";
@@ -55,6 +58,7 @@ export function ChatWidget() {
   const [unread, setUnread] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
+  const noticeRef = useRef<NoticeBarHandle>(null);
   // 플로팅 위치 — null = 기본(우하단). 드래그로 바뀌면 좌표 고정 + 저장
   const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(
     null,
@@ -338,7 +342,9 @@ export function ChatWidget() {
                 ‹
               </button>
             ) : null}
-            <b className={excel ? "" : "font-hand text-base"}>
+            <b
+              className={`min-w-0 flex-1 truncate ${excel ? "" : "font-hand text-base"}`}
+            >
               {excel
                 ? room
                   ? `${room.name}_공유.xlsx`
@@ -347,6 +353,19 @@ export function ChatWidget() {
                   ? `${room.name} 와의 교환 노트`
                   : "교환 노트"}
             </b>
+            {room && (
+              <ChatHeaderMenu
+                excel={excel}
+                items={[
+                  {
+                    label: noticeRef.current?.hasNotice
+                      ? "공지 수정"
+                      : "공지 쓰기",
+                    onClick: () => noticeRef.current?.openEditor(),
+                  },
+                ]}
+              />
+            )}
             {effFloating && (
               <button
                 type="button"
@@ -354,7 +373,7 @@ export function ChatWidget() {
                 aria-label="닫기 (Esc)"
                 // 44px 터치 타겟 + 큰 글리프 — × 가 너무 작아 터치가 어렵다는
                 // 보고 (2026-08-12). 시각 무게는 opacity 로 낮게 유지
-                className="ml-auto flex min-h-11 min-w-11 items-center justify-center text-2xl leading-none opacity-60 hover:opacity-100"
+                className="flex min-h-11 min-w-11 items-center justify-center text-2xl leading-none opacity-60 hover:opacity-100"
               >
                 ×
               </button>
@@ -362,7 +381,11 @@ export function ChatWidget() {
           </div>
 
           {room ? (
-            <WidgetRoom userId={room.userId} excel={excel} />
+            <WidgetRoom
+              userId={room.userId}
+              excel={excel}
+              noticeRef={noticeRef}
+            />
           ) : (
             <WidgetList
               excel={excel}
@@ -519,11 +542,20 @@ function WidgetList({
 
 /* --- 대화 뷰 (useChatRoom 재사용) -------------------------------------------- */
 
-function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
+function WidgetRoom({
+  userId,
+  excel,
+  noticeRef,
+}: {
+  userId: number;
+  excel: boolean;
+  noticeRef: RefObject<NoticeBarHandle | null>;
+}) {
   const p = useChatRoom(userId);
 
   return (
     <>
+      <NoticeBar otherId={userId} excel={excel} apiRef={noticeRef} />
       <GoalBoard otherId={userId} excel={excel} peerName={p.peerName} />
       <div
         ref={p.listRef}
@@ -532,6 +564,17 @@ function WidgetRoom({ userId, excel }: { userId: number; excel: boolean }) {
       >
         {p.messages.map((m) => {
           const mine = m.sender_id === p.myId;
+          if (m.kind) {
+            return (
+              <NoticeSystemLine
+                key={m.id}
+                msg={m}
+                mine={mine}
+                peerName={p.peerName}
+                excel={excel}
+              />
+            );
+          }
           const imageUrl = m.image_url;
           return (
             <div

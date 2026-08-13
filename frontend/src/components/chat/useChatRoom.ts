@@ -221,7 +221,8 @@ export function useChatRoom(otherId: number) {
         if (stickBottom.current) requestAnimationFrame(scrollToBottom);
         // WS 는 번역을 실어오지 않는다(비동기 완료 전 도착) — 상대 글 번역이
         // 켜져 있을 때만 1회 조회 (범위 밖이면 서버도 null 을 주지만 호출 자체를 아낀다)
-        if (translate && translateTheirs) {
+        // 공지 시스템 줄(kind)은 번역 대상이 아니다 (docs/specs/chat-notice.md)
+        if (!msg.kind && translate && translateTheirs) {
           chatApi
             .translation(msg.id)
             .then((res) => {
@@ -263,7 +264,14 @@ export function useChatRoom(otherId: number) {
         resync();
       }
     });
-  }, [otherId, scrollToBottom, markReadAndSignal, resync, translate, translateTheirs]);
+  }, [
+    otherId,
+    scrollToBottom,
+    markReadAndSignal,
+    resync,
+    translate,
+    translateTheirs,
+  ]);
 
   // 내 메시지 삭제 — 낙관적 치환 후 서버 확정 (실패 시 재동기화로 복원)
   const onDeleteMessage = useCallback(
@@ -428,7 +436,9 @@ export function useChatRoom(otherId: number) {
               if (!res.translation) return;
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.id === saved.id ? { ...m, translation: res.translation } : m,
+                  m.id === saved.id
+                    ? { ...m, translation: res.translation }
+                    : m,
                 ),
               );
             })
@@ -445,7 +455,16 @@ export function useChatRoom(otherId: number) {
         }
       }
     },
-    [input, attachedItem, attachedImage, replyDraft, otherId, scrollToBottom, translate, translateMine],
+    [
+      input,
+      attachedItem,
+      attachedImage,
+      replyDraft,
+      otherId,
+      scrollToBottom,
+      translate,
+      translateMine,
+    ],
   );
 
   const skinProps = {

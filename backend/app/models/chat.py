@@ -60,6 +60,9 @@ class ChatMessage(Base, PkMixin):
     reply_to_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True
     )
+    # 시스템 줄 표식 — NULL=일반 메시지, "notice_set"/"notice_clear" 등
+    # (docs/specs/chat-notice.md). my_phrases 스캔·자동번역·답글 인용 대상에서 제외.
+    kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
     client_msg_id: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

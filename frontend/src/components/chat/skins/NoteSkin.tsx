@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ChatHeaderMenu } from "@/components/chat/ChatHeaderMenu";
 import { ChatToolsMenu } from "@/components/chat/ChatToolsMenu";
 import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { GoalBoard } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
+import { NoticeBar, type NoticeBarHandle } from "@/components/chat/NoticeBar";
+import { NoticeSystemLine } from "@/components/chat/NoticeSystemLine";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { TranslationLine } from "@/components/chat/TranslationLine";
 import { BackLink } from "@/components/nav/BackLink";
@@ -20,6 +23,7 @@ export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
   // 패널 밖(빈 종이) 클릭 = 채팅 패널 토글 — 힐끗 보일 때 빈 노트로 위장 (2026-07-31)
   const [panelHidden, setPanelHidden] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const noticeRef = useRef<NoticeBarHandle>(null);
   // 접힘 상태를 전역 신호로 — 접힌 동안은 "안 보는 중"이라 배지·알림이 살아야
   // 하고, 다시 펼치면 밀린 메시지를 읽음 처리한다 (2026-08-10 버그 픽스)
   function togglePanel() {
@@ -46,18 +50,30 @@ export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
       >
         <header className="mb-2 flex items-center gap-3">
           <BackLink href="/chat" label="목록" />
-          <h1 className="flex items-center gap-2 font-hand text-xl font-bold">
-            <span className="hl">{p.peerName || "..."} 와의 교환 노트</span>
+          <h1 className="flex min-w-0 flex-1 items-center gap-2 font-hand text-xl font-bold">
+            <span className="hl truncate">
+              {p.peerName || "..."} 와의 교환 노트
+            </span>
             <span
               aria-label={p.online ? "접속 중" : "미접속"}
               title={p.online ? "접속 중" : "미접속"}
-              className={`h-2.5 w-2.5 rounded-full ${
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
                 p.online ? "bg-brick-green" : "bg-ink/20"
               }`}
             />
           </h1>
+          <ChatHeaderMenu
+            excel={false}
+            items={[
+              {
+                label: noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
+                onClick: () => noticeRef.current?.openEditor(),
+              },
+            ]}
+          />
         </header>
 
+        <NoticeBar otherId={p.otherId} excel={false} apiRef={noticeRef} />
         <GoalBoard otherId={p.otherId} excel={false} peerName={p.peerName} />
 
         {p.error && <p className="mb-2 text-sm text-brick-red">{p.error}</p>}
@@ -75,6 +91,17 @@ export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
           )}
           {p.messages.map((m) => {
             const mine = m.sender_id === p.myId;
+            if (m.kind) {
+              return (
+                <NoticeSystemLine
+                  key={m.id}
+                  msg={m}
+                  mine={mine}
+                  peerName={p.peerName}
+                  excel={false}
+                />
+              );
+            }
             const imageUrl = m.image_url;
             return (
               <div
