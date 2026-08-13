@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core.config import Settings, assert_production_secrets
-from app.models import Content, ReviewCard, User, UserSettings
+from app.models import Content, ItemGrant, Purchase, ReviewCard, User, UserSettings, XpSpend
 from tests.test_study import login, seed_items
 
 
@@ -29,6 +29,25 @@ async def test_delete_me_removes_user_and_data(client, db_session):
     # 쿠키 삭제 → 재요청은 401
     again = await client.get("/api/me")
     assert again.status_code == 401
+
+
+async def test_delete_me_removes_shop_ledger_rows(client, db_session):
+    """E7: 상점 원장(ItemGrant/Purchase/XpSpend)도 명시 파기 목록에 포함돼야 한다
+    (누락 시 탈퇴 후에도 유저 id 참조 행이 남는다)."""
+    user = await login(client, db_session)
+    db_session.add(ItemGrant(user_id=user.id, item_key="mascot:henyang"))
+    db_session.add(Purchase(user_id=user.id, item_key="mascot:henyang", method="xp", amount=1500))
+    db_session.add(XpSpend(user_id=user.id, amount=1500, reason="mascot:henyang"))
+    await db_session.commit()
+
+    res = await client.delete("/api/me")
+    assert res.status_code == 204
+
+    for model in (ItemGrant, Purchase, XpSpend):
+        count = (
+            await db_session.execute(select(func.count(model.id)).where(model.user_id == user.id))
+        ).scalar_one()
+        assert count == 0, f"{model.__name__} rows survived account deletion"
 
 
 async def test_delete_me_cleans_orphan_private_content(client, db_session):

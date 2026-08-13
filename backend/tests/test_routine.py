@@ -51,12 +51,32 @@ async def test_routine_steps_toggle_and_complete_xp(client, db_session):
         await client.post(f"/api/contents/{cid}/routine/7", json={"done": True})
     ).status_code == 422
 
-    # 6단계 전부 완료 → completed + 완주 보너스 XP 50
-    for step in range(1, 7):
+    # 1~5단계 완료 + 6단계(요약)는 요약 제출로 자동 체크 → completed + 완주 보너스 XP 50
+    for step in range(1, 6):
         await client.post(f"/api/contents/{cid}/routine/{step}", json={"done": True})
+    await client.post(f"/api/contents/{cid}/summary", json={"text": "One sentence summary."})
     res = (await client.get(f"/api/contents/{cid}/routine")).json()
     assert res["completed"] is True
-    assert (await client.get("/api/study/stats")).json()["xp"] == 50
+    # 완주 보너스 50 + 요약 제출 20
+    assert (await client.get("/api/study/stats")).json()["xp"] == 70
+
+
+async def test_routine_step6_manual_check_rejected(client, db_session):
+    """L1: 6단계(한 문장 요약)는 요약 제출 시 자동 체크만 허용 — 수동 체크/해제로
+    요약 없이 완주 XP 를 우회할 수 있던 구멍을 422 로 막는다."""
+    user = await login(client, db_session)
+    await seed_items(db_session, count=1)
+    cid = await _subscribed_content_id(db_session, user.id)
+
+    res = await client.post(f"/api/contents/{cid}/routine/6", json={"done": True})
+    assert res.status_code == 422
+    assert res.json()["detail"] == "summary_only_step"
+    assert (await client.get(f"/api/contents/{cid}/routine")).json()["steps"][5]["done"] is False
+
+    # 해제 요청도 동일하게 거부
+    res = await client.post(f"/api/contents/{cid}/routine/6", json={"done": False})
+    assert res.status_code == 422
+    assert res.json()["detail"] == "summary_only_step"
 
 
 async def test_summary_submit_saves_feedback_and_checks_step6(client, db_session, monkeypatch):

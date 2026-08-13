@@ -137,6 +137,7 @@ async def total_xp(db: AsyncSession, user_id: int) -> int:
     from sqlalchemy import or_
 
     from app.models import (
+        BingoMatch,
         DictationRace,
         ExamAttempt,
         GameMatch,
@@ -199,6 +200,15 @@ async def total_xp(db: AsyncSession, user_id: int) -> int:
             )
         )
     ).scalar_one()
+    # 빙고(2026-08-10 출시) — 참여만 20 XP, 승리 보너스 없음(30은 테트리스 전용 산식)
+    bingo_played = (
+        await db.execute(
+            select(func.count(BingoMatch.id)).where(
+                or_(BingoMatch.player1_id == user_id, BingoMatch.player2_id == user_id),
+                BingoMatch.status == "finished",
+            )
+        )
+    ).scalar_one()
     # 시험 XP — 제출 20 + 점수 10점당 1 (api/exams.py exam_xp 와 동일 산식).
     # 건별 floor(score/10) 합 — 합계에 //10 하면 건별 산식과 어긋난다 (25+15: 3 vs 4)
     exam_submits, exam_score_bonus = (
@@ -212,7 +222,15 @@ async def total_xp(db: AsyncSession, user_id: int) -> int:
 
     return (
         total_reviews * 10
-        + (tetris_played + typing_played + quiz_played + scramble_played + dictation_played) * 20
+        + (
+            tetris_played
+            + typing_played
+            + quiz_played
+            + scramble_played
+            + dictation_played
+            + bingo_played
+        )
+        * 20
         + tetris_wins * 30
         + int(exam_submits) * 20
         + int(exam_score_bonus)

@@ -6,7 +6,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
@@ -107,7 +107,13 @@ async def set_step(
     user: Annotated[User, Depends(get_current_user)],
     step: Annotated[int, Path(ge=1, le=ROUTINE_STEP_COUNT)],
 ) -> dict:
-    """단계 체크/해제 — 멱등 (중복 체크는 기존 행 유지)."""
+    """단계 체크/해제 — 멱등 (중복 체크는 기존 행 유지).
+
+    6단계(한 문장 요약)는 요약 제출 시 자동 체크만 허용 — 수동 체크/해제는 요약
+    없이 완주 XP 를 우회할 수 있어 거부한다 (L1 픽스).
+    """
+    if step == SUMMARY_STEP:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "summary_only_step")
     content = await get_subscribed_content(db, content_id, user)
     # rollback 이 ORM 객체(user/content)를 만료시켜도 안전하게 — 값으로 캡처
     uid, cid = user.id, content.id

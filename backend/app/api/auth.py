@@ -26,11 +26,14 @@ from app.core.security import (
 from app.models import (
     Content,
     ContentSubscription,
+    ItemGrant,
     Notification,
+    Purchase,
     PushSubscription,
     ReviewCard,
     ReviewLog,
     ThemeGrant,
+    XpSpend,
 )
 from app.models.user import ROLE_ADMIN, User, UserSettings
 from app.services.content_service import delete_content_row
@@ -265,6 +268,9 @@ async def delete_me(
         (Notification.__table__, Notification.user_id),
         (ThemeGrant.__table__, ThemeGrant.user_id),
         (UserSettings.__table__, UserSettings.user_id),
+        (ItemGrant.__table__, ItemGrant.user_id),
+        (Purchase.__table__, Purchase.user_id),
+        (XpSpend.__table__, XpSpend.user_id),
     ):
         await db.execute(table.delete().where(col == user.id))
     await db.delete(user)

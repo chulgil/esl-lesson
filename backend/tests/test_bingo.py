@@ -8,6 +8,7 @@ from app.models import BingoMatch
 from app.services.game import bingo as bg
 from app.services.game.manager import WordPoolError
 from tests.test_game_manager import Collector, seed_user_and_words, wired_db  # noqa: F401
+from tests.test_study import login
 
 
 def _pool(n=40):
@@ -262,3 +263,23 @@ async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  
     assert any(m.get("code") == "room_closed" for m in s2.messages)
     assert guest.id not in manager.by_user  # 세션 정리됨
     assert not manager.sessions
+
+
+async def test_bingo_participation_grants_xp_without_win_bonus(client, db_session):
+    """빙고는 참여 20 XP — 승리 보너스 없음 (승리 30은 테트리스 전용 산식 유지,
+    2026-08-10 출시 후 total_xp() 집계 누락 픽스)."""
+    user = await login(client, db_session)
+    db_session.add(
+        BingoMatch(
+            mode="solo",
+            status="finished",
+            player1_id=user.id,
+            winner_id=user.id,
+            stats={},
+        )
+    )
+    await db_session.commit()
+
+    res = await client.get("/api/study/stats")
+    assert res.status_code == 200
+    assert res.json()["xp"] == 20

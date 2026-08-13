@@ -10,7 +10,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    BingoMatch,
     DictationRace,
+    Exam,
     ExamAttempt,
     GameMatch,
     LearningItem,
@@ -22,6 +24,7 @@ from app.models import (
     TypingRace,
 )
 from app.models.friend import Friendship
+from app.services.exams import POINTS_PER_QUESTION
 
 KST = timezone(timedelta(hours=9))
 STREAK_WINDOW_DAYS = 90
@@ -152,7 +155,7 @@ DEFINITIONS = (
     ("friends_10", "마당발", "친구 10명과 연결됐어요", 10, "intermediate", "social", "friends"),
     # 시험 — 제출·만점·1위 (docs/specs/library-exam.md)
     ("first_exam", "첫 시험", "첫 시험을 제출했어요", 1, None, "exam", "exam_submits"),
-    ("exam_perfect", "만점", "시험에서 100점을 받았어요", 1, None, "exam", "exam_perfect"),
+    ("exam_perfect", "만점", "시험에서 만점을 받았어요", 1, None, "exam", "exam_perfect"),
     # 공동 1위 = best score 동률 기준 (duration 무관 — 최고 점수 도달 성취 인정)
     ("exam_champion", "1위 등극", "시험 랭킹 1위에 올랐어요", 1, None, "exam", "exam_champion"),
     ("exams_10", "응시 입문", "시험 10회를 제출했어요", 10, "beginner", "exam", "exam_submits"),
@@ -290,6 +293,16 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
     ).one()
     dictation_played, dictation_wins = int(dictation_rows[0]), int(dictation_rows[1])
 
+    # 빙고(2026-08-10 출시) — games_played 류 제네릭 카운터에만 포함, 승리 지표는
+    # XP 산식과 동일하게 대상 외(승리 보너스 없음 — 게임별 전용 업적도 아직 없음)
+    bingo_played = await _count(
+        db,
+        select(func.count(BingoMatch.id)).where(
+            or_(BingoMatch.player1_id == user_id, BingoMatch.player2_id == user_id),
+            BingoMatch.status == "finished",
+        ),
+    )
+
     friends = await _count(
         db,
         select(func.count(Friendship.id)).where(
@@ -305,10 +318,15 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
             ExamAttempt.user_id == user_id, ExamAttempt.submitted_at.is_not(None)
         ),
     )
+    # 만점 = question_count x POINTS_PER_QUESTION — 100 하드코딩은 문항 5~19개(5점/문항)
+    # 콘텐츠에서 전 문항 정답이어도 100점 미만이라 업적을 놓쳤다 (L2 픽스)
     exam_perfect = await _count(
         db,
-        select(func.count(ExamAttempt.id)).where(
-            ExamAttempt.user_id == user_id, ExamAttempt.score == 100
+        select(func.count(ExamAttempt.id))
+        .join(Exam, Exam.id == ExamAttempt.exam_id)
+        .where(
+            ExamAttempt.user_id == user_id,
+            ExamAttempt.score == Exam.question_count * POINTS_PER_QUESTION,
         ),
     )
     # 현 1위 시험 수 — 공동 1위 = best score 동률 기준 (duration 무관, spec §4).
@@ -345,7 +363,8 @@ async def compute(db: AsyncSession, user_id: int) -> list[dict]:
         + len(typing_rows)
         + quiz_played
         + scramble_played
-        + dictation_played,
+        + dictation_played
+        + bingo_played,
         "typing": peak_cpm,
         "friends": friends,
         "exam_submits": exam_submits,
