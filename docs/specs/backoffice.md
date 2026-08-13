@@ -15,6 +15,7 @@
 | `/admin/items` | 항목 풀 관리 | 전역 항목 검색/수정 (콘텐츠 횡단) |
 | `/admin/users` | 사용자 관리 | 역할 변경, 학습 현황 조회 |
 | `/admin/themes` | 테마 몰 관리 | 제한 테마 지급/회수 — [theme-mall.md](theme-mall.md) |
+| `/admin/shop` | 마스코트 상점 관리 | 마스코트/악세서리 XP 가격·이벤트 지급/회수 — [mascot-shop.md](mascot-shop.md) (2026-08-11) |
 
 ## 콘텐츠 등록 (/admin/contents/new)
 
@@ -105,6 +106,7 @@
 | GET `/api/admin/dashboard` | 대시보드 집계 — 공급 리듬 포함 (2026-08-10 P0-B): `weekly_supply`(이번 주 월요일 KST 기준 공용 등록 수)·`supply_goal`(2)·`levels`(ready 공용의 파생 난이도별 수). 대시보드 카드가 주 2편 미달·초급 5편 미달 시 빨간 강조, 등록 화면 CC 검색엔 초급 키워드 프리셋 5종 |
 | GET `/api/admin/youtube/cc-search?q=` | CC 영상 검색 (등록 후보) |
 | `/api/admin/themes*` | 테마 카탈로그·지급/회수 — [theme-mall.md](theme-mall.md) |
+| `/api/admin/shop*` | 마스코트 상점 카탈로그·가격 설정·지급/회수 (지급 시 `item_granted` 알림) — [mascot-shop.md](mascot-shop.md) |
 
 ## 접근 제어
 

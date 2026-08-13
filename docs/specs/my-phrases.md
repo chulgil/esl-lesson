@@ -31,6 +31,7 @@
 | 채택 | **빈도 2회 이상만** | "자주 쓰는 말"의 이름값 — 1회 발화는 아직 '내 말'이 아니다 (2026-08-12 기획 점검으로 길이 예외 제거) |
 | 제외 | http 포함(링크), 이미지 전용 | 학습 문장이 아님 |
 | 상한 | 동기화당 후보 200개 | 폭주 방지 |
+| 스캔 창 | 최근 메시지 2000건 | 스캔 비용 상한 — 창 밖으로 밀려난 과거 표현은 빈도 집계에서 빠지며 재수집되지 않는다 (다작 유저 트레이드오프, 2026-08-13 명시) |
 
 - **멱등 동기화**: 학습 탭 카드 조회 시 lazy sync (theme_rewards 패턴).
   normalized_key(번역문 lower) get-or-create — 전역 항목 dedup 과 동일 원칙,
@@ -60,6 +61,9 @@
 | 표면 | 내용 |
 |---|---|
 | GET /api/study/my-phrases | lazy sync 후 {content_id, total, added_now, recent[5]} |
+| GET /api/study/my-phrases/items | 편집용 전체 목록 — 문장 빼기 화면 |
+| POST /api/study/my-phrases/refresh | 번역 품질 새로고침 — 엔진·프롬프트 개선분을 기존 문장에 재적용 (항목 ID 유지, 사용량은 translation_usage 예산 회계 포함) |
+| DELETE /api/study/my-phrases/{item_id} | 문장 빼기 — 제외 원장 기록, 재동기화에도 안 돌아옴 (204) |
 | 학습 탭 카드 | "내가 쓰는 말" — 수집 문장 수·최근 추가 미리보기·"이 덱으로 학습"(기존 /study?content_id= 라우트)·게임 자동 출제 안내. 0개면 채팅 자동번역 켜기 안내 |
 
 ## 성장 루프 (기획 의도)

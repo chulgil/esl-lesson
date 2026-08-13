@@ -9,6 +9,11 @@ XP 로 움직이는 캐릭터(마스코트)와 악세사리를 사서 **좌하�
 
 ## 카탈로그 (가격 = 일일 획득량 ~500XP 기준 층위화)
 
+> 주의: **일일 XP 상한은 없다** (의도적 무마찰 정책 — 복습·게임 참여·시험
+> 재응시 모두 무제한 적립). "~500XP/일"은 복습 중심 평균 추정치이며, 헤비
+> 유저는 하루에 상위 가격대도 도달 가능하다. 획득 속도가 가격 층위를 계속
+> 상회하면 가격 재조정 또는 상한 도입을 재검토한다 (2026-08-13 크로스컷 감사).
+
 | 종류 | 키 | 가격 | 비고 |
 |---|---|---|---|
 | 마스코트 | henyang 헤냥이 2000 / bricky 브리키 1500 / mongi 몽이 1500 | | 1개 활성(`user_settings.mascot_key`), 구매 즉시 자동 활성 — 산 캐릭터가 바로 화면에 |
@@ -24,7 +29,7 @@ school/academy 800, ocean/excel 1200, cat 2000 (백오피스 기입 가격은 �
 | 메서드/경로 | 역할 |
 |---|---|
 | GET `/api/shop` | 지갑(available_xp)+활성 마스코트+마스코트/악세 목록(owned·유효가·sale)+책갈피 상태 |
-| POST `/api/shop/purchase` | `{item_key: "mascot:x"\|"outfit:x"}` — 404 미존재 / 409 보유 / 422 잔액 부족·`event_only_item`. 마스코트는 구매 시 자동 활성 |
+| POST `/api/shop/purchase` | `{item_key: "mascot:x"\|"outfit:x"}` — 검사 순서: 404 미존재 → 422 `event_only_item`(이벤트 전용은 보유 여부보다 먼저) → 409 보유 → 422 `insufficient_xp`. 마스코트는 구매 시 자동 활성 |
 | PATCH `/api/shop/mascot` | `{key\|null}` 활성 변경 — 403 미보유, null=끄기("쉬게 하기") |
 | POST `/api/shop/streak-saver/purchase` | 422 `saver_full`(최대 2)/`insufficient_xp` |
 | GET `/api/shop/purchases` | 내 구매 이력 최신 50건 — 품목·결제수단·금액·시각 |
@@ -37,6 +42,12 @@ school/academy 800, ocean/excel 1200, cat 2000 (백오피스 기입 가격은 �
 책갈피 구매 3경로 모두 기록하며, 기존 `xp_spends` 전량을 XP 결제로 백필했다
 (마이그레이션 7107c0984dc7). **어드민 지급은 구매가 아니므로 기록하지 않는다.**
 설정 화면 "구매 내역" 접기에서 조회 (`PurchaseHistory`, 펼칠 때 로드).
+
+## 회원탈퇴 (2026-08-13)
+
+`delete_me` 의 명시 파기 목록에 `item_grants`·`purchases`·`xp_spends` 포함 —
+DB CASCADE 에만 맡기지 않아 어떤 DB 에서도 동일 동작 (theme_grants 전례,
+theme-mall.md 회원탈퇴 항목과 같은 원칙).
 
 ## 백오피스 관리 (`/admin/shop`, 2026-08-11)
 

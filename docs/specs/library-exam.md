@@ -78,7 +78,7 @@ exam_attempts               -- 응시 1회. 인덱스 (exam_id, user_id)
 | key | title | target/tier | metric |
 |---|---|---|---|
 | first_exam | 첫 시험 | 1 (단발) | 제출 수 |
-| exam_perfect | 만점 | 1 (단발) | score 100 응시 존재 |
+| exam_perfect | 만점 | 1 (단발) | 전 문항 정답 응시 존재 — score == question_count x 5 (20문항 미만 콘텐츠도 만점 인정, 2026-08-13 정정: 구 score==100 판정은 5~19문항 시험에서 영구 미획득 버그) |
 | exam_champion | 1위 등극 | 1 (단발) | 현재 1위인 시험 존재 — **공동 1위 = best score 동률 (duration 무관)** |
 | exams_10/30/100 | 응시 입문/중수/고수 | 10/30/100 (초/중/고급) | 제출 수 |
 
