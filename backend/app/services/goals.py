@@ -44,6 +44,12 @@ async def _get_or_create_conversation(
     return conv
 
 
+async def _require_mutable(db: AsyncSession, conv: Conversation, user_id: int) -> None:
+    """친구 해제 후에는 조회만 남는다 — 변경은 403 (chat 전송 경로와 동일 규칙)."""
+    if not await chat_service.are_friends(db, user_id, other_participant(conv, user_id)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_friends")
+
+
 async def _goal_or_404(db: AsyncSession, goal_id: int) -> SharedGoal:
     goal = await db.get(SharedGoal, goal_id)
     if goal is None or goal.kind != "check":
@@ -150,6 +156,7 @@ async def add_check(
     if not text:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_text")
     conv = await _get_or_create_conversation(db, user_id, other_id)
+    await _require_mutable(db, conv, user_id)
     count = (
         await db.execute(
             select(func.count(SharedGoal.id)).where(
@@ -177,6 +184,7 @@ async def patch_check(
     (goal_id PATCH 는 check 전용)."""
     goal = await _goal_or_404(db, goal_id)
     conv = await _require_goal_participant(db, goal, user_id)
+    await _require_mutable(db, conv, user_id)
     if text is not None:
         text = text.strip()
         if not text:
@@ -194,6 +202,7 @@ async def patch_check(
 async def delete_check(db: AsyncSession, user_id: int, goal_id: int) -> Conversation:
     goal = await _goal_or_404(db, goal_id)
     conv = await _require_goal_participant(db, goal, user_id)
+    await _require_mutable(db, conv, user_id)
     await db.delete(goal)
     await db.commit()
     return conv
@@ -205,6 +214,7 @@ async def set_weekly_target(
     if not (WEEKLY_TARGET_MIN <= target_value <= WEEKLY_TARGET_MAX):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_target")
     conv = await _get_or_create_conversation(db, user_id, other_id)
+    await _require_mutable(db, conv, user_id)
     row = await _weekly_row(db, conv.id)
     if row is None:
         row = SharedGoal(conversation_id=conv.id, kind="weekly_reviews", created_by=user_id)
