@@ -36,7 +36,7 @@
   - `POST /api/push/subscriptions` — 구독 저장 (endpoint 기준 upsert, https 만)
   - `DELETE /api/push/subscriptions` — 내 구독 해지
   - `POST /api/push/test` — 내 전체 기기로 즉시 테스트 발송
-- **프론트**: `public/sw.js` (푸시 전용 서비스 워커, 캐싱 없음) + `public/manifest.json` + `src/lib/push.ts` + 설정 페이지 `NotificationCard` (2026-07-31 통합 — 구독은 기기당 1개라 "복습 리마인더"/"새 글 알림" 이중 토글은 같은 스위치의 다른 이름이었음. 기기 단위 마스터 스위치 + 받는 알림 종류(채팅 새 글·게임 초대·복습 리마인더) 목록 안내로 일원화. 채팅창 카드는 표시 방식만)
+- **프론트**: `public/sw.js` (푸시 전용 서비스 워커, 캐싱 없음) + `public/manifest.json` + `src/lib/push.ts` + 설정 페이지 `NotificationCard` (2026-07-31 통합 — 구독은 기기당 1개라 "복습 리마인더"/"새 글 알림" 이중 토글은 같은 스위치의 다른 이름이었음. 기기 단위 마스터 스위치 + 받는 알림 종류(채팅 새 글·게임 초대·복습 리마인더·주간 성적표 — weekly-report.md, 2026-08-07 추가) 목록 안내로 일원화. 채팅창 카드는 표시 방식만)
 
 ## 환경 변수 (서버 .env.api)
 

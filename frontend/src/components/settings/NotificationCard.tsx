@@ -171,6 +171,7 @@ export function NotificationCard() {
               · 복습 리마인더 — 매일 {fmtHour(reminderHour ?? 20)}, 밀린 복습이
               있을 때만
             </li>
+            <li>· 주간 성적표 — 매주 월요일, 지난주 복습이 있었을 때만</li>
             <li className="mt-1 opacity-50">
               접속 중 소식(시험 1위 탈환 등)은 상단 벨로 도착해요
             </li>

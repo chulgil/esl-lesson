@@ -228,20 +228,24 @@
   "correct": true,
   "rating_applied": 3,
   "long_term_reached": false,
+  "interval_previews": {"1": 1.2, "2": 3.5, "3": 7.0, "4": 14.1},
   "correct_answer": "It takes some time to get used to it",
-  "diff": null,
-  "explanation": {"ko": "...", "context_en": "...", "thinking_ko": "..."},
-  "card": {"state": "review", "due_at": "2026-07-14T03:00:00Z"},
-  "session": {"remaining": 12, "done": 8}
+  "close_match": null,
+  "explanation": {"ko": "...", "thinking_ko": "...", "context_en": "..."},
+  "card": {"state": "review", "due_at": "2026-07-14T03:00:00Z"}
 }
 ```
+
+`close_match` 는 오답이 유사단어였을 때만 비교 카드 `{item_id, en_text, ko_text}`
+(그 외 null). 세션 진행(remaining/done)은 응답에 없고 클라이언트가 큐로 관리
+(2026-08-13 실응답 기준으로 계약 정정 — `diff`/`session` 필드는 미구현 초안 흔적).
 
 ## 엣지 케이스
 
 | 케이스 | 처리 |
 |--------|------|
 | 오답 보기 풀 부족 (word 3개 미만) | 부족분은 사전 정의 더미 보기로 채움 (초기 데이터 적을 때) |
-| 항목이 검수에서 rejected로 전환 | 기존 카드 suspended 처리 (이력 보존) |
+| 항목이 검수에서 rejected로 전환 | 가시성 규칙(`visible_item_clause`)이 출제에서 제외 — 카드는 suspended 하지 않아 이력 보존, 재승인 시 자동 복귀 |
 | 밀린 복습 폭탄 (due 수백 개) | daily_review_limit로 상한, 오래된 순 우선 |
 | 동일 항목 문맥 다수 | 출제 시 랜덤 문맥 선택 (과적합 방지) |
 | 자정 경계 | "오늘" 판정은 사용자 타임존(기본 Asia/Seoul) 기준 |

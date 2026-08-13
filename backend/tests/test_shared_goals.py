@@ -3,7 +3,7 @@
 import pytest
 from sqlalchemy import select
 
-from app.models import SharedGoal
+from app.models import Friendship, SharedGoal
 from app.services import chat as chat_service
 from tests.test_chat import login, two_friends
 from tests.test_daily_loop import _log_reviews
@@ -125,6 +125,36 @@ async def test_non_participant_cannot_patch_or_delete(client, db_session):
 
     deleted = await client.delete(f"/api/chat/goals/{created['id']}")
     assert deleted.status_code == 403
+
+
+async def test_unfriend_blocks_mutations_but_keeps_view(client, db_session):
+    """친구 삭제 후: 조회는 유지, 모든 변경은 403 not_friends — chat 전송 경로와 동일 규칙."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    created = (await client.post(f"/api/chat/with/{b.id}/goals", json={"text": "남는 목표"})).json()
+
+    row = (await db_session.execute(select(Friendship))).scalar_one()
+    await db_session.delete(row)
+    await db_session.commit()
+
+    # 조회는 여전히 허용 (기록 보존 원칙)
+    view = await client.get(f"/api/chat/with/{b.id}/goals")
+    assert view.status_code == 200
+    assert [i["text"] for i in view.json()["items"]] == ["남는 목표"]
+
+    # 변경은 전부 403 not_friends
+    added = await client.post(f"/api/chat/with/{b.id}/goals", json={"text": "새 목표"})
+    assert added.status_code == 403
+    assert added.json()["detail"] == "not_friends"
+
+    patched = await client.patch(f"/api/chat/goals/{created['id']}", json={"done": True})
+    assert patched.status_code == 403
+
+    deleted = await client.delete(f"/api/chat/goals/{created['id']}")
+    assert deleted.status_code == 403
+
+    weekly = await client.patch(f"/api/chat/with/{b.id}/goals/weekly", json={"target_value": 400})
+    assert weekly.status_code == 403
 
 
 async def test_add_goal_requires_friend(client, db_session):

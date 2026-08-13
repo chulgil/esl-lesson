@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from app.models import GameMatch, ReviewCard, ReviewLog, TypingRace
+from app.models import BingoMatch, GameMatch, ReviewCard, ReviewLog, TypingRace
 from app.models.friend import Friendship
 from app.models.user import User
 from tests.test_study import login, seed_items
@@ -90,6 +90,27 @@ async def test_first_win_from_any_game(client, db_session):
     # 첫 게임(참여) 단발 업적 — 테마 보상(레고) 매핑 대상
     assert items["first_game"]["achieved"] is True
     assert items["first_game"]["tier"] is None
+
+
+async def test_bingo_counts_toward_generic_games_played(client, db_session):
+    """빙고(2026-08-10 출시) 참여도 games_played 류 제네릭 카운터에 포함돼야 한다
+    (achievements.py 누락 픽스 — first_game/games_10 등)."""
+    me = await login(client, db_session)
+    db_session.add(
+        BingoMatch(
+            mode="solo",
+            status="finished",
+            player1_id=me.id,
+            winner_id=me.id,
+            stats={},
+        )
+    )
+    await db_session.commit()
+
+    res = await client.get("/api/study/achievements")
+    items = {a["key"]: a for a in res.json()["items"]}
+    assert items["first_game"]["achieved"] is True
+    assert items["games_10"]["current"] == 1
 
 
 async def test_typing_300_from_peak_cpm(client, db_session):
@@ -239,6 +260,18 @@ async def test_exam_perfect_requires_100(client, db_session):
 
     await _submit_exam(db_session, exam, me.id, score=100)
     await db_session.commit()
+    items = {a["key"]: a for a in (await client.get("/api/study/achievements")).json()["items"]}
+    assert items["exam_perfect"]["achieved"] is True
+
+
+async def test_exam_perfect_achieved_on_full_score_short_exam(client, db_session):
+    """L2: 문항 5~19개 콘텐츠는 전 문항 정답이어도 100점 미만 — 만점(question_count x
+    POINTS_PER_QUESTION) 기준으로 판정해야 짧은 시험도 업적을 받을 수 있다."""
+    me = await login(client, db_session)
+    exam = await _seed_exam(db_session, question_count=5)
+    await _submit_exam(db_session, exam, me.id, score=25)  # 5문항 x 5점 = 만점
+    await db_session.commit()
+
     items = {a["key"]: a for a in (await client.get("/api/study/achievements")).json()["items"]}
     assert items["exam_perfect"]["achieved"] is True
 

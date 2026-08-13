@@ -57,7 +57,8 @@
   - 응답 `iv.sent {ok, via: "ws"|"push"|null}`
 - **초대자 테마 미러링 (2026-07-30)**: 클라 `invite()` 가 `getAppTheme()` 을 자동 동봉,
   서버 `safe_theme()` 이 카탈로그 외 값을 None 으로 버린 뒤 3경로(토스트·푸시 URL·
-  알림센터 `game_invite` payload)에 릴레이. 게스트 게임 화면(5종 전부)은
+  알림센터 `game_invite` payload)에 릴레이. 게스트 게임 화면(6종 전부 —
+  2026-08-10 리스닝 빙고 출시 반영)은
   `useInviteTheme(ended)` 훅이 `?theme=` 을 data-theme 속성으로만 오버라이드 —
   **게임 종료(phase ended) + 페이지 이탈 이중 복원**, setAppTheme 금지(localStorage
   저장 시 제한 테마가 게스트 설정으로 굳는 누수 — 관전 st.event 와 동일 원칙).

@@ -26,7 +26,8 @@ XP 로 제한 테마를 구매한다 — 업적 보상과 **독립 설정, 동�
 | 무료 | 운영 중 | note 하나만 전원 사용 가능 (2026-07-30 전환 — 기본 테마는 노트뿐) |
 | 업적 보상 | **운영 중** | theme_reward_rules 매핑으로 업적 달성 시 자동 지급 (첫 친구→candy, 첫 게임→lego). 백오피스에서 규칙 관리 |
 | 이벤트 지급 | 운영 중 | restricted 테마를 백오피스에서 이메일로 수동 지급/회수. cat 은 초기 2계정 전용 |
-| 유료 판매 | 후속 | `THEME_ACCESS` 에 "paid" 값 추가 + PG 연동. purchases 테이블(결제 이력)·환불 정책은 **결제 수단 결정 후** 별도 스펙 |
+| XP 판매 | **운영 중** | XP 상점(`/shop`) — `price_xp` 설정 테마를 XP 로 구매, `purchases`/`xp_spends` 원장 기록 (2026-08-11 라이브, 위 "XP 상점" 절) |
+| PG 결제 | 후속 | `THEME_ACCESS` 에 "paid" 값 추가 + PG 연동. 결제 이력(금액·PG 승인번호)·환불 정책은 **결제 수단 결정 후** 별도 스펙 |
 
 - 유료 전환 시에도 `theme_grants` 가 "보유"의 단일 근거 — 구매 성공 = grant INSERT. 결제 이력(금액·PG 승인번호·환불)은 별도 purchases 테이블로 분리한다.
 
@@ -54,6 +55,7 @@ theme_grants
 theme_settings (c8d9e0f1a2b3, 2026-07-30)
   theme_key String(32) PK -- THEME_ACCESS 의 키
   access String(16)       -- "free" | "restricted" (오버라이드)
+  price_xp Integer NULL   -- XP 상점 가격 (dd44ee55ff66, 2026-08-05 — NULL = 미판매)
 
 theme_reward_rules (d1e2f3a4b5c6, 2026-07-30)
   id PK
@@ -80,6 +82,7 @@ theme_reward_rules (d1e2f3a4b5c6, 2026-07-30)
 | DELETE `/api/admin/themes/rewards/{rule_id}` | 규칙 삭제 204 — 기존 지급 유지 |
 | GET `/api/admin/themes` | 카탈로그 + 테마별 보유자 수 `{items:[{key, access, grants}]}` |
 | PATCH `/api/admin/themes/{theme_key}` | 무료/제한 전환 `{access: "free"\|"restricted"}` — 404 `theme_not_found` / 422 `fallback_theme_locked`(note 제한 금지) |
+| PATCH `/api/admin/themes/{theme_key}/price` | XP 가격 설정/해제 `{price_xp: 1~1000000 \| null}` — "XP 상점" 절의 판매 여부가 이 값으로 결정 (NULL = 미판매) |
 | GET `/api/admin/themes/{theme_key}/grants` | 보유자 목록 `{items:[{id, email, nickname, note, created_at}]}` |
 | POST `/api/admin/themes/{theme_key}/grants` | 지급 `{email, note?}` — 이메일 소문자 조회. 404 `user_not_found` / 409 `already_granted` / 422 `theme_not_restricted`(free 는 지급 무의미) / 404 `theme_not_found` |
 | DELETE `/api/admin/themes/grants/{grant_id}` | 회수 204 |
