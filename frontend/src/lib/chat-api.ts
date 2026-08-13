@@ -79,6 +79,8 @@ export interface GoalsResponse {
 
 /** 대화방 공지 — 대화당 1개, 두 참가자 모두 수정 가능 (docs/specs/chat-notice.md) */
 export interface ChatNotice {
+  /** 제목(한 줄, 80자) — 레거시 행(제목 도입 전)만 null 에 text 존재 가능 */
+  title: string | null;
   text: string | null;
   updated_at?: string | null;
   updated_by_name?: string | null;
@@ -181,10 +183,10 @@ export const chatApi = {
   // --- 대화방 공지 (docs/specs/chat-notice.md) ---
   notice: (otherId: number) =>
     request<ChatNotice>(`/api/chat/with/${otherId}/notice`),
-  setNotice: (otherId: number, text: string) =>
+  setNotice: (otherId: number, title: string, text: string) =>
     request<ChatNotice>(`/api/chat/with/${otherId}/notice`, {
       method: "PUT",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ title, text }),
     }),
   clearNotice: (otherId: number) =>
     request<void>(`/api/chat/with/${otherId}/notice`, { method: "DELETE" }),

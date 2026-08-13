@@ -94,6 +94,8 @@ class SharedGoal(Base, PkMixin, TimestampMixin):
         BigInteger, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
     )
     kind: Mapped[str] = mapped_column(String(16), default="check", server_default="check")
+    # 공지(kind="notice") 전용 — 제목+내용 구조 (docs/specs/chat-notice.md, 2026-08-13)
+    title: Mapped[str | None] = mapped_column(String(80))
     text: Mapped[str] = mapped_column(Text, default="", server_default="")
     target_value: Mapped[int | None] = mapped_column(Integer)
     done: Mapped[bool] = mapped_column(default=False, server_default="false")

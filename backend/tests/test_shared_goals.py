@@ -188,7 +188,7 @@ async def test_clear_board_removes_goals_but_keeps_notice(client, db_session):
     await login(client, db_session, a)
     await client.post(f"/api/chat/with/{b.id}/goals", json={"text": "지울 목표"})
     await client.patch(f"/api/chat/with/{b.id}/goals/weekly", json={"target_value": 400})
-    await client.put(f"/api/chat/with/{b.id}/notice", json={"text": "공지는 남아야 함"})
+    await client.put(f"/api/chat/with/{b.id}/notice", json={"title": "공지는 남아야 함"})
 
     res = await client.delete(f"/api/chat/with/{b.id}/goals")
     assert res.status_code == 204
@@ -199,7 +199,7 @@ async def test_clear_board_removes_goals_but_keeps_notice(client, db_session):
     assert view["weekly"]["target"] == 300  # 기본값 복귀
 
     notice = (await client.get(f"/api/chat/with/{b.id}/notice")).json()
-    assert notice["text"] == "공지는 남아야 함"
+    assert notice["title"] == "공지는 남아야 함"
 
     # 멱등 — 빈 보드 재내리기도 204
     assert (await client.delete(f"/api/chat/with/{b.id}/goals")).status_code == 204

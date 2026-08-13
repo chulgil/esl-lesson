@@ -6,6 +6,7 @@ import { chatApi, type ChatNotice } from "@/lib/chat-api";
 import { onChatEvent } from "@/lib/chat-signals";
 
 const MAX_LEN = 500;
+const TITLE_MAX = 80;
 
 export interface NoticeBarHandle {
   /** 헤더 케밥 메뉴가 편집 시트를 여는 통로 — 공지 유무와 무관하게 호출 가능 */
@@ -33,6 +34,7 @@ export function NoticeBar({
   const [notice, setNotice] = useState<ChatNotice | null>(null);
   const [folded, setFolded] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +80,11 @@ export function NoticeBar({
   );
 
   const openEditor = useCallback(() => {
+    // 레거시 행(제목 도입 전) 편집 시 첫 줄을 제목 후보로 승격
+    const legacyFirst = notice?.title
+      ? ""
+      : (notice?.text?.split("\n")[0] ?? "");
+    setTitleDraft(notice?.title ?? legacyFirst);
     setDraft(notice?.text ?? "");
     setError(null);
     setEditing(true);
@@ -85,7 +92,10 @@ export function NoticeBar({
 
   useEffect(() => {
     if (!apiRef) return;
-    apiRef.current = { openEditor, hasNotice: Boolean(notice?.text) };
+    apiRef.current = {
+      openEditor,
+      hasNotice: Boolean(notice?.title || notice?.text),
+    };
   }, [apiRef, openEditor, notice]);
 
   function persistFold(next: boolean) {
@@ -98,10 +108,11 @@ export function NoticeBar({
   }
 
   function onSave() {
+    const title = titleDraft.trim();
     const t = draft.trim();
-    if (!t || t.length > MAX_LEN) return;
+    if (!title || title.length > TITLE_MAX || t.length > MAX_LEN) return;
     chatApi
-      .setNotice(otherId, t)
+      .setNotice(otherId, title, t)
       .then((res) => {
         setNotice(res);
         setEditing(false);
@@ -113,7 +124,7 @@ export function NoticeBar({
   function onClear() {
     chatApi
       .clearNotice(otherId)
-      .then(() => setNotice({ text: null }))
+      .then(() => setNotice({ title: null, text: null }))
       .catch(() => setError("공지를 내리지 못했어요"));
   }
 
@@ -128,11 +139,22 @@ export function NoticeBar({
     return (
       <section className={`${wrapClass} px-3 py-2`}>
         {error && <p className={errClass}>{error}</p>}
+        <input
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value.slice(0, TITLE_MAX))}
+          placeholder="공지 제목"
+          aria-label="공지 제목"
+          className={
+            excel
+              ? "mb-1.5 w-full rounded-sm border border-[#c9cfd6] px-2 py-1.5 text-xs font-bold focus:border-[#217346] focus:outline-none"
+              : "mb-1.5 w-full rounded-md border-2 border-ink/20 px-2 py-1.5 text-xs font-bold focus:border-brick-blue focus:outline-none"
+          }
+        />
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value.slice(0, MAX_LEN))}
           rows={4}
-          placeholder="대화방 공지를 적어보세요"
+          placeholder="내용 (선택)"
           aria-label="공지 내용"
           className={
             excel
@@ -156,7 +178,7 @@ export function NoticeBar({
           <button
             type="button"
             onClick={onSave}
-            disabled={!draft.trim()}
+            disabled={!titleDraft.trim()}
             className={`text-xs font-bold disabled:opacity-40 ${
               excel ? "text-[#217346]" : "text-brick-blue"
             }`}
@@ -168,9 +190,10 @@ export function NoticeBar({
     );
   }
 
-  if (!notice?.text) return null;
+  if (!notice?.title && !notice?.text) return null;
 
-  const firstLine = notice.text.split("\n")[0] ?? "";
+  // 레거시 행(제목 도입 전)은 내용 첫 줄이 제목 역할을 대신한다
+  const barTitle = notice.title ?? (notice.text?.split("\n")[0] || "");
 
   return (
     <section className={wrapClass}>
@@ -187,7 +210,7 @@ export function NoticeBar({
           }
         >
           <span className="min-w-0 flex-1 truncate text-xs">
-            [공지] {firstLine}
+            [공지] <span className="font-bold">{barTitle}</span>
           </span>
         </button>
         <button
@@ -224,9 +247,15 @@ export function NoticeBar({
       {!folded && (
         <div className="px-3 pb-3">
           {error && <p className={errClass}>{error}</p>}
-          <p className="text-sm break-words whitespace-pre-wrap">
-            {notice.text}
-          </p>
+          {/* 레거시 행(title null)은 text 첫 줄이 바 제목이라 본문만 보여준다 */}
+          {notice.title && (
+            <p className="text-sm font-bold break-words">{notice.title}</p>
+          )}
+          {notice.text && (
+            <p className="mt-1 text-sm break-words whitespace-pre-wrap">
+              {notice.text}
+            </p>
+          )}
         </div>
       )}
     </section>

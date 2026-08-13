@@ -18,6 +18,7 @@ from app.services import chat as chat_service
 from app.services import goals as goals_service
 
 NOTICE_MAX = 500
+TITLE_MAX = 80
 PREVIEW_MAX = 80
 
 
@@ -61,10 +62,12 @@ async def _notice_row(db: AsyncSession, conv_id: int) -> SharedGoal | None:
 
 async def _notice_dict(db: AsyncSession, conv: Conversation) -> dict:
     row = await _notice_row(db, conv.id)
-    if row is None or not row.text:
-        return {"text": None}
+    # title 도입(2026-08-13) 이전 레거시 행은 text 만 있어도 성립
+    if row is None or not (row.title or row.text):
+        return {"title": None, "text": None}
     editor = await db.get(User, row.created_by) if row.created_by else None
     return {
+        "title": row.title,
         "text": row.text,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "updated_by_name": editor.nickname if editor else None,
@@ -96,17 +99,22 @@ async def get_notice(db: AsyncSession, user_id: int, other_id: int) -> dict:
     """GET /with/{other_id}/notice — 대화가 없으면 친구 검증 후 빈 응답."""
     conv = await _existing_conversation_or_404(db, user_id, other_id)
     if conv is None:
-        return {"text": None}
+        return {"title": None, "text": None}
     return await _notice_dict(db, conv)
 
 
 async def set_notice(
-    db: AsyncSession, user_id: int, other_id: int, text: str
+    db: AsyncSession, user_id: int, other_id: int, title: str, text: str
 ) -> tuple[dict, dict, Conversation]:
-    """PUT — upsert. 반환: (공지 뷰, 시스템 줄 메시지, 대화)."""
+    """PUT — upsert. 제목 필수(한 줄, 80자), 내용 선택(500자).
+
+    반환: (공지 뷰, 시스템 줄 메시지, 대화)."""
+    title = title.strip()
+    if not title or "\n" in title:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_title")
+    if len(title) > TITLE_MAX:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "title_too_long")
     text = text.strip()
-    if not text:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_text")
     if len(text) > NOTICE_MAX:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "text_too_long")
     conv = await _get_or_create_conversation(db, user_id, other_id)
@@ -115,12 +123,13 @@ async def set_notice(
     if row is None:
         row = SharedGoal(conversation_id=conv.id, kind="notice")
         db.add(row)
+    row.title = title
     row.text = text
     row.created_by = user_id
     await db.commit()
     await db.refresh(row)
-    preview = text.split("\n", 1)[0][:PREVIEW_MAX]
-    system_line = await _record_system_line(db, conv, user_id, "notice_set", preview)
+    # 제목이 곧 미리보기 — TITLE_MAX(80) <= PREVIEW_MAX 라 자름 없음
+    system_line = await _record_system_line(db, conv, user_id, "notice_set", title)
     return await _notice_dict(db, conv), system_line, conv
 
 
@@ -137,8 +146,9 @@ async def clear_notice(
         return None, None
     await _require_mutable(db, conv, user_id)
     row = await _notice_row(db, conv.id)
-    if row is None or not row.text:
+    if row is None or not (row.title or row.text):
         return None, conv
+    row.title = None
     row.text = ""
     row.created_by = user_id
     await db.commit()
