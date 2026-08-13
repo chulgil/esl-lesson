@@ -31,6 +31,7 @@ chat_messages
   image_path Text nullable     -- 서버 발급 uuid.ext (이미지 전송 — e4f5a6b7c8d9)
   client_msg_id Text           -- 멱등키. unique(conversation_id, client_msg_id)
   reply_to_id BigInt nullable   -- 답장 대상 self-FK (SET NULL, 2026-07-31)
+  kind String(16) nullable      -- NULL=일반 / notice_set·notice_clear=공지 시스템 줄 (chat-notice.md, 2026-08-13)
   created_at
 
 chat_reads
