@@ -27,6 +27,7 @@ import { useChatFloating } from "@/lib/chat-mode";
 import { setFaviconBadge } from "@/lib/favicon-badge";
 import { SHOP_EVENT, shopApi } from "@/lib/shop-api";
 import { useAppTheme } from "@/lib/theme";
+import { CHAT_LABEL_OF } from "@/lib/theme-surfaces";
 
 /** 채팅 위젯 — excelkospi 우하단 버튼 컨셉 (docs/specs/chat.md 위장 테마).
  *  설정(플로팅 체크) 에 따라 두 가지로 표시된다:
@@ -357,10 +358,12 @@ export function ChatWidget() {
               {excel
                 ? room
                   ? `${room.peer.nickname}_공유.xlsx`
-                  : "공유 메모"
+                  : // 전체 페이지·탭 라벨과 동일 정본 — "공유 메모" 별칭이
+                    // 표기 불일치 보고(2026-08-14)를 낳아 CHAT_LABEL_OF 로 통일
+                    CHAT_LABEL_OF[theme]
                 : room
                   ? `${room.peer.nickname} 와의 교환 노트`
-                  : "교환 노트"}
+                  : CHAT_LABEL_OF[theme]}
             </b>
             {room && (
               <LangPairBadge
@@ -459,7 +462,7 @@ export function ChatWidget() {
           }
         >
           {excel ? (
-            <span>메모</span>
+            <span>문서</span>
           ) : mascotLauncher && mascot ? (
             <MascotSvg kind={mascot.kind} outfits={mascot.outfits} />
           ) : (
