@@ -15,6 +15,12 @@ const LANG_LABELS: Record<string, string> = {
   ja: "일본어",
 };
 
+/** (일반) = 개편 전 수집분 덱 — 언어 칩과 구분되게 괄호로 표기
+ *  (docs/specs/my-phrases.md 덱 그룹화) */
+function tabLabel(l: string): string {
+  return l === "legacy" ? "(일반)" : (LANG_LABELS[l] ?? l);
+}
+
 /** 내가 쓰는 말 편집 — 문장 빼기 (docs/specs/my-phrases.md 편집).
  *  뺀 문장은 제외 원장에 기록되어 재동기화(채팅 재수집)에도 돌아오지 않는다.
  *  언어 탭 + 빈도 배지 + 졸업 문장 접힘 섹션 (2026-08-14 개정). */
@@ -97,6 +103,12 @@ function MyPhrasesEditInner() {
     setRefreshing(false);
   }
 
+  // (일반) 칩 — 개편 전 수집분이 있을 때만 노출. 카드에서 lang=legacy 로 바로
+  // 들어온 경우 res 가 아직 없어도 탭이 사라지지 않게 lang 자체도 함께 확인
+  // (docs/specs/my-phrases.md 덱 그룹화)
+  const showLegacyTab = (res?.legacy_total ?? 0) > 0 || lang === "legacy";
+  const tabs = [...(learningLangs ?? []), ...(showLegacyTab ? ["legacy"] : [])];
+
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-4 py-8 sm:px-10">
       <h1 className="font-hand text-3xl font-bold">
@@ -107,9 +119,9 @@ function MyPhrasesEditInner() {
         같은 말을 다시 채팅해도 다시 수집되지 않아요.
       </p>
 
-      {learningLangs && learningLangs.length > 1 && lang && (
+      {tabs.length > 1 && lang && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {learningLangs.map((l) => (
+          {tabs.map((l) => (
             <button
               key={l}
               type="button"
@@ -121,7 +133,7 @@ function MyPhrasesEditInner() {
                   : "border-ink/15 bg-white hover:border-brick-blue/50"
               }`}
             >
-              {LANG_LABELS[l] ?? l}
+              {tabLabel(l)}
             </button>
           ))}
         </div>

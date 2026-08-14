@@ -22,6 +22,19 @@
                         └─> 학습 탭 "내가 쓰는 말" 카드 (언어 탭 · 수집 현황)
 ```
 
+## 덱 그룹화 — 학습 덱과 분리 (2026-08-14 사용자 결정)
+
+- **학습 탭 "내 덱" 목록은 유튜브 등 콘텐츠 덱만** — chat 덱(source='chat')은
+  목록에서 제외한다. 내가 쓰는 말의 유일한 진입점은 전용 섹션.
+- **내가 쓰는 말 섹션은 하위 그룹**으로 나눈다: (영어) (일본어) … + **(일반)**.
+- **(일반) = 기존 채팅방(개편 후 일반 방) 시절 수집분** — 당시 번역이 있어
+  원문·번역 쌍이 유효한 학습카드다. 마이그레이션이 기존 chat 덱을
+  `chat_kind='legacy'`, 제목 "내가 쓰는 말 (일반)" 으로 전환한다.
+  **신규 수집은 동결** (일반 방 발화는 번역 쌍이 없어 수집 제외 원칙 유지) —
+  편집(빼기)·번역 새로고침·학습·게임 풀 합류는 종전대로 동작한다.
+- 언어별 덱(아래)은 학습 방 수집분만 — legacy 덱과 별개 행
+  (`contents.chat_kind` NULL = 언어별 학습 덱).
+
 ## 언어별 덱 (2026-08-14)
 
 - 덱 = `(created_by, source='chat', lang)` 당 1개 — 제목 "내가 쓰는 말 (영어)"
@@ -89,11 +102,11 @@ chat 덱의 문장 항목은 **모든 학습 난이도에서 출제**된다 (일
 
 | 표면 | 내용 |
 |---|---|
-| GET /api/study/my-phrases?lang= | lazy sync 후 {content_id, lang, total, active, graduated, added_now, recent[5]}. lang 생략 = learning_langs[0] |
+| GET /api/study/my-phrases?lang= | lazy sync 후 {content_id, lang, total, active, graduated, added_now, recent[5]}. lang 생략 = learning_langs[0]. **lang='legacy' = (일반) 덱** (sync 없음, added_now=0) |
 | GET /api/study/my-phrases/items?lang= | 편집용 활성 목록 (freq 내림차순, freq·장기기억 여부 포함) + graduated 카운트 |
 | POST /api/study/my-phrases/refresh | 번역 품질 새로고침 (lang 파라미터, 종전 동작) |
 | DELETE /api/study/my-phrases/{item_id} | 문장 빼기 (언어 무관 — 항목이 속한 내 chat 덱에서) |
-| 학습 탭 카드 | "내가 쓰는 말" — **언어 탭**(학습언어 복수 시) · 활성 N/100 · 졸업 M · 최근 추가 · "이 덱으로 학습". 0개면 학습 방 만들기 안내 |
+| 학습 탭 카드 | "내가 쓰는 말" — **하위 그룹 칩 (영어)(일본어)…+(일반)** (legacy 덱이 있고 항목>0 일 때만 (일반) 노출) · 활성 N/100 · 졸업 M · 최근 추가 · "이 덱으로 학습". (일반) 탭엔 "새 문장은 학습 방에서 모여요" 안내. 0개면 학습 방 만들기 안내 |
 | /study/phrases | 언어 탭 + 빈도 배지("N회") + 졸업 문장 접힘 목록 + 빼기 |
 
 ## 성장 루프 (기획 의도)

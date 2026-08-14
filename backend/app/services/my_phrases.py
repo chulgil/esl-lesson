@@ -48,6 +48,8 @@ async def _get_or_create_deck(db: AsyncSession, user: User, lang: str) -> Conten
                 Content.source == "chat",
                 Content.created_by == user.id,
                 Content.lang == lang,
+                # legacy((일반) 덱)는 별개 행 — 여기서 재사용하지 않는다 (덱 그룹화)
+                Content.chat_kind.is_(None),
             )
         )
     ).scalar_one_or_none()
@@ -102,6 +104,43 @@ async def deck_counts(db: AsyncSession, user_id: int, deck_id: int) -> tuple[int
         )
     ).scalar_one()
     return active, total
+
+
+async def get_legacy_deck(db: AsyncSession, user_id: int) -> Content | None:
+    """(일반) 덱 — 개편 전(언어 분리 이전) 수집분 (chat_kind='legacy').
+
+    신규 수집은 동결(sync_my_phrases 가 만들지 않는다) — 편집·번역 새로고침·
+    학습·게임 풀 합류는 언어별 덱과 동일하게 동작한다 (my-phrases.md 덱 그룹화).
+    사용자당 1개가 정상이지만, id 오름차순 1건으로 방어적으로 고른다."""
+    return (
+        (
+            await db.execute(
+                select(Content)
+                .where(
+                    Content.source == "chat",
+                    Content.created_by == user_id,
+                    Content.chat_kind == "legacy",
+                )
+                .order_by(Content.id)
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+async def legacy_total(db: AsyncSession, user_id: int) -> int:
+    """(일반) 덱 문장 수 — 프론트가 (일반) 칩 노출 여부를 판단하는 근거
+    (my-phrases.md API·화면)."""
+    deck = await get_legacy_deck(db, user_id)
+    if deck is None:
+        return 0
+    return (
+        await db.execute(
+            select(func.count(ItemOccurrence.id)).where(ItemOccurrence.content_id == deck.id)
+        )
+    ).scalar_one()
 
 
 async def _promote_candidates(
@@ -264,24 +303,28 @@ async def refresh_my_phrases(
 
     엔진·프롬프트가 개선됐을 때 기존 문장을 새 품질로: 원문 실명 치환
     (anonymize) 후 재번역해 ko/en 텍스트를 제자리 갱신. 본인 덱만(언어별,
-    lang 지정 — 미지정 시 learning_langs[0]) — 항목이 공유(전역 dedup)됐어도
-    chat 덱 항목은 채팅 유래라 사실상 개인 소유. 사용량은 translation_usage
-    에 기록(예산 회계). 커밋은 호출자 책임.
+    lang 지정 — 미지정 시 learning_langs[0], 'legacy'=(일반) 덱) — 항목이
+    공유(전역 dedup)됐어도 chat 덱 항목은 채팅 유래라 사실상 개인 소유.
+    사용량은 translation_usage 에 기록(예산 회계). 커밋은 호출자 책임.
     """
     from app.models import TranslationUsage
 
     primary = settings.primary_lang if settings and settings.primary_lang else "ko"
     default_lang = (settings.learning_langs if settings and settings.learning_langs else ["en"])[0]
     resolved_lang = lang or default_lang
-    deck = (
-        await db.execute(
-            select(Content).where(
-                Content.source == "chat",
-                Content.created_by == user.id,
-                Content.lang == resolved_lang,
+    if resolved_lang == "legacy":
+        deck = await get_legacy_deck(db, user.id)
+    else:
+        deck = (
+            await db.execute(
+                select(Content).where(
+                    Content.source == "chat",
+                    Content.created_by == user.id,
+                    Content.lang == resolved_lang,
+                    Content.chat_kind.is_(None),
+                )
             )
-        )
-    ).scalar_one_or_none()
+        ).scalar_one_or_none()
     if deck is None:
         return 0
     items = (
@@ -302,7 +345,9 @@ async def refresh_my_phrases(
         if not ko:
             continue
         safe = await translation_service.anonymize_names(ko, primary)
-        result = await translation_service._translate_via_chain(safe, resolved_lang)  # noqa: SLF001
+        # deck.lang(실제 번역 대상 언어) 사용 — resolved_lang 은 'legacy' 일 수 있어
+        # 번역 엔진에 그대로 넘기면 안 된다 (덱 그룹화)
+        result = await translation_service._translate_via_chain(safe, deck.lang)  # noqa: SLF001
         if result is None:
             continue  # 엔진 불가 — 남은 항목은 다음 새로고침에서
         translated, engine = result
