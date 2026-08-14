@@ -211,6 +211,8 @@ async def sync_my_phrases(
                 ChatMessage.body != "",
                 # 시스템 줄(공지 등) 제외 (docs/specs/chat-notice.md)
                 ChatMessage.kind.is_(None),
+                # 일반 대화 방(plain)은 학습 문맥이 아님 — 수집 제외 (스펙 §일반 대화 방)
+                Conversation.mode == "learn",
             )
             .order_by(ChatMessage.id.desc())
             .limit(MESSAGE_SCAN_LIMIT)

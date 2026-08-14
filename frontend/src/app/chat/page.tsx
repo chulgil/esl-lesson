@@ -154,7 +154,7 @@ function NoteList({
             <span className="min-w-0 flex-1">
               <span className="flex items-baseline gap-2">
                 <b className="truncate">{r.peer.nickname}</b>
-                <LangPairBadge source={r.source_lang} target={r.target_lang} />
+                <LangPairBadge source={r.source_lang} target={r.target_lang} mode={r.mode} />
                 {r.status === "closed" && (
                   <span className="shrink-0 text-[10px] font-bold opacity-50">
                     종료

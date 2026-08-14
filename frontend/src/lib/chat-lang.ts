@@ -25,11 +25,13 @@ export function langPairLabel(
   return `${LANG_SHORT[source]}→${LANG_SHORT[target]}`;
 }
 
-/** 입력창 placeholder — 방 언어쌍 반영, 테마 중립 (chat-language-rooms.md §UX) */
+/** 입력창 placeholder — 방 언어쌍 반영, 테마 중립 (chat-language-rooms.md §UX).
+ *  일반 대화 방(plain)은 언어 안내 없이 기본 문구. */
 export function roomInputPlaceholder(
   source: SupportedLang | null,
   target: SupportedLang | null,
+  mode: "learn" | "plain" = "learn",
 ): string {
-  if (!source || !target) return "한 줄 적기...";
+  if (mode === "plain" || !source || !target) return "한 줄 적기...";
   return `${LANG_LABEL[source]}로 쓰면 ${LANG_LABEL[target]}로 보여요`;
 }

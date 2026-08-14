@@ -67,7 +67,7 @@ export function NoteSkin(p: ChatSkinProps & { roomId: number }) {
             />
           </h1>
           {p.sourceLang && p.targetLang && (
-            <LangPairBadge source={p.sourceLang} target={p.targetLang} />
+            <LangPairBadge source={p.sourceLang} target={p.targetLang} mode={p.room?.mode} />
           )}
           {closed && (
             <span className="shrink-0 rounded-full border-2 border-ink/15 px-2 py-0.5 text-[10px] font-bold opacity-50">
@@ -356,7 +356,7 @@ export function NoteSkin(p: ChatSkinProps & { roomId: number }) {
               onChange={p.onInputChange}
               onSend={p.onSend}
               onPasteImage={p.onAttachImageFile}
-              placeholder={roomInputPlaceholder(p.sourceLang, p.targetLang)}
+              placeholder={roomInputPlaceholder(p.sourceLang, p.targetLang, p.room?.mode ?? "learn")}
               className="min-h-11 flex-1 rounded-md border-2 border-ink/20 px-3 py-2.5 text-base transition-colors focus:border-brick-blue focus:outline-none sm:text-sm"
             />
             <button

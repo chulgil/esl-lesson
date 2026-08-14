@@ -161,7 +161,7 @@ async def _oldest_room_any_status(db: AsyncSession, a: int, b: int) -> Conversat
 
 
 async def get_room_by_langs(
-    db: AsyncSession, a: int, b: int, source_lang: str, target_lang: str
+    db: AsyncSession, a: int, b: int, source_lang: str, target_lang: str, mode: str = "learn"
 ) -> Conversation | None:
     lo, hi = _pair(a, b)
     return (
@@ -171,6 +171,7 @@ async def get_room_by_langs(
                 Conversation.user_hi_id == hi,
                 Conversation.source_lang == source_lang,
                 Conversation.target_lang == target_lang,
+                Conversation.mode == mode,
             )
         )
     ).scalar_one_or_none()
@@ -183,12 +184,13 @@ async def get_or_create_room(
     source_lang: str,
     target_lang: str,
     origin: str = "friend",
+    mode: str = "learn",
 ) -> tuple[Conversation, bool]:
     """언어쌍 방 get-or-create (docs/specs/chat-language-rooms.md 결정 #1, #9).
 
     종료된 방을 다시 찾으면 재오픈한다 — "이미 있는 방 열기" UX와 매칭 재회가
     이 경로를 공유한다. 반환 (방, 신규 생성 여부)."""
-    conv = await get_room_by_langs(db, a, b, source_lang, target_lang)
+    conv = await get_room_by_langs(db, a, b, source_lang, target_lang, mode)
     if conv is not None:
         if conv.status == "closed":
             conv.status = "active"
@@ -203,6 +205,7 @@ async def get_or_create_room(
         source_lang=source_lang,
         target_lang=target_lang,
         origin=origin,
+        mode=mode,
     )
     db.add(conv)
     try:
@@ -210,7 +213,7 @@ async def get_or_create_room(
     except IntegrityError:
         # 동시 첫 생성 레이스 — 상대가 먼저 만든 행 사용
         await db.rollback()
-        conv = await get_room_by_langs(db, a, b, source_lang, target_lang)
+        conv = await get_room_by_langs(db, a, b, source_lang, target_lang, mode)
         if conv is None:  # pragma: no cover
             raise
         return conv, False
@@ -588,6 +591,7 @@ def _room_payload(
         "source_lang": conv.source_lang,
         "target_lang": conv.target_lang,
         "origin": conv.origin,
+        "mode": conv.mode,
         "status": conv.status,
         "last_message_at": conv.last_message_at.isoformat() if conv.last_message_at else None,
         "unread": unread,
@@ -663,7 +667,7 @@ async def list_rooms(db: AsyncSession, user: User) -> list[dict]:
             elif last.body:
                 cached = (
                     None
-                    if last.kind
+                    if last.kind or conv.mode != "learn"
                     else await translation.cache_lookup(db, last.body, conv.target_lang)
                 )
                 preview = cached or last.body

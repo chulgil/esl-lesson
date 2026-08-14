@@ -362,6 +362,7 @@ export function ChatWidget() {
               <LangPairBadge
                 source={room.source_lang}
                 target={room.target_lang}
+                mode={room.mode}
                 variant={excel ? "excel" : "note"}
               />
             )}
@@ -562,6 +563,7 @@ function WidgetList({
               <LangPairBadge
                 source={r.source_lang}
                 target={r.target_lang}
+                mode={r.mode}
                 variant={excel ? "excel" : "note"}
               />
             </span>
@@ -903,7 +905,7 @@ function WidgetRoom({
             onChange={p.onInputChange}
             onSend={p.onSend}
             onPasteImage={p.onAttachImageFile}
-            placeholder={roomInputPlaceholder(p.sourceLang, p.targetLang)}
+            placeholder={roomInputPlaceholder(p.sourceLang, p.targetLang, p.room?.mode ?? "learn")}
             className={`min-h-11 min-w-0 flex-1 px-2 py-2.5 text-base focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px] ${
               excel
                 ? "rounded-sm border border-[#c9cfd6] focus:border-[#217346]"

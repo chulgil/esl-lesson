@@ -391,3 +391,124 @@ async def test_match_validates_lang_pair(client, db_session):
     await login(client, db_session, a)
     res = await client.post("/api/chat/match", json={"source_lang": "ko", "target_lang": "ko"})
     assert res.status_code == 422
+
+
+# --- 일반 대화 방 (mode='plain', 스펙 §일반 대화 방) --------------------------------
+
+
+async def test_plain_room_separate_from_learn_and_unique_per_pair(client, db_session):
+    """같은 쌍에 학습 방과 일반 방이 공존하고, 일반 방은 쌍당 1개."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    learn = await client.post(
+        "/api/chat/rooms", json={"peer_id": b.id, "source_lang": "ko", "target_lang": "en"}
+    )
+    plain = await client.post(
+        "/api/chat/rooms",
+        json={"peer_id": b.id, "source_lang": "ja", "target_lang": "ko", "mode": "plain"},
+    )
+    assert plain.status_code == 201
+    assert plain.json()["created"] is True
+    assert plain.json()["room"]["mode"] == "plain"
+    assert learn.json()["room"]["id"] != plain.json()["room"]["id"]
+
+    # 언어쌍을 다르게 보내도 일반 방은 ko→en 정규화 — 쌍당 1개로 수렴
+    again = await client.post(
+        "/api/chat/rooms",
+        json={"peer_id": b.id, "source_lang": "ko", "target_lang": "ja", "mode": "plain"},
+    )
+    assert again.json()["created"] is False
+    assert again.json()["room"]["id"] == plain.json()["room"]["id"]
+
+
+async def test_plain_room_messages_have_no_translation(client, db_session, monkeypatch):
+    """일반 방은 전송 응답·목록 조회 모두 translation 이 붙지 않는다."""
+    await stub_translation(monkeypatch, {"밥 먹었어요?": ("Did you eat?", "haiku")})
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    room_id = (
+        await client.post(
+            "/api/chat/rooms",
+            json={"peer_id": b.id, "source_lang": "ko", "target_lang": "en", "mode": "plain"},
+        )
+    ).json()["room"]["id"]
+
+    sent = await client.post(
+        "/api/chat/messages",
+        json={"room_id": room_id, "body": "밥 먹었어요?", "client_msg_id": "plain-000001"},
+    )
+    assert sent.status_code == 201
+    assert sent.json()["translation"] is None
+
+    listed = await client.get(f"/api/chat/rooms/{room_id}/messages")
+    assert listed.json()["items"][0]["translation"] is None
+    assert listed.json()["room"]["mode"] == "plain"
+
+    # 단건 번역 엔드포인트도 plain 방에서는 null
+    mid = listed.json()["items"][0]["id"]
+    single = await client.get(f"/api/chat/messages/{mid}/translation")
+    assert single.json()["translation"] is None
+
+
+async def test_plain_match_bucket_ignores_lang_pair(client, db_session):
+    """일반 매칭은 언어쌍 무관 단일 버킷 — ja→ko 로 참가해도 ko→en 대기자와 성사."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    first = await client.post(
+        "/api/chat/match", json={"source_lang": "ko", "target_lang": "en", "mode": "plain"}
+    )
+    assert first.json() == {"waiting": True}
+
+    await login(client, db_session, b)
+    second = await client.post(
+        "/api/chat/match", json={"source_lang": "ja", "target_lang": "ko", "mode": "plain"}
+    )
+    room = second.json()["room"]
+    assert room["mode"] == "plain"
+    assert room["origin"] == "match"
+
+    # 학습 매칭 대기자와는 섞이지 않는다
+    await login(client, db_session, a)
+    learn_wait = await client.post(
+        "/api/chat/match", json={"source_lang": "ko", "target_lang": "en"}
+    )
+    assert learn_wait.json() == {"waiting": True}
+
+
+async def test_plain_room_excluded_from_my_phrases(client, db_session, monkeypatch):
+    """plain 방 발화는 내가 쓰는 말 수집 대상이 아니다 (스펙 §일반 대화 방)."""
+    from app.models import ChatTranslation
+    from app.services.langs import normalize_text_key
+
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    room_id = (
+        await client.post(
+            "/api/chat/rooms",
+            json={"peer_id": b.id, "source_lang": "ko", "target_lang": "en", "mode": "plain"},
+        )
+    ).json()["room"]["id"]
+    # 번역 캐시가 있어도 (plain 방이라) 수집되면 안 된다
+    db_session.add(
+        ChatTranslation(
+            text_key=normalize_text_key("일반 방에서 자주 하는 말"),
+            source_lang="ko",
+            target_lang="en",
+            text="A phrase from the plain room",
+            engine="seed",
+        )
+    )
+    await db_session.commit()
+    for i in range(2):
+        await client.post(
+            "/api/chat/messages",
+            json={
+                "room_id": room_id,
+                "body": "일반 방에서 자주 하는 말",
+                "client_msg_id": f"plain-mp-{i:06d}",
+            },
+        )
+
+    summary = (await client.get("/api/study/my-phrases?lang=en")).json()
+    assert summary["total"] == 0

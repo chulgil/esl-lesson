@@ -21,6 +21,8 @@ export interface ChatRoomPeer {
 
 /** 언어쌍 학습 방 — 상대 1명 + 언어쌍(source→target) 단위. 같은 상대와도
  *  언어쌍이 다르면 별개 방이 될 수 있다 (chat-language-rooms.md §데이터 모델) */
+export type RoomMode = "learn" | "plain";
+
 export interface ChatRoom {
   id: number;
   peer: ChatRoomPeer;
@@ -28,6 +30,8 @@ export interface ChatRoom {
   target_lang: SupportedLang;
   origin: RoomOrigin;
   status: RoomStatus;
+  /** learn=번역 표시 방(기본) / plain=일반 대화(번역 없음) */
+  mode: RoomMode;
   last_message_at: string | null;
   unread: number;
   /** 목록 미리보기 — 번역문 우선 (서버가 결정) */
@@ -194,6 +198,7 @@ export const roomsApi = {
     peerId: number,
     sourceLang: SupportedLang,
     targetLang: SupportedLang,
+    mode: RoomMode = "learn",
   ) =>
     request<{ room: ChatRoom; created: boolean }>("/api/chat/rooms", {
       method: "POST",
@@ -201,6 +206,7 @@ export const roomsApi = {
         peer_id: peerId,
         source_lang: sourceLang,
         target_lang: targetLang,
+        mode,
       }),
     }),
   get: (id: number) => request<ChatRoom>(`/api/chat/rooms/${id}`),
@@ -229,12 +235,17 @@ export const roomsApi = {
 
 /** 랜덤 매칭 대기열 (인프로세스, chat-language-rooms.md §랜덤 매칭) */
 export const matchApi = {
-  join: (sourceLang: SupportedLang, targetLang: SupportedLang) =>
+  join: (
+    sourceLang: SupportedLang,
+    targetLang: SupportedLang,
+    mode: RoomMode = "learn",
+  ) =>
     request<{ room: ChatRoom } | { waiting: true }>("/api/chat/match", {
       method: "POST",
       body: JSON.stringify({
         source_lang: sourceLang,
         target_lang: targetLang,
+        mode,
       }),
     }),
   status: () => request<{ waiting: boolean }>("/api/chat/match"),
