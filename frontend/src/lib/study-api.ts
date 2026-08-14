@@ -141,17 +141,21 @@ export interface LongTermMemory {
   weekly: { week_start: string; count: number }[];
 }
 
-/** 내가 쓰는 말 덱 요약 — 언어별 1개, 활성 100개 순환 보충 (docs/specs/my-phrases.md) */
+/** 내가 쓰는 말 덱 요약 — 언어별 1개, 활성 100개 순환 보충 (docs/specs/my-phrases.md).
+ *  lang="legacy" 는 개편 전 수집분((일반) 덱) — 신규 수집 동결, active/100 목표 없음 */
 export interface MyPhrasesSummary {
-  content_id: number;
-  lang: "ko" | "en" | "ja";
+  /** legacy 요청인데 아직 (일반) 덱이 없으면 null */
+  content_id: number | null;
+  lang: "ko" | "en" | "ja" | "legacy";
   total: number;
-  /** 장기기억 미도달(활성) 문장 수 — 목표 100 */
+  /** 장기기억 미도달(활성) 문장 수 — 목표 100 (legacy 는 순환 보충 없음) */
   active: number;
   /** 장기기억 도달로 목록에서 숨겨진 문장 수 */
   graduated: number;
   added_now: number;
   recent: { en: string; ko: string }[];
+  /** (일반) 덱 문장 수 — 0 이면 (일반) 칩을 숨긴다 */
+  legacy_total: number;
 }
 
 export interface MyPhraseItem {
@@ -164,10 +168,12 @@ export interface MyPhraseItem {
 
 /** 편집 화면용 — 활성 목록(빈도 내림차순) + 졸업 목록(접힘 섹션) */
 export interface MyPhrasesItemsResponse {
-  lang: "ko" | "en" | "ja";
+  lang: "ko" | "en" | "ja" | "legacy";
   graduated: number;
   items: MyPhraseItem[];
   graduated_items: MyPhraseItem[];
+  /** (일반) 덱 문장 수 — 0 이면 (일반) 칩을 숨긴다 */
+  legacy_total: number;
 }
 
 export interface Stats {

@@ -280,11 +280,17 @@ async def get_decks(
     같은 항목이 두 콘텐츠에 등장하면 양쪽 덱에 모두 집계된다 (다대다 — Anki 와
     다른 점). 카운트는 모두 가시성 규칙을 통과한 항목만 — 구독 해제하면 덱과
     함께 사라지고, 다시 담으면 카드 진행 상태 그대로 복귀한다.
+
+    chat 덱("내가 쓰는 말")은 여기서 제외 — 전용 섹션이 유일한 진입점이다
+    (docs/specs/my-phrases.md 덱 그룹화).
     """
     now = datetime.now(UTC)
     contents = (
         await db.execute(
-            select(Content.id, Content.title).where(Content.id.in_(subscribed_content_ids(user.id)))
+            select(Content.id, Content.title).where(
+                Content.id.in_(subscribed_content_ids(user.id)),
+                Content.source != "chat",
+            )
         )
     ).all()
     if not contents:
@@ -890,6 +896,27 @@ def _resolve_lang(settings: UserSettings, lang: str | None) -> str:
     return resolved
 
 
+def _resolve_phrase_lang(settings: UserSettings, lang: str | None) -> str:
+    """my-phrases 계열 전용 lang 파싱 — 'legacy'((일반) 덱) 특수값 허용
+    (docs/specs/my-phrases.md 덱 그룹화)."""
+    if lang == "legacy":
+        return "legacy"
+    return _resolve_lang(settings, lang)
+
+
+async def _recent_phrases(db: AsyncSession, content_id: int) -> list[dict]:
+    rows = (
+        await db.execute(
+            select(LearningItem.en_text, LearningItem.ko_text)
+            .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+            .where(ItemOccurrence.content_id == content_id)
+            .order_by(ItemOccurrence.id.desc())
+            .limit(5)
+        )
+    ).all()
+    return [{"en": en, "ko": ko or ""} for en, ko in rows]
+
+
 @router.get("/my-phrases")
 async def my_phrases(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -900,24 +927,44 @@ async def my_phrases(
 
     채팅 발화(번역 캐시 쌍)를 방의 target_lang 별 개인 콘텐츠 항목으로 합류
     — 복습·문장 게임에 자동 출제된다. 조회 시 동기화(멱등)라 별도 배치가
-    없다. lang 생략 시 learning_langs[0]."""
+    없다. lang 생략 시 learning_langs[0]. lang='legacy' 는 개편 전 수집분
+    ((일반) 덱) — 동기화 없이 현황만 반환한다 (신규 수집 동결)."""
     from app.services import my_phrases as my_phrases_service
 
     settings = await get_user_settings(db, user)
-    resolved_lang = _resolve_lang(settings, lang)
+    resolved_lang = _resolve_phrase_lang(settings, lang)
+
+    if resolved_lang == "legacy":
+        deck = await my_phrases_service.get_legacy_deck(db, user.id)
+        await db.commit()
+        if deck is None:
+            return {
+                "content_id": None,
+                "lang": "legacy",
+                "total": 0,
+                "active": 0,
+                "graduated": 0,
+                "added_now": 0,
+                "recent": [],
+                "legacy_total": 0,
+            }
+        active, total = await my_phrases_service.deck_counts(db, user.id, deck.id)
+        return {
+            "content_id": deck.id,
+            "lang": "legacy",
+            "total": total,
+            "active": active,
+            "graduated": total - active,
+            "added_now": 0,
+            "recent": await _recent_phrases(db, deck.id),
+            "legacy_total": total,
+        }
+
     deck, added = await my_phrases_service.sync_my_phrases(db, user, settings, resolved_lang)
     await db.commit()
 
     active, total = await my_phrases_service.deck_counts(db, user.id, deck.id)
-    recent = (
-        await db.execute(
-            select(LearningItem.en_text, LearningItem.ko_text)
-            .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
-            .where(ItemOccurrence.content_id == deck.id)
-            .order_by(ItemOccurrence.id.desc())
-            .limit(5)
-        )
-    ).all()
+    legacy_count = await my_phrases_service.legacy_total(db, user.id)
     return {
         "content_id": deck.id,
         "lang": resolved_lang,
@@ -925,7 +972,8 @@ async def my_phrases(
         "active": active,
         "graduated": total - active,
         "added_now": added,
-        "recent": [{"en": en, "ko": ko or ""} for en, ko in recent],
+        "recent": await _recent_phrases(db, deck.id),
+        "legacy_total": legacy_count,
     }
 
 
@@ -935,14 +983,31 @@ async def my_phrases_items(
     user: Annotated[User, Depends(get_current_user)],
     lang: str | None = None,
 ) -> dict:
-    """편집용 목록 — 활성(freq 내림차순) + 졸업(장기기억 도달) (my-phrases.md 편집)."""
+    """편집용 목록 — 활성(freq 내림차순) + 졸업(장기기억 도달) (my-phrases.md 편집).
+    lang='legacy' 는 (일반) 덱 — 동기화 없이 조회만."""
     from app.services import my_phrases as my_phrases_service
     from app.services.game.typing_race import mastered_item_clause
 
     settings = await get_user_settings(db, user)
-    resolved_lang = _resolve_lang(settings, lang)
-    deck, _ = await my_phrases_service.sync_my_phrases(db, user, settings, resolved_lang)
-    await db.commit()
+    resolved_lang = _resolve_phrase_lang(settings, lang)
+
+    if resolved_lang == "legacy":
+        deck = await my_phrases_service.get_legacy_deck(db, user.id)
+        await db.commit()
+    else:
+        deck, _ = await my_phrases_service.sync_my_phrases(db, user, settings, resolved_lang)
+        await db.commit()
+
+    legacy_count = await my_phrases_service.legacy_total(db, user.id)
+
+    if deck is None:
+        return {
+            "lang": resolved_lang,
+            "graduated": 0,
+            "items": [],
+            "graduated_items": [],
+            "legacy_total": legacy_count,
+        }
 
     not_graduated = mastered_item_clause(user.id)
 
@@ -973,6 +1038,7 @@ async def my_phrases_items(
         "graduated": len(graduated_rows),
         "items": _rows_to_items(active_rows),
         "graduated_items": _rows_to_items(graduated_rows),
+        "legacy_total": legacy_count,
     }
 
 
@@ -984,12 +1050,13 @@ async def refresh_my_phrases(
 ) -> dict:
     """내 덱 번역 품질 새로고침 — 엔진·프롬프트 개선분을 기존 문장에 적용.
 
-    항목 ID 유지(복습 진행도 보존), 실명 치환 + 재번역. 본인 덱만(언어별).
-    사용량은 translation_usage 로 예산 회계에 포함된다."""
+    항목 ID 유지(복습 진행도 보존), 실명 치환 + 재번역. 본인 덱만(언어별,
+    lang='legacy' 는 (일반) 덱 대상). 사용량은 translation_usage 로 예산
+    회계에 포함된다."""
     from app.services import my_phrases as my_phrases_service
 
     settings = await get_user_settings(db, user)
-    resolved_lang = _resolve_lang(settings, lang)
+    resolved_lang = _resolve_phrase_lang(settings, lang)
     updated = await my_phrases_service.refresh_my_phrases(db, user, settings, resolved_lang)
     await db.commit()
     return {"updated": updated}

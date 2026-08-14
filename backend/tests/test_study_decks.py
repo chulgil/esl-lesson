@@ -106,6 +106,36 @@ async def test_deck_shared_item_counts_in_both_decks(client, db_session):
     assert decks[deck_b.id]["due"] == 1
 
 
+async def test_decks_excludes_chat_deck(client, db_session):
+    """chat 덱("내가 쓰는 말")은 목록에서 제외 — 전용 섹션이 유일한 진입점
+    (docs/specs/my-phrases.md 덱 그룹화). 유튜브 등 콘텐츠 덱은 그대로 노출."""
+    me = await login(client, db_session)
+    deck_a, _items_a = await seed_deck(db_session, me.id, "유튜브영상", 1)
+
+    chat_deck = Content(
+        source="chat",
+        title="내가 쓰는 말 (영어)",
+        status="ready",
+        visibility="private",
+        created_by=me.id,
+        lang="en",
+    )
+    db_session.add(chat_deck)
+    await db_session.flush()
+    db_session.add(ContentSubscription(content_id=chat_deck.id, user_id=me.id))
+    chat_item = LearningItem(
+        item_type="sentence", en_text="Hello", ko_text="안녕", normalized_key="hello"
+    )
+    db_session.add(chat_item)
+    await db_session.flush()
+    db_session.add(ItemOccurrence(item_id=chat_item.id, content_id=chat_deck.id))
+    await db_session.commit()
+
+    ids = [d["content_id"] for d in (await client.get("/api/study/decks")).json()["items"]]
+    assert deck_a.id in ids
+    assert chat_deck.id not in ids
+
+
 async def test_deck_disappears_after_unsubscribe(client, db_session):
     me = await login(client, db_session)
     deck_a, _ = await seed_deck(db_session, me.id, "해지영상", 1)

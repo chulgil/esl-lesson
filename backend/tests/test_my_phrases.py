@@ -5,7 +5,15 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from app.models import ChatMessage, ChatTranslation, Content, LearningItem, ReviewCard
+from app.models import (
+    ChatMessage,
+    ChatTranslation,
+    Content,
+    ContentSubscription,
+    ItemOccurrence,
+    LearningItem,
+    ReviewCard,
+)
 from app.services.chat import get_conversation
 from app.services.game.typing_race import load_sentence_pool
 from app.services.langs import normalize_text_key
@@ -61,6 +69,35 @@ async def set_room_lang(db, a, b, target_lang: str) -> None:
     conv.target_lang = target_lang
     conv.mode = "learn"
     await db.commit()
+
+
+async def seed_legacy_deck(db, user_id: int, en_text: str, ko_text: str, lang: str = "en"):
+    """(일반) 덱 시뮬레이션 — 마이그레이션 g1b2c3d4e5f6 이 배포 시점의 chat 덱을
+    chat_kind='legacy'로 전환하는 상태를 테스트에서 직접 재현한다
+    (docs/specs/my-phrases.md 덱 그룹화)."""
+    deck = Content(
+        source="chat",
+        chat_kind="legacy",
+        title="내가 쓰는 말 (일반)",
+        status="ready",
+        visibility="private",
+        created_by=user_id,
+        lang=lang,
+    )
+    db.add(deck)
+    await db.flush()
+    db.add(ContentSubscription(content_id=deck.id, user_id=user_id))
+    item = LearningItem(
+        item_type="sentence",
+        en_text=en_text,
+        ko_text=ko_text,
+        normalized_key=normalize_text_key(en_text),
+    )
+    db.add(item)
+    await db.flush()
+    db.add(ItemOccurrence(item_id=item.id, content_id=deck.id))
+    await db.commit()
+    return deck, item
 
 
 async def test_sync_creates_deck_and_is_idempotent(client, db_session):
@@ -139,6 +176,93 @@ async def test_lang_rooms_split_into_separate_decks(client, db_session):
         ("en", "내가 쓰는 말 (영어)"),
         ("ja", "내가 쓰는 말 (일본어)"),
     }
+
+
+async def test_legacy_deck_stays_separate_from_new_lang_sync(client, db_session):
+    """(일반) 덱(chat_kind='legacy')이 있어도 학습 방 수집은 별개의 새 언어별
+    덱을 만든다 — legacy 덱에 섞이지 않는다 (my-phrases.md 덱 그룹화)."""
+    a, b = await learn_pair(client, db_session)
+    legacy_deck, _legacy_item = await seed_legacy_deck(
+        db_session, a.id, "Legacy phrase", "레거시 문장"
+    )
+
+    await login(client, db_session, a)
+    await send(client, b.id, "새로 쓰는 문장이에요", "cid-grp001")
+    await send(client, b.id, "새로 쓰는 문장이에요", "cid-grp001b")
+    await seed_translation(db_session, "새로 쓰는 문장이에요", "This is a new sentence")
+
+    en = (await client.get("/api/study/my-phrases?lang=en")).json()
+    assert en["total"] == 1
+    assert en["recent"][0]["en"] == "This is a new sentence"
+    assert en["content_id"] != legacy_deck.id
+    assert en["legacy_total"] == 1  # legacy 존재 여부/개수를 프론트에 알림
+
+    # legacy 덱 자체는 건드리지 않는다
+    decks = (
+        (
+            await db_session.execute(
+                select(Content).where(Content.source == "chat", Content.created_by == a.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(decks) == 2
+    kinds = {d.chat_kind for d in decks}
+    assert kinds == {"legacy", None}
+
+
+async def test_legacy_lang_returns_summary_and_items_without_sync(client, db_session):
+    """lang='legacy' 는 sync 없이 (일반) 덱 현황·목록만 반환한다 (my-phrases.md API)."""
+    a, _b = await two_friends(client, db_session)
+    legacy_deck, _item = await seed_legacy_deck(db_session, a.id, "Legacy phrase", "레거시 문장")
+
+    await login(client, db_session, a)
+    res = (await client.get("/api/study/my-phrases?lang=legacy")).json()
+    assert res["lang"] == "legacy"
+    assert res["content_id"] == legacy_deck.id
+    assert res["total"] == 1
+    assert res["added_now"] == 0  # 신규 수집 동결 — sync 호출 없음
+    assert res["legacy_total"] == 1
+    assert res["recent"][0] == {"en": "Legacy phrase", "ko": "레거시 문장"}
+
+    items = (await client.get("/api/study/my-phrases/items?lang=legacy")).json()
+    assert items["lang"] == "legacy"
+    assert len(items["items"]) == 1
+    assert items["items"][0]["en_text"] == "Legacy phrase"
+    assert items["legacy_total"] == 1
+
+
+async def test_legacy_lang_missing_deck_returns_empty(client, db_session):
+    """(일반) 덱이 아직 없는 사용자는 lang='legacy' 조회 시 빈 현황을 받는다."""
+    a = await login_as(client, db_session, "nolegacy@example.com")
+    await login(client, db_session, a)
+    res = (await client.get("/api/study/my-phrases?lang=legacy")).json()
+    assert res == {
+        "content_id": None,
+        "lang": "legacy",
+        "total": 0,
+        "active": 0,
+        "graduated": 0,
+        "added_now": 0,
+        "recent": [],
+        "legacy_total": 0,
+    }
+
+
+async def test_legacy_phrase_removal_updates_legacy_total(client, db_session):
+    """(일반) 덱 문장 빼기도 언어별 덱과 동일하게 동작한다 (my-phrases.md 편집)."""
+    a, _b = await two_friends(client, db_session)
+    legacy_deck, item = await seed_legacy_deck(db_session, a.id, "Legacy phrase", "레거시 문장")
+
+    await login(client, db_session, a)
+    res = await client.delete(f"/api/study/my-phrases/{item.id}")
+    assert res.status_code == 204
+
+    after = (await client.get("/api/study/my-phrases?lang=legacy")).json()
+    assert after["content_id"] == legacy_deck.id  # 덱 자체는 남는다(빈 채로)
+    assert after["total"] == 0
+    assert after["legacy_total"] == 0
 
 
 async def test_collect_filters_noise(client, db_session):

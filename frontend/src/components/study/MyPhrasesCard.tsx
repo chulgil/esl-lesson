@@ -51,14 +51,19 @@ export function MyPhrasesCard() {
 
   if (data === null || lang === null) return null;
 
+  // (일반) 칩 — 개편 전 수집분이 있을 때만 노출 (docs/specs/my-phrases.md 덱 그룹화)
+  const showLegacyTab = data.legacy_total > 0;
+  const tabs = [...(learningLangs ?? []), ...(showLegacyTab ? ["legacy"] : [])];
+  const isLegacy = lang === "legacy";
+
   return (
     <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-blue/40 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-hand text-2xl font-bold">내가 쓰는 말</h2>
-        {/* 학습언어가 2개 이상일 때만 탭 노출 (2026-08-14) */}
-        {learningLangs && learningLangs.length > 1 && (
+        {/* 언어 탭이 2개 이상이거나 (일반) 덱이 있을 때만 탭 노출 (2026-08-14) */}
+        {tabs.length > 1 && (
           <div className="flex flex-wrap gap-1.5">
-            {learningLangs.map((l) => (
+            {tabs.map((l) => (
               <button
                 key={l}
                 type="button"
@@ -70,19 +75,26 @@ export function MyPhrasesCard() {
                     : "border-ink/15 bg-white hover:border-brick-blue/50"
                 }`}
               >
-                {LANG_LABELS[l] ?? l}
+                {l === "legacy" ? "(일반)" : (LANG_LABELS[l] ?? l)}
               </button>
             ))}
           </div>
         )}
       </div>
-      <p className="mt-1 text-xs opacity-60">
-        채팅에서 두 번 이상 쓴 말이 학습 문장이 돼요 — 복습과 타자·어순·받아쓰기
-        게임에 자동으로 나와요 (이미 익힌 문장은 게임에서 빠져요)
-        {data.added_now > 0 && (
-          <b className="ml-1 text-brick-green">+{data.added_now} 새로 수집</b>
-        )}
-      </p>
+      {isLegacy ? (
+        <p className="mt-1 text-xs opacity-60">
+          기존 채팅에서 모인 {data.total}문장 · 새 문장은 학습 방에서 모여요
+        </p>
+      ) : (
+        <p className="mt-1 text-xs opacity-60">
+          채팅에서 두 번 이상 쓴 말이 학습 문장이 돼요 — 복습과
+          타자·어순·받아쓰기 게임에 자동으로 나와요 (이미 익힌 문장은 게임에서
+          빠져요)
+          {data.added_now > 0 && (
+            <b className="ml-1 text-brick-green">+{data.added_now} 새로 수집</b>
+          )}
+        </p>
+      )}
 
       {data.total === 0 ? (
         <p className="mt-3 text-sm opacity-70">
@@ -104,15 +116,19 @@ export function MyPhrasesCard() {
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs font-bold opacity-60">
-            활성 {data.active}/100 · 졸업 {data.graduated}
-          </p>
+          {!isLegacy && (
+            <p className="mt-2 text-xs font-bold opacity-60">
+              활성 {data.active}/100 · 졸업 {data.graduated}
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Link
               href={`/study/session?content=${data.content_id}`}
               className="inline-flex min-h-10 items-center rounded-md border-2 border-brick-blue/60 bg-white px-3 text-sm font-bold text-brick-blue transition hover:-translate-y-0.5 hover:border-brick-blue"
             >
-              내 말투로 학습 ({data.active}문장)
+              {isLegacy
+                ? `이 덱으로 학습 (${data.active}문장)`
+                : `내 말투로 학습 (${data.active}문장)`}
             </Link>
             {/* 편집 — 빼고 싶은 문장 관리 (2026-08-12 요청) */}
             <Link
@@ -121,9 +137,11 @@ export function MyPhrasesCard() {
             >
               편집
             </Link>
-            <span className="text-xs opacity-50">
-              게임에도 자동 출제 — 어제 내가 한 말이 문제로 나와요
-            </span>
+            {!isLegacy && (
+              <span className="text-xs opacity-50">
+                게임에도 자동 출제 — 어제 내가 한 말이 문제로 나와요
+              </span>
+            )}
           </div>
         </>
       )}
