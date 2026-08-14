@@ -141,8 +141,12 @@ async def test_messages_translation_window_caps_at_30(client, db_session, monkey
 
 async def test_single_message_translation_requires_participant(client, db_session, monkeypatch):
     """단건 엔드포인트는 방 기준 번역 — 뷰어 설정(chat_translate) 과 무관하게 항상
-    시도한다 (docs/specs/chat-language-rooms.md 번역 규칙, 2026-08-14 개편)."""
+    시도한다 (docs/specs/chat-language-rooms.md 번역 규칙, 2026-08-14 개편).
+    레거시 경로는 일반 방을 만들므로(결정 #8) 학습 방을 명시적으로 만든다."""
+    from app.services import chat as chat_service
+
     a, b = await two_friends(client, db_session)
+    await chat_service.get_or_create_room(db_session, a.id, b.id, "ko", "en", mode="learn")
     await stub_translation(monkeypatch, {"안녕": ("hi", "haiku")})
     await login(client, db_session, a)
     sent = (

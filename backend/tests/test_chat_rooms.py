@@ -512,3 +512,16 @@ async def test_plain_room_excluded_from_my_phrases(client, db_session, monkeypat
 
     summary = (await client.get("/api/study/my-phrases?lang=en")).json()
     assert summary["total"] == 0
+
+
+async def test_legacy_send_creates_plain_room_when_none_exists(client, db_session):
+    """방이 하나도 없는 쌍의 레거시 전송 — 학습 방이 아니라 일반 방을 만든다
+    (2026-08-14 사용자 결정: 설정 단계를 안 거친 대화는 일반 대화)."""
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+    sent = await client.post(
+        "/api/chat/messages", json=send_body(b.id, "첫 인사", "cid-lg-plain01")
+    )
+    assert sent.status_code == 201
+    conv = (await db_session.execute(select(Conversation))).scalar_one()
+    assert conv.mode == "plain"
