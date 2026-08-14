@@ -1,6 +1,13 @@
 """학습 관전 릴레이 — 승인제 (허락한 관전자만 스트림 수신)."""
 
-from app.services.game.spectate import SpectateHub
+from app.models import User
+from app.models.friend import Friendship
+from app.services.game.invites import InviteHub
+from app.services.game.spectate import (
+    SpectateHub,
+    notify_friends_study_end,
+    notify_friends_studying,
+)
 from tests.test_game_manager import Collector
 
 
@@ -115,3 +122,77 @@ async def test_chat_guards_membership_kind_and_rate():
     await hub.chat(3, long_text)
     chats = [m for m in host_s.messages if m["t"] == "st.chat"]
     assert len(chats[-1]["text"]) == 100
+
+
+# --- 친구 학습 중 알림 (docs/specs/study-spectate.md §진입 경로 재설계) ---
+
+
+async def test_notify_friends_studying_relays_to_accepted_friends_only(db_session):
+    """관전 호스팅 시작 알림은 접속 중인 수락 친구에게만 가고, 비친구는 못 받는다."""
+    host = User(google_sub="g-host", email="host@example.com", name="Host", nickname="학습자")
+    friend = User(google_sub="g-friend", email="friend@example.com", name="Friend", nickname="친구")
+    stranger = User(
+        google_sub="g-stranger", email="stranger@example.com", name="Stranger", nickname="남남"
+    )
+    db_session.add_all([host, friend, stranger])
+    await db_session.flush()
+    db_session.add(Friendship(requester_id=host.id, addressee_id=friend.id, status="accepted"))
+    db_session.add(Friendship(requester_id=host.id, addressee_id=stranger.id, status="pending"))
+    await db_session.commit()
+
+    hub = InviteHub()
+    friend_s, stranger_s = Collector(), Collector()
+    hub.attach(friend.id, "친구", friend_s)
+    hub.attach(stranger.id, "남남", stranger_s)
+
+    await notify_friends_studying(db_session, hub, host.id, "학습자", "AB12CD")
+    msg = next(m for m in friend_s.messages if m["t"] == "st.friend_studying")
+    assert msg == {
+        "t": "st.friend_studying",
+        "user_id": host.id,
+        "nickname": "학습자",
+        "code": "AB12CD",
+    }
+    assert not any(m["t"] == "st.friend_studying" for m in stranger_s.messages)
+
+
+async def test_notify_friends_study_end_relays_to_accepted_friends_only(db_session):
+    host = User(google_sub="g-host2", email="host2@example.com", name="Host2", nickname="학습자2")
+    friend = User(
+        google_sub="g-friend2", email="friend2@example.com", name="Friend2", nickname="친구2"
+    )
+    stranger = User(
+        google_sub="g-stranger2", email="stranger2@example.com", name="Stranger2", nickname="남남2"
+    )
+    db_session.add_all([host, friend, stranger])
+    await db_session.flush()
+    db_session.add(Friendship(requester_id=host.id, addressee_id=friend.id, status="accepted"))
+    await db_session.commit()
+
+    hub = InviteHub()
+    friend_s, stranger_s = Collector(), Collector()
+    hub.attach(friend.id, "친구2", friend_s)
+    hub.attach(stranger.id, "남남2", stranger_s)
+
+    await notify_friends_study_end(db_session, hub, host.id)
+    assert any(
+        m["t"] == "st.friend_study_end" and m["user_id"] == host.id for m in friend_s.messages
+    )
+    assert not any(m["t"] == "st.friend_study_end" for m in stranger_s.messages)
+
+
+async def test_notify_friends_studying_skips_offline_friends(db_session):
+    """접속 중이 아닌 친구는 알림을 받지 않는다 (접속 채널만, 웹푸시 폴백 없음)."""
+    host = User(google_sub="g-host3", email="host3@example.com", name="Host3", nickname="학습자3")
+    offline_friend = User(
+        google_sub="g-offline", email="offline@example.com", name="Offline", nickname="오프"
+    )
+    db_session.add_all([host, offline_friend])
+    await db_session.flush()
+    db_session.add(
+        Friendship(requester_id=host.id, addressee_id=offline_friend.id, status="accepted")
+    )
+    await db_session.commit()
+
+    hub = InviteHub()  # 아무도 접속하지 않음
+    await notify_friends_studying(db_session, hub, host.id, "학습자3", "ZZ9999")  # 예외 없이 무시

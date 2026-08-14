@@ -15,9 +15,10 @@ from datetime import UTC, datetime
 
 from app.core.db import get_session_factory
 from app.models import ScrambleRace
-from app.services.game.manager import WordPoolError, review_items
+from app.services.game.manager import DEFAULT_GAME_LANG, WordPoolError, review_items
 from app.services.game.profiles import safe_player_badges
 from app.services.game.typing_race import load_sentence_pool, pick_sentences
+from app.services.langs import SUPPORTED_LANGS
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,7 @@ class ScrambleSession:
     mode: str  # solo | race
     players: list[ScramblerState]
     rounds: list[dict] = field(default_factory=list)
+    lang: str = DEFAULT_GAME_LANG
     started: bool = False
     round_no: int = -1
     round_started: float = 0.0
@@ -132,18 +134,22 @@ class ScrambleManager:
 
     # --- 진입 ---
 
-    async def solo(self, user_id: int, name: str, send: Sender) -> ScrambleSession:
+    async def solo(
+        self, user_id: int, name: str, send: Sender, lang: str = DEFAULT_GAME_LANG
+    ) -> ScrambleSession:
         await self._leave_if_idle(user_id)
-        pool = await self._pool(user_id)
-        session = await self._new_session(user_id, name, send, "solo", None)
+        pool = await self._pool(user_id, lang)
+        session = await self._new_session(user_id, name, send, "solo", None, lang)
         await self._start(session, pool)
         return session
 
-    async def create(self, user_id: int, name: str, send: Sender) -> str:
+    async def create(
+        self, user_id: int, name: str, send: Sender, lang: str = DEFAULT_GAME_LANG
+    ) -> str:
         await self._leave_if_idle(user_id)
-        await self._pool(user_id)  # 시작 전에 문장 부족을 미리 알림
+        await self._pool(user_id, lang)  # 시작 전에 문장 부족을 미리 알림
         code = secrets.token_hex(3).upper()
-        session = await self._new_session(user_id, name, send, "race", code)
+        session = await self._new_session(user_id, name, send, "race", code, lang)
         self.rooms[code] = session.match_id
         await self._broadcast_room(session)
         return code
@@ -170,7 +176,7 @@ class ScrambleManager:
             or len(session.players) < 2
         ):
             return
-        pool = await self._pool(session.host_id)
+        pool = await self._pool(session.host_id, session.lang)
         if session.code:
             self.rooms.pop(session.code, None)
         await self._start(session, pool)
@@ -237,6 +243,7 @@ class ScrambleManager:
                 "t": "sc.start",
                 "rounds": session.rounds,
                 "total": len(session.rounds),
+                "lang": session.lang,
                 "sentence_seconds": SENTENCE_SECONDS,
                 "countdown": 0,
                 "players": [p.name for p in session.players],
@@ -280,6 +287,7 @@ class ScrambleManager:
                 "t": "sc.start",
                 "rounds": session.rounds,
                 "total": len(session.rounds),
+                "lang": session.lang,
                 "sentence_seconds": SENTENCE_SECONDS,
                 "countdown": COUNTDOWN_SECONDS,
                 "players": [p.name for p in session.players],
@@ -339,15 +347,23 @@ class ScrambleManager:
 
     # --- 헬퍼 ---
 
-    async def _pool(self, user_id: int) -> list[dict]:
-        pool = await load_sentence_pool(user_id)
+    async def _pool(self, user_id: int, lang: str) -> list[dict]:
+        if lang not in SUPPORTED_LANGS:
+            raise WordPoolError("invalid_lang")
+        pool = await load_sentence_pool(user_id, lang)
         fits = [s for s in pool if MIN_CHIPS <= len(s["en"].split()) <= MAX_CHIPS]
         if len(fits) < MIN_SENTENCES:
             raise WordPoolError("sentences_insufficient")
         return fits
 
     async def _new_session(
-        self, user_id: int, name: str, send: Sender, mode: str, code: str | None
+        self,
+        user_id: int,
+        name: str,
+        send: Sender,
+        mode: str,
+        code: str | None,
+        lang: str = DEFAULT_GAME_LANG,
     ) -> ScrambleSession:
         async with get_session_factory()() as db:
             row = ScrambleRace(mode=mode, status="waiting", player1_id=user_id)
@@ -359,6 +375,7 @@ class ScrambleManager:
             code=code,
             host_id=user_id,
             mode=mode,
+            lang=lang,
             players=[ScramblerState(user_id=user_id, name=name, send=send)],
         )
         self.sessions[match_id] = session
@@ -397,6 +414,7 @@ class ScrambleManager:
             {
                 "t": "sc.room",
                 "code": session.code,
+                "lang": session.lang,
                 "host": session.players[0].name if session.players else "",
                 "players": [p.name for p in session.players],
                 "profiles": await self._profiles(session),

@@ -32,11 +32,15 @@ from app.services.game import records
 from app.services.game.bingo import caller
 from app.services.game.dictation import dictator
 from app.services.game.invites import GAMES, invite_hub, invite_push_payload, safe_theme
-from app.services.game.manager import WordPoolError, manager
+from app.services.game.manager import WordPoolError, manager, resolve_lang
 from app.services.game.profiles import safe_player_badges
 from app.services.game.quiz_royale import royale
 from app.services.game.scramble import scrambler
-from app.services.game.spectate import spectate_hub
+from app.services.game.spectate import (
+    notify_friends_study_end,
+    notify_friends_studying,
+    spectate_hub,
+)
 from app.services.game.typing_race import racer
 from app.services.notifications import notify
 
@@ -574,6 +578,13 @@ def _parse_content_ids(msg: dict) -> list[int] | None:
     return ids or None
 
 
+def _parse_lang(msg: dict) -> str | None:
+    """게임 언어 파라미터 — 생략 시 None (resolve_lang 이 settings.learning_langs[0] 로
+    보완, docs/specs/chat-language-rooms.md §게임 언어 분리)."""
+    raw = msg.get("lang")
+    return str(raw) if raw else None
+
+
 @ws_router.websocket("/ws/game")
 async def game_ws(websocket: WebSocket) -> None:
     # 쿠키 JWT 인증 (docs/specs/auth.md — WS 는 핸드셰이크 쿠키 사용)
@@ -598,6 +609,16 @@ async def game_ws(websocket: WebSocket) -> None:
 
     async def send(message: dict) -> None:
         await websocket.send_json(message)
+
+    async def end_spectate_hosting() -> None:
+        """관전 호스팅 종료 — 접속 중이던 친구에게 st.friend_study_end 릴레이
+        (docs/specs/study-spectate.md §진입 경로 재설계)."""
+        was_hosting = user_id in spectate_hub.by_host
+        await spectate_hub.detach(user_id)
+        if not was_hosting:
+            return
+        async with get_session_factory()() as friend_db:
+            await notify_friends_study_end(friend_db, invite_hub, user_id)
 
     # 프레즌스 등록 (친구 초대 수신용) + 진행 중이던 매치 자동 복귀
     became_online = not invite_hub.online(user_id)
@@ -629,6 +650,7 @@ async def game_ws(websocket: WebSocket) -> None:
                         await chat_service.relay_typing(db, user_id, to_id)
             elif t == "queue.join":
                 quiz = msg.get("quiz", "en")
+                lang = await resolve_lang(user_id, _parse_lang(msg))
                 if msg.get("mode") == "pve":
                     try:
                         await manager.join_pve(
@@ -638,11 +660,15 @@ async def game_ws(websocket: WebSocket) -> None:
                             int(msg.get("bot_level", 3)),
                             send,
                             content_ids=_parse_content_ids(msg),
+                            lang=lang,
                         )
                     except WordPoolError as exc:
                         await send({"t": "error", "code": str(exc)})
                 else:
-                    await manager.join_pvp_queue(user_id, user.nickname, quiz, send)
+                    try:
+                        await manager.join_pvp_queue(user_id, user.nickname, quiz, send, lang=lang)
+                    except WordPoolError as exc:
+                        await send({"t": "error", "code": str(exc)})
             elif t == "queue.leave":
                 manager.leave_queue(user_id)
             elif t == "room.create":
@@ -653,6 +679,7 @@ async def game_ws(websocket: WebSocket) -> None:
                         msg.get("quiz", "en"),
                         send,
                         content_ids=_parse_content_ids(msg),
+                        lang=await resolve_lang(user_id, _parse_lang(msg)),
                     )
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
@@ -678,6 +705,7 @@ async def game_ws(websocket: WebSocket) -> None:
                         bots=int(msg.get("bots", 1)),
                         content_ids=_parse_content_ids(msg),
                         variant=str(msg.get("variant", "meaning")),
+                        lang=await resolve_lang(user_id, _parse_lang(msg)),
                     )
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
@@ -689,6 +717,7 @@ async def game_ws(websocket: WebSocket) -> None:
                         send,
                         content_ids=_parse_content_ids(msg),
                         variant=str(msg.get("variant", "meaning")),
+                        lang=await resolve_lang(user_id, _parse_lang(msg)),
                     )
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
@@ -706,12 +735,14 @@ async def game_ws(websocket: WebSocket) -> None:
             # --- 받아쓰기 배틀 (docs/specs/dictation-battle.md) ---
             elif t == "dt.solo":
                 try:
-                    await dictator.solo(user_id, user.nickname, send)
+                    lang = await resolve_lang(user_id, _parse_lang(msg))
+                    await dictator.solo(user_id, user.nickname, send, lang=lang)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "dt.create":
                 try:
-                    await dictator.create(user_id, user.nickname, send)
+                    lang = await resolve_lang(user_id, _parse_lang(msg))
+                    await dictator.create(user_id, user.nickname, send, lang=lang)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "dt.join":
@@ -733,12 +764,14 @@ async def game_ws(websocket: WebSocket) -> None:
             # --- 어순 조립 레이스 (docs/specs/scramble-race.md) ---
             elif t == "sc.solo":
                 try:
-                    await scrambler.solo(user_id, user.nickname, send)
+                    lang = await resolve_lang(user_id, _parse_lang(msg))
+                    await scrambler.solo(user_id, user.nickname, send, lang=lang)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "sc.create":
                 try:
-                    await scrambler.create(user_id, user.nickname, send)
+                    lang = await resolve_lang(user_id, _parse_lang(msg))
+                    await scrambler.create(user_id, user.nickname, send, lang=lang)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "sc.join":
@@ -764,12 +797,14 @@ async def game_ws(websocket: WebSocket) -> None:
             # --- 영문 타자연습 (docs/specs/typing-race.md) ---
             elif t == "tp.solo":
                 try:
-                    await racer.solo(user_id, user.nickname, send)
+                    lang = await resolve_lang(user_id, _parse_lang(msg))
+                    await racer.solo(user_id, user.nickname, send, lang=lang)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "tp.create":
                 try:
-                    await racer.create(user_id, user.nickname, send)
+                    lang = await resolve_lang(user_id, _parse_lang(msg))
+                    await racer.create(user_id, user.nickname, send, lang=lang)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "tp.join":
@@ -798,12 +833,14 @@ async def game_ws(websocket: WebSocket) -> None:
             # --- 리스닝 빙고 (docs/specs/listening-bingo.md) ---
             elif t == "bg.solo":
                 try:
-                    await caller.solo(user_id, user.nickname, send)
+                    lang = await resolve_lang(user_id, _parse_lang(msg))
+                    await caller.solo(user_id, user.nickname, send, lang=lang)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "bg.create":
                 try:
-                    await caller.create(user_id, user.nickname, send)
+                    lang = await resolve_lang(user_id, _parse_lang(msg))
+                    await caller.create(user_id, user.nickname, send, lang=lang)
                 except WordPoolError as exc:
                     await send({"t": "error", "code": str(exc)})
             elif t == "bg.join":
@@ -824,7 +861,12 @@ async def game_ws(websocket: WebSocket) -> None:
                 await caller.detach(user_id)
             # --- 학습 관전 (승인제 릴레이 — docs/specs/study-spectate.md) ---
             elif t == "st.host":
-                await spectate_hub.host(user_id, user.nickname, send)
+                code = await spectate_hub.host(user_id, user.nickname, send)
+                # 관전 ON(opt-in) 시작 — 접속 중인 수락 친구에게 학습 중 알림
+                async with get_session_factory()() as friend_db:
+                    await notify_friends_studying(
+                        friend_db, invite_hub, user_id, user.nickname, code
+                    )
             elif t == "st.request":
                 await spectate_hub.request(user_id, user.nickname, send, str(msg.get("code", "")))
             elif t == "st.allow":
@@ -842,7 +884,7 @@ async def game_ws(websocket: WebSocket) -> None:
             elif t == "st.cheer":
                 await spectate_hub.cheer(user_id, str(msg.get("kind", "")))
             elif t == "st.leave":
-                await spectate_hub.detach(user_id)
+                await end_spectate_hosting()
             # --- 친구 게임 초대 (P2 경쟁 루프) ---
             elif t == "iv.invite":
                 to_user_id = int(msg.get("to_user_id", 0))
@@ -895,7 +937,7 @@ async def game_ws(websocket: WebSocket) -> None:
         await scrambler.detach(user_id)
         await dictator.detach(user_id)
         await caller.detach(user_id)
-        await spectate_hub.detach(user_id)
+        await end_spectate_hosting()
     except Exception:
         logger.exception("ws error user=%s", user_id)
         invite_hub.detach(user_id, send)
@@ -911,4 +953,4 @@ async def game_ws(websocket: WebSocket) -> None:
         await scrambler.detach(user_id)
         await dictator.detach(user_id)
         await caller.detach(user_id)
-        await spectate_hub.detach(user_id)
+        await end_spectate_hosting()

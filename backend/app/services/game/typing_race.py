@@ -17,9 +17,10 @@ from sqlalchemy import select
 
 from app.core.db import get_session_factory
 from app.models import Content, ItemOccurrence, LearningItem, TypingRace
-from app.services.game.manager import WordPoolError, review_items
+from app.services.game.manager import DEFAULT_GAME_LANG, WordPoolError, review_items
 from app.services.game.profiles import safe_player_badges
-from app.services.visibility import visible_item_clause
+from app.services.langs import SUPPORTED_LANGS
+from app.services.visibility import lang_item_clause, visible_item_clause
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +101,9 @@ def mastered_item_clause(user_id: int):
     )
 
 
-async def load_sentence_pool(user_id: int) -> list[dict]:
-    """가시성 규칙(공용 승인 ∪ 내 개인)을 지키는 (영문, 뜻) 문장 풀."""
+async def load_sentence_pool(user_id: int, lang: str = DEFAULT_GAME_LANG) -> list[dict]:
+    """가시성 규칙(공용 승인 ∪ 내 개인)을 지키는 lang 콘텐츠의 (영문, 뜻) 문장 풀
+    (게임 언어 분리 chat-language-rooms.md §게임 언어 분리)."""
     async with get_session_factory()() as db:
         rows = (
             await db.execute(
@@ -112,6 +114,7 @@ async def load_sentence_pool(user_id: int) -> list[dict]:
                     LearningItem.item_type == "sentence",
                     visible_item_clause(user_id),
                     mastered_item_clause(user_id),
+                    lang_item_clause(lang),
                 )
                 .distinct()
                 .limit(300)
@@ -148,6 +151,7 @@ class RaceSession:
     mode: str  # solo | race
     players: list[RacerState]
     sentences: list[str] = field(default_factory=list)
+    lang: str = DEFAULT_GAME_LANG
     started: bool = False
     race_started: float = 0.0
     round_no: int = -1
@@ -163,18 +167,22 @@ class TypingRaceManager:
 
     # --- 진입 ---
 
-    async def solo(self, user_id: int, name: str, send: Sender) -> RaceSession:
+    async def solo(
+        self, user_id: int, name: str, send: Sender, lang: str = DEFAULT_GAME_LANG
+    ) -> RaceSession:
         await self._leave_if_idle(user_id)
-        pool = await self._pool(user_id)
-        session = await self._new_session(user_id, name, send, "solo", None)
+        pool = await self._pool(user_id, lang)
+        session = await self._new_session(user_id, name, send, "solo", None, lang)
         await self._start(session, pool)
         return session
 
-    async def create(self, user_id: int, name: str, send: Sender) -> str:
+    async def create(
+        self, user_id: int, name: str, send: Sender, lang: str = DEFAULT_GAME_LANG
+    ) -> str:
         await self._leave_if_idle(user_id)
-        await self._pool(user_id)  # 시작 전에 문장 부족을 미리 알림
+        await self._pool(user_id, lang)  # 시작 전에 문장 부족을 미리 알림
         code = secrets.token_hex(3).upper()
-        session = await self._new_session(user_id, name, send, "race", code)
+        session = await self._new_session(user_id, name, send, "race", code, lang)
         self.rooms[code] = session.match_id
         await self._broadcast_room(session)
         return code
@@ -202,7 +210,7 @@ class TypingRaceManager:
             or len(session.players) < 2
         ):
             return
-        pool = await self._pool(session.host_id)
+        pool = await self._pool(session.host_id, session.lang)
         if session.code:
             self.rooms.pop(session.code, None)
         await self._start(session, pool)
@@ -274,6 +282,7 @@ class TypingRaceManager:
                 "t": "tp.start",
                 "sentences": session.sentences,
                 "total": len(session.sentences),
+                "lang": session.lang,
                 "sentence_seconds": SENTENCE_SECONDS,
                 "countdown": 0,
                 "players": [p.name for p in session.players],
@@ -318,6 +327,7 @@ class TypingRaceManager:
                 "t": "tp.start",
                 "sentences": session.sentences,
                 "total": len(session.sentences),
+                "lang": session.lang,
                 "sentence_seconds": SENTENCE_SECONDS,
                 "countdown": COUNTDOWN_SECONDS,
                 "players": [p.name for p in session.players],
@@ -393,14 +403,22 @@ class TypingRaceManager:
         elapsed = max(0.5, time.monotonic() - (session.race_started or time.monotonic()))
         return wpm_for(racer.chars + racer.live_chars, elapsed)
 
-    async def _pool(self, user_id: int) -> list[str]:
-        pool = await load_sentence_pool(user_id)
+    async def _pool(self, user_id: int, lang: str) -> list[str]:
+        if lang not in SUPPORTED_LANGS:
+            raise WordPoolError("invalid_lang")
+        pool = await load_sentence_pool(user_id, lang)
         if len(pool) < MIN_SENTENCES:
             raise WordPoolError("sentences_insufficient")
         return pool
 
     async def _new_session(
-        self, user_id: int, name: str, send: Sender, mode: str, code: str | None
+        self,
+        user_id: int,
+        name: str,
+        send: Sender,
+        mode: str,
+        code: str | None,
+        lang: str = DEFAULT_GAME_LANG,
     ) -> RaceSession:
         async with get_session_factory()() as db:
             row = TypingRace(mode=mode, status="waiting", player1_id=user_id)
@@ -412,6 +430,7 @@ class TypingRaceManager:
             code=code,
             host_id=user_id,
             mode=mode,
+            lang=lang,
             players=[RacerState(user_id=user_id, name=name, send=send)],
         )
         self.sessions[match_id] = session
@@ -450,6 +469,7 @@ class TypingRaceManager:
             {
                 "t": "tp.room",
                 "code": session.code,
+                "lang": session.lang,
                 "host": session.players[0].name if session.players else "",
                 "players": [p.name for p in session.players],
                 "profiles": await self._profiles(session),

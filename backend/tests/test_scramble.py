@@ -63,6 +63,7 @@ import asyncio  # noqa: E402
 import pytest  # noqa: E402
 
 from app.models import User  # noqa: E402
+from app.services.game.manager import WordPoolError  # noqa: E402
 from tests.test_game_manager import Collector, seed_user_and_words, wired_db  # noqa: E402, F401
 
 _seed_batch = 0
@@ -214,3 +215,44 @@ async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  
     assert any(m.get("code") == "room_closed" for m in s2.messages)
     assert guest.id not in manager.by_user  # 세션 정리됨
     assert not manager.sessions
+
+
+# --- 게임 언어 분리 (docs/specs/chat-language-rooms.md §게임 언어 분리) ---
+
+
+async def test_solo_rejects_invalid_lang(wired_db):  # noqa: F811
+    user = await seed_user_and_words(wired_db)
+    await seed_scramble_sentences(wired_db)
+    manager = sc.ScrambleManager()
+    with pytest.raises(WordPoolError, match="invalid_lang"):
+        await manager.solo(user.id, user.name, Collector(), lang="fr")
+
+
+async def test_room_lang_stored_and_pool_filtered(wired_db, fast_scramble):  # noqa: F811
+    """방장이 고른 lang 이 sc.room·sc.start 로 전파되고, 풀도 그 lang 에서만 뽑힌다."""
+    from tests.test_typing_race import seed_lang_sentences
+
+    host = await seed_user_and_words(wired_db)
+    ja_items = await seed_lang_sentences(wired_db, "ja", count=6)
+    await seed_lang_sentences(wired_db, "en", count=6)  # 다른 언어 풀 — 섞이면 안 됨
+
+    manager = sc.ScrambleManager()
+    s1 = Collector()
+    code = await manager.create(host.id, host.name, s1, lang="ja")
+    room = next(m for m in s1.messages if m["t"] == "sc.room")
+    assert room["lang"] == "ja"
+
+    guest = User(google_sub="g-sclang", email="sclang@example.com", name="SL")
+    wired_db.add(guest)
+    await wired_db.commit()
+    s2 = Collector()
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+
+    start = next(m for m in s1.messages if m["t"] == "sc.start")
+    assert start["lang"] == "ja"
+    ja_ids = {i.id for i in ja_items}
+    assert all(r["item_id"] in ja_ids for r in start["rounds"])
+
+    session.task.cancel()

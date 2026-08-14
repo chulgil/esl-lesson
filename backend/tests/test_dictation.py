@@ -38,13 +38,17 @@ import asyncio  # noqa: E402
 import pytest  # noqa: E402
 
 from app.models import User  # noqa: E402
+from app.services.game.manager import WordPoolError  # noqa: E402
 from tests.test_game_manager import Collector, seed_user_and_words, wired_db  # noqa: E402, F401
 
 _seed_batch = 0
 
 
-async def seed_dictation_sentences(db, count=6):
-    """유튜브 구간이 있는 문장 시딩 — 받아쓰기 풀 요건 (video_id + start_ms)."""
+async def seed_dictation_sentences(db, count=6, lang="en"):
+    """유튜브 구간이 있는 문장 시딩 — 받아쓰기 풀 요건 (video_id + start_ms).
+
+    lang: 게임 언어 분리 필터 테스트용 (chat-language-rooms.md §게임 언어 분리).
+    """
     from sqlalchemy import select
 
     from app.models import (
@@ -63,6 +67,7 @@ async def seed_dictation_sentences(db, count=6):
         status="ready",
         visibility="public",
         youtube_video_id=f"vid{_seed_batch:08d}",
+        lang=lang,
     )
     db.add(content)
     await db.flush()
@@ -201,3 +206,52 @@ async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  
     assert any(m.get("code") == "room_closed" for m in s2.messages)
     assert guest.id not in manager.by_user  # 세션 정리됨
     assert not manager.sessions
+
+
+# --- 게임 언어 분리 (docs/specs/chat-language-rooms.md §게임 언어 분리) ---
+
+
+async def test_load_dictation_pool_filters_by_lang(wired_db):  # noqa: F811
+    """en 콘텐츠와 ja 콘텐츠가 섞여 있어도 lang 별로 분리된 풀만 나온다."""
+    user = await seed_user_and_words(wired_db)
+    en_items = await seed_dictation_sentences(wired_db, count=6, lang="en")
+    ja_items = await seed_dictation_sentences(wired_db, count=6, lang="ja")
+
+    en_pool = await dt.load_dictation_pool(user.id, lang="en")
+    ja_pool = await dt.load_dictation_pool(user.id, lang="ja")
+
+    assert {p["item_id"] for p in en_pool} == {i.id for i in en_items}
+    assert {p["item_id"] for p in ja_pool} == {i.id for i in ja_items}
+
+
+async def test_solo_rejects_invalid_lang(wired_db):  # noqa: F811
+    user = await seed_user_and_words(wired_db)
+    await seed_dictation_sentences(wired_db)
+    manager = dt.DictationManager()
+    with pytest.raises(WordPoolError, match="invalid_lang"):
+        await manager.solo(user.id, user.name, Collector(), lang="fr")
+
+
+async def test_room_lang_stored_and_broadcast(wired_db, fast_dictation):  # noqa: F811
+    """방장이 고른 lang 이 dt.room·dt.start 로 전파된다."""
+    host = await seed_user_and_words(wired_db)
+    await seed_dictation_sentences(wired_db, count=6, lang="ja")
+
+    manager = dt.DictationManager()
+    s1 = Collector()
+    code = await manager.create(host.id, host.name, s1, lang="ja")
+    room = next(m for m in s1.messages if m["t"] == "dt.room")
+    assert room["lang"] == "ja"
+
+    guest = User(google_sub="g-dtlang", email="dtlang@example.com", name="DL")
+    wired_db.add(guest)
+    await wired_db.commit()
+    s2 = Collector()
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+
+    start = next(m for m in s1.messages if m["t"] == "dt.start")
+    assert start["lang"] == "ja"
+
+    session.task.cancel()

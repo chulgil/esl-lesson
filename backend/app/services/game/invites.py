@@ -104,5 +104,17 @@ class InviteHub:
                 logger.debug("invite send failed", exc_info=True)
         return True
 
+    async def notify(self, user_id: int, message: dict) -> bool:
+        """접속 중인 사용자의 모든 소켓에 임의 메시지 전달 — 게임 초대 외 범용 릴레이
+        (학습 중 알림 등, docs/specs/study-spectate.md §진입 경로 재설계). 오프라인이면 False."""
+        if not self.online(user_id):
+            return False
+        for send in list(self.sockets.get(user_id, [])):
+            try:
+                await send(message)
+            except Exception:
+                logger.debug("notify send failed", exc_info=True)
+        return True
+
 
 invite_hub = InviteHub()

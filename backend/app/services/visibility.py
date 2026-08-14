@@ -53,3 +53,20 @@ def visible_item_clause(user_id: int):
             LearningItem.id.in_(my_private_item_ids(user_id)),
         ),
     )
+
+
+def lang_item_clause(lang: str):
+    """LearningItem 이 lang 콘텐츠(Content.lang==lang)에 속하는지 필터.
+
+    게임 풀 언어 분리 (docs/specs/chat-language-rooms.md §게임 언어 분리) — 문장·단어
+    게임의 출제 풀이 사용자가 고른 게임 언어의 콘텐츠에서만 뽑히도록 강제한다.
+
+    다른 절과 동일하게 상관(exists) 대신 IN 서브쿼리를 쓴다 — 이 필터를 쓰는
+    호출부가 이미 ItemOccurrence 를 join 하는 경우가 많아, exists() 상관 서브쿼리는
+    SQLAlchemy 가 겹치는 FROM 을 자동 상관 제거해 "no FROM clauses" 오류를 낸다.
+    """
+    return LearningItem.id.in_(
+        select(ItemOccurrence.item_id)
+        .join(Content, Content.id == ItemOccurrence.content_id)
+        .where(Content.lang == lang)
+    )

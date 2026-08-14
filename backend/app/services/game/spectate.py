@@ -9,6 +9,11 @@ import secrets
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Protocol
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.services.friends import friend_ids_of
 
 logger = logging.getLogger(__name__)
 
@@ -159,3 +164,28 @@ class SpectateHub:
 
 
 spectate_hub = SpectateHub()
+
+
+class FriendNotifyHub(Protocol):
+    """InviteHub 의존 없이 타입만 — notify(user_id, message) 가 있는 프레즌스 허브."""
+
+    async def notify(self, user_id: int, message: dict) -> bool: ...
+
+
+async def notify_friends_studying(
+    db: AsyncSession, hub: FriendNotifyHub, user_id: int, nickname: str, code: str
+) -> None:
+    """관전 호스팅 시작(opt-in) — 접속 중인 수락 친구에게 학습 중 알림 릴레이
+    (docs/specs/study-spectate.md §진입 경로 재설계). 접속 채널만, 웹푸시 폴백 없음 —
+    학습 시작은 빈번해 푸시는 스팸이 된다."""
+    for friend_id in await friend_ids_of(db, user_id):
+        await hub.notify(
+            friend_id,
+            {"t": "st.friend_studying", "user_id": user_id, "nickname": nickname, "code": code},
+        )
+
+
+async def notify_friends_study_end(db: AsyncSession, hub: FriendNotifyHub, user_id: int) -> None:
+    """관전 호스팅 종료 — 학습 중 알림을 받았던 친구들에게 종료 신호."""
+    for friend_id in await friend_ids_of(db, user_id):
+        await hub.notify(friend_id, {"t": "st.friend_study_end", "user_id": user_id})

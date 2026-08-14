@@ -7,7 +7,12 @@ import pytest
 from app.models import BingoMatch
 from app.services.game import bingo as bg
 from app.services.game.manager import WordPoolError
-from tests.test_game_manager import Collector, seed_user_and_words, wired_db  # noqa: F401
+from tests.test_game_manager import (  # noqa: F401
+    Collector,
+    seed_user_and_words,
+    seed_words_for,
+    wired_db,
+)
 from tests.test_study import login
 
 
@@ -263,6 +268,55 @@ async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  
     assert any(m.get("code") == "room_closed" for m in s2.messages)
     assert guest.id not in manager.by_user  # 세션 정리됨
     assert not manager.sessions
+
+
+# --- 게임 언어 분리 (docs/specs/chat-language-rooms.md §게임 언어 분리) ---
+
+
+async def test_solo_rejects_invalid_lang(wired_db):  # noqa: F811
+    user = await seed_user_and_words(wired_db)
+    manager = bg.BingoManager()
+    with pytest.raises(WordPoolError, match="invalid_lang"):
+        await manager.solo(user.id, user.name, Collector(), lang="fr")
+
+
+async def test_solo_board_filtered_by_lang(wired_db):  # noqa: F811
+    """en 콘텐츠와 ja 콘텐츠가 섞여 있어도 보드가 lang 콘텐츠에서만 뽑힌다."""
+    user = await seed_user_and_words(wired_db, count=20, lang="en")
+    ja_items = await seed_words_for(wired_db, user, "ja", count=20)
+    ja_ids = {i.id for i in ja_items}
+
+    manager = bg.BingoManager()
+    session = await manager.solo(user.id, user.name, Collector(), lang="ja")
+    session.task.cancel()
+    assert len(session.words) == bg.BOARD_CELLS
+    assert set(session.words) <= ja_ids
+    manager._cleanup(session)
+
+
+async def test_room_lang_stored_and_broadcast(wired_db):  # noqa: F811
+    """방장이 고른 lang 이 bg.room·bg.start 로 전파된다."""
+    from app.models import User
+
+    host = await seed_user_and_words(wired_db, count=20, lang="ja")
+    guest = User(google_sub="g-bglang", email="bglang@example.com", name="BL")
+    wired_db.add(guest)
+    await wired_db.commit()
+
+    manager = bg.BingoManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1, lang="ja")
+    room = next(m for m in s1.messages if m["t"] == "bg.room")
+    assert room["lang"] == "ja"
+
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    start = next(m for m in s1.messages if m["t"] == "bg.start")
+    assert start["lang"] == "ja"
+
+    session.task.cancel()
+    manager._cleanup(session)
 
 
 async def test_bingo_participation_grants_xp_without_win_bonus(client, db_session):
