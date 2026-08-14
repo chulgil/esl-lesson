@@ -232,12 +232,24 @@ async def get_conversation(db: AsyncSession, a: int, b: int) -> Conversation | N
 
 
 async def get_or_create_conversation(db: AsyncSession, a: int, b: int) -> Conversation:
-    """레거시 전송 경로 — 가장 오래된 활성 방, 없으면 ko→en 신규(또는 종료된 ko/en
-    방 재오픈) — get_or_create_room 에 위임한다 (스펙 결정 #2, #8)."""
+    """레거시 전송 경로 — 가장 오래된 활성 방 > 종료된 방 재오픈 > **일반 방** 신규
+    (스펙 결정 #2, #8).
+
+    2026-08-14 사용자 결정: 설정 단계를 거치지 않은 대화(레거시 동선·기존 방)는
+    학습 방이 아니라 일반 대화다. 학습 방은 마법사에서 명시적으로 만든다.
+    종료된 방이 있으면 종류와 무관하게 그 방을 재오픈한다 — 같은 쌍에 방을
+    조용히 늘리지 않는다."""
     conv = await _oldest_active_room(db, a, b)
     if conv is not None:
         return conv
-    conv, _created = await get_or_create_room(db, a, b, "ko", "en", origin="friend")
+    conv = await _oldest_room_any_status(db, a, b)
+    if conv is not None:
+        conv.status = "active"
+        conv.closed_by = None
+        conv.closed_at = None
+        await db.commit()
+        return conv
+    conv, _created = await get_or_create_room(db, a, b, "ko", "en", origin="friend", mode="plain")
     return conv
 
 
