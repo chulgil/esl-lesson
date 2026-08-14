@@ -65,7 +65,7 @@ export default function LegacyChatRedirectPage() {
             className="flex items-center gap-2 rounded-lg border-2 border-ink/10 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-brick-blue/40"
           >
             <b className="truncate">{r.peer.nickname}</b>
-            <LangPairBadge source={r.source_lang} target={r.target_lang} />
+            <LangPairBadge source={r.source_lang} target={r.target_lang} mode={r.mode} />
             {r.status === "closed" && (
               <span className="ml-auto shrink-0 text-xs opacity-40">종료</span>
             )}

@@ -34,13 +34,29 @@ conversations (기존 컬럼 유지 + 추가)
   target_lang String(5)  default 'en'   -- 학습(표시) 언어
   origin      String(8)  default 'friend'  -- 'friend' | 'match'
   status      String(8)  default 'active'  -- 'active' | 'closed'
+  mode        String(8)  default 'learn'   -- 'learn'(번역 표시) | 'plain'(일반 대화)
   closed_by   BigInt FK users nullable / closed_at nullable
-  unique(user_lo_id, user_hi_id, source_lang, target_lang)  -- 기존 쌍 유니크 대체
+  unique(user_lo_id, user_hi_id, source_lang, target_lang, mode)
   check(source_lang != target_lang)
 ```
 
 - 마이그레이션: 컬럼 추가(server_default) → 기존 유니크 제약 삭제 → 새 유니크 생성.
   기존 행은 ko→en·friend·active 로 백필.
+
+## 일반 대화 방 (mode='plain', 2026-08-14 사용자 지시)
+
+방 생성 시 종류를 고른다 — **[언어 학습](기본) | [일반 대화]**.
+
+| 항목 | learn | plain |
+|---|---|---|
+| 본문 표시 | target 번역문 + [원문] 힌트 | 친 그대로 (번역 없음) |
+| 배지 | "한→영" 등 언어쌍 | "일반" |
+| 언어쌍 | 마법사에서 선택 | 미사용 — ko→en 정규화 저장 (쌍당 일반 방 1개) |
+| 내가 쓰는 말 수집 | 대상 | **제외** (학습 문맥 아님) |
+| 랜덤 매칭 | 같은 언어쌍끼리 | 일반 대기자끼리 (언어 무관 단일 버킷) |
+| 입력 placeholder | "한국어로 쓰면 영어로 보여요" | 일반 문구 |
+
+그 외(전송·읽음·나가기·알림·위장·접근 규칙)는 learn 과 동일.
 - 메시지·읽음·공지·공유목표·업로드는 conversation_id FK 그대로 — 변경 없음.
 - `chat_messages.body` 는 **항상 원문**(친 그대로). 번역은 전역 캐시
   (chat_translations) 를 읽기 시점에 붙인다 — 저장 이중화 없음.

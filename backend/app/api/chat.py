@@ -4,7 +4,7 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
@@ -70,6 +70,8 @@ class RoomCreateBody(BaseModel):
     peer_id: int
     source_lang: str
     target_lang: str
+    # 'learn'(번역 표시, 기본) | 'plain'(일반 대화 — 번역 없음)
+    mode: Literal["learn", "plain"] = "learn"
 
 
 @router.post("/rooms", status_code=status.HTTP_201_CREATED)
@@ -81,10 +83,14 @@ async def create_room(
     """친구 초대로 방 생성 — get-or-create (중복 생성 시도 = 기존 방 열기, 스펙 결정 #9)."""
     if payload.peer_id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot_chat_self")
-    chat.validate_lang_pair(payload.source_lang, payload.target_lang)
+    # plain 은 언어쌍을 ko→en 으로 정규화 저장 — 쌍당 일반 방 1개 (스펙 §일반 대화 방)
+    source, target = (
+        ("ko", "en") if payload.mode == "plain" else (payload.source_lang, payload.target_lang)
+    )
+    chat.validate_lang_pair(source, target)
     await chat.require_friend(db, user.id, payload.peer_id)
     room, created = await chat.get_or_create_room(
-        db, user.id, payload.peer_id, payload.source_lang, payload.target_lang
+        db, user.id, payload.peer_id, source, target, mode=payload.mode
     )
     if created:
         peer_view = await chat.room_dict(db, room, payload.peer_id)
@@ -122,8 +128,12 @@ async def room_messages(
     room = await _get_room_or_404(db, room_id, user.id)
     items = await chat.get_room_messages(db, room.id, before=before, limit=limit)
     reads = await chat.get_read_positions(db, room.id)
-    items = await _attach_room_translations(db, user.id, items, room.target_lang)
-    await db.commit()
+    if room.mode == "learn":
+        items = await _attach_room_translations(db, user.id, items, room.target_lang)
+        await db.commit()
+    else:
+        # 일반 대화 방 — 번역 없이 친 그대로 (스펙 §일반 대화 방)
+        items = [{**m, "translation": None} for m in items]
     return {
         "items": items,
         "reads": {str(uid): mid for uid, mid in reads.items()},
@@ -160,6 +170,7 @@ async def room_leave(
 class MatchJoinBody(BaseModel):
     source_lang: str
     target_lang: str
+    mode: Literal["learn", "plain"] = "learn"
 
 
 @router.post("/match")
@@ -169,8 +180,11 @@ async def join_match(
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     """대기열 참가 — 즉시 성사 시 {room}, 아니면 {waiting: true}."""
-    chat.validate_lang_pair(payload.source_lang, payload.target_lang)
-    room = await chat_match.join(db, user.id, payload.source_lang, payload.target_lang)
+    source, target = (
+        ("ko", "en") if payload.mode == "plain" else (payload.source_lang, payload.target_lang)
+    )
+    chat.validate_lang_pair(source, target)
+    room = await chat_match.join(db, user.id, source, target, mode=payload.mode)
     if room is None:
         return {"waiting": True}
     peer_id = room.user_hi_id if room.user_lo_id == user.id else room.user_lo_id
@@ -306,7 +320,7 @@ async def message_translation(
     conv = await db.get(Conversation, msg.conversation_id)
     if conv is None or user.id not in (conv.user_lo_id, conv.user_hi_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not_participant")
-    if msg.deleted_at is not None or not msg.body or msg.kind is not None:
+    if msg.deleted_at is not None or not msg.body or msg.kind is not None or conv.mode != "learn":
         return {"translation": None}
     result = await translation_service.translate_to(db, user.id, msg.body, conv.target_lang)
     await db.commit()
@@ -412,8 +426,9 @@ async def send(
         )
         peer_id = room.user_hi_id if room.user_lo_id == user.id else room.user_lo_id
         # 방 기준 번역 동봉(낙관 렌더 치환용) — 방 UX 로만 한정, 레거시 to_user_id
-        # 전송은 여전히 개인 설정(chat_translate) 기반 조회 경로를 따른다
-        if data.get("body") and not data.get("kind"):
+        # 전송은 여전히 개인 설정(chat_translate) 기반 조회 경로를 따른다.
+        # 일반 대화 방(plain)은 번역하지 않는다 (스펙 §일반 대화 방)
+        if room.mode == "learn" and data.get("body") and not data.get("kind"):
             translation = await translation_service.translate_to(
                 db, user.id, data["body"], room.target_lang
             )

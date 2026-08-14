@@ -5,6 +5,7 @@ import {
   matchApi,
   roomsApi,
   type ChatRoom,
+  type RoomMode,
   type SupportedLang,
 } from "@/lib/chat-api";
 import { LANG_LABEL, SUPPORTED_LANGS } from "@/lib/chat-lang";
@@ -32,6 +33,8 @@ export function RoomCreateSheet({
   const [peer, setPeer] = useState<FriendEntry | null>(null);
   const [source, setSource] = useState<SupportedLang>("ko");
   const [target, setTarget] = useState<SupportedLang>("en");
+  // 방 종류 — 언어 학습(기본) | 일반 대화 (스펙 §일반 대화 방)
+  const [mode, setMode] = useState<RoomMode>("learn");
   const [existingRooms, setExistingRooms] = useState<ChatRoom[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +44,7 @@ export function RoomCreateSheet({
     if (!open) return;
     setStep("peer");
     setPeer(null);
+    setMode("learn");
     setError(null);
     studyApi
       .getSettings()
@@ -75,10 +79,14 @@ export function RoomCreateSheet({
 
   const existingRoom = useMemo(
     () =>
-      existingRooms.find(
-        (r) => r.source_lang === source && r.target_lang === target,
+      existingRooms.find((r) =>
+        mode === "plain"
+          ? r.mode === "plain"
+          : r.mode === "learn" &&
+            r.source_lang === source &&
+            r.target_lang === target,
       ) ?? null,
-    [existingRooms, source, target],
+    [existingRooms, source, target, mode],
   );
 
   // 랜덤 매칭 대기 중 — WS 성사 신호 + 폴링 폴백 (chat-language-rooms.md §랜덤 매칭)
@@ -99,8 +107,9 @@ export function RoomCreateSheet({
               .filter(
                 (r) =>
                   r.origin === "match" &&
-                  r.source_lang === source &&
-                  r.target_lang === target,
+                  r.mode === mode &&
+                  (mode === "plain" ||
+                    (r.source_lang === source && r.target_lang === target)),
               )
               .sort((a, b) => b.id - a.id)[0];
             if (matched && !cancelled) onCreated(matched);
@@ -132,12 +141,12 @@ export function RoomCreateSheet({
           onCreated(existingRoom);
           return;
         }
-        const res = await roomsApi.create(peer.user_id, source, target);
+        const res = await roomsApi.create(peer.user_id, source, target, mode);
         onCreated(res.room);
         return;
       }
       // 랜덤 매칭
-      const res = await matchApi.join(source, target);
+      const res = await matchApi.join(source, target, mode);
       if ("room" in res) {
         onCreated(res.room);
       } else {
@@ -263,26 +272,42 @@ export function RoomCreateSheet({
                 <b>{peer.name}</b> 님과의 방
               </p>
             )}
-            <div className="flex items-center justify-center gap-2">
-              <LangPicker
-                value={source}
-                onChange={setSource}
-                exclude={target}
+            <div className="flex gap-2">
+              <ModeChip
+                active={mode === "learn"}
+                label="언어 학습"
+                hint="쓴 글이 배우는 언어로 보여요"
+                onClick={() => setMode("learn")}
               />
-              <button
-                type="button"
-                onClick={swap}
-                aria-label="언어 순서 바꾸기"
-                className="flex min-h-10 min-w-10 items-center justify-center rounded-full border-2 border-ink/15 text-lg hover:border-brick-blue/50"
-              >
-                ⇄
-              </button>
-              <LangPicker
-                value={target}
-                onChange={setTarget}
-                exclude={source}
+              <ModeChip
+                active={mode === "plain"}
+                label="일반 대화"
+                hint="번역 없이 그대로"
+                onClick={() => setMode("plain")}
               />
             </div>
+            {mode === "learn" && (
+              <div className="flex items-center justify-center gap-2">
+                <LangPicker
+                  value={source}
+                  onChange={setSource}
+                  exclude={target}
+                />
+                <button
+                  type="button"
+                  onClick={swap}
+                  aria-label="언어 순서 바꾸기"
+                  className="flex min-h-10 min-w-10 items-center justify-center rounded-full border-2 border-ink/15 text-lg hover:border-brick-blue/50"
+                >
+                  ⇄
+                </button>
+                <LangPicker
+                  value={target}
+                  onChange={setTarget}
+                  exclude={source}
+                />
+              </div>
+            )}
             <button
               type="button"
               onClick={submit}
@@ -309,6 +334,34 @@ export function RoomCreateSheet({
         )}
       </div>
     </div>
+  );
+}
+
+function ModeChip({
+  active,
+  label,
+  hint,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`min-h-12 flex-1 rounded-lg border-2 px-3 text-left transition ${
+        active
+          ? "border-brick-blue bg-brick-blue/10"
+          : "border-ink/15 hover:border-ink/40"
+      }`}
+    >
+      <b className="block text-sm">{label}</b>
+      <span className="block text-[11px] opacity-60">{hint}</span>
+    </button>
   );
 }
 

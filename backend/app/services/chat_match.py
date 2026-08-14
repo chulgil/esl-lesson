@@ -15,10 +15,11 @@ from app.services import chat as chat_service
 WAIT_TTL = timedelta(minutes=10)
 REMATCH_COOLDOWN = timedelta(hours=24)
 
-# (source_lang, target_lang) -> [(user_id, joined_at)] — 선착순 매칭
-_queue: dict[tuple[str, str], list[tuple[int, datetime]]] = {}
-# user_id -> (source_lang, target_lang) — 재참가 시 이전 대기 제거·waiting 조회용
-_by_user: dict[int, tuple[str, str]] = {}
+# (mode, source_lang, target_lang) -> [(user_id, joined_at)] — 선착순 매칭.
+# 일반 대화(plain)는 언어쌍이 ko→en 으로 정규화돼 단일 버킷이 된다 (스펙 §일반 대화 방)
+_queue: dict[tuple[str, str, str], list[tuple[int, datetime]]] = {}
+# user_id -> (mode, source_lang, target_lang) — 재참가 시 이전 대기 제거·waiting 조회용
+_by_user: dict[int, tuple[str, str, str]] = {}
 
 
 def reset() -> None:
@@ -32,7 +33,7 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
-def _prune(key: tuple[str, str], now: datetime) -> None:
+def _prune(key: tuple[str, str, str], now: datetime) -> None:
     """TTL(10분) 초과 대기자를 제거 — _by_user 도 함께 정리한다."""
     entries = _queue.get(key)
     if not entries:
@@ -65,21 +66,21 @@ def _leave_previous(user_id: int) -> None:
 
 
 async def _recently_closed_with(
-    db: AsyncSession, a: int, b: int, source_lang: str, target_lang: str
+    db: AsyncSession, a: int, b: int, source_lang: str, target_lang: str, mode: str
 ) -> bool:
     """24h 내 같은 언어쌍으로 종료(closed)한 상대는 재매칭 대상에서 제외."""
-    conv = await chat_service.get_room_by_langs(db, a, b, source_lang, target_lang)
+    conv = await chat_service.get_room_by_langs(db, a, b, source_lang, target_lang, mode)
     if conv is None or conv.status != "closed" or conv.closed_at is None:
         return False
     return datetime.now(UTC) - _aware(conv.closed_at) < REMATCH_COOLDOWN
 
 
 async def join(
-    db: AsyncSession, user_id: int, source_lang: str, target_lang: str
+    db: AsyncSession, user_id: int, source_lang: str, target_lang: str, mode: str = "learn"
 ) -> Conversation | None:
     """대기열 참가 — 즉시 매칭되면 방을 반환, 아니면 None(대기 등록)."""
     now = datetime.now(UTC)
-    key = (source_lang, target_lang)
+    key = (mode, source_lang, target_lang)
     _leave_previous(user_id)
     _prune(key, now)
 
@@ -87,7 +88,7 @@ async def join(
     for idx, (candidate_id, _joined_at) in enumerate(entries):
         if candidate_id == user_id:
             continue
-        if await _recently_closed_with(db, user_id, candidate_id, source_lang, target_lang):
+        if await _recently_closed_with(db, user_id, candidate_id, source_lang, target_lang, mode):
             continue
         remaining = entries[:idx] + entries[idx + 1 :]
         if remaining:
@@ -96,7 +97,7 @@ async def join(
             _queue.pop(key, None)
         _by_user.pop(candidate_id, None)
         room, _created = await chat_service.get_or_create_room(
-            db, user_id, candidate_id, source_lang, target_lang, origin="match"
+            db, user_id, candidate_id, source_lang, target_lang, origin="match", mode=mode
         )
         return room
 
