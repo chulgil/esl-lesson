@@ -61,7 +61,14 @@
 - 등록: 언어 선택(기본 영어) + 유튜브 defaultAudioLanguage 자동 감지.
   라이브러리: ja/ko 배지 + 언어 필터 칩
 
-## Phase 4 (미착수 — 별도 승인)
+## Phase 4 — 언어 학습 방으로 개편 (2026-08-14 착수)
 
-en_text/ko_text 데이터 모델 일반화, 게임 6종 다국어(타자 자판·어순 분절 등
-게임별 재설계). 위험이 커서 1~3 배포 후 사용 데이터 보고 진행 판단.
+- **방 기준 번역**: 채팅이 언어쌍 단위 학습 방으로 확장 —
+  [chat-language-rooms.md](chat-language-rooms.md) 가 정본. 방에서는
+  개인 설정(translate_mine/theirs)이 아니라 **방의 target_lang** 이 번역
+  방향을 결정하고, **번역문이 본문·원문이 힌트**로 반전 표시된다.
+  `translate_to(db, user_id, text, target)` 추출 — 캐시·예산·엔진 체인 공유.
+- **게임 풀 언어 분리**: 풀 쿼리에 콘텐츠 lang 필터 + 게임 언어 선택
+  (chat-language-rooms.md §게임 언어 분리). 게임별 입력 재설계(자판 등)는
+  여전히 후속.
+- en_text/ko_text 데이터 모델 일반화(text/native 개명)는 여전히 미착수.
