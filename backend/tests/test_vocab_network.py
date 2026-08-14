@@ -131,3 +131,52 @@ async def test_network_endpoint_edges_and_visible_suggestions(client, db_session
     assert body["edges"] == [{"source": words[0].id, "target": words[1].id, "distance": 0.2}]
     assert [s["item_id"] for s in body["suggestions"]] == [ghosts[0].id]
     assert body["suggestions"][0]["en"] == ghosts[0].en_text
+
+
+async def test_network_endpoint_lang_filter_and_counts(client, db_session):
+    """언어별 복수 네트워크 분리 (word-insight.md §어휘망 언어별 분리, 2026-08-14).
+
+    lang 파라미터가 콘텐츠 언어로 노드를 가르고, counts 는 언어 무관 전체
+    집계(칩 노출 판단용)로 항상 함께 온다."""
+    await login(client, db_session)
+    en_words = await seed_items(db_session, count=2, lang="en")
+    ja_words = await seed_items(db_session, count=1, lang="ja")
+    for item in [*en_words, *ja_words]:
+        await client.post("/api/cards", json={"item_id": item.id})
+
+    en_res = (await client.get("/api/study/network?lang=en")).json()
+    assert sorted(n["item_id"] for n in en_res["nodes"]) == sorted(i.id for i in en_words)
+    assert en_res["lang"] == "en"
+    assert en_res["counts"] == {"en": 2, "ja": 1}
+
+    ja_res = (await client.get("/api/study/network?lang=ja")).json()
+    assert [n["item_id"] for n in ja_res["nodes"]] == [ja_words[0].id]
+    assert ja_res["lang"] == "ja"
+    assert ja_res["counts"] == {"en": 2, "ja": 1}
+
+
+async def test_network_endpoint_lang_defaults_to_learning_langs(client, db_session):
+    """lang 생략 시 settings.learning_langs[0] (my-phrases.md 와 동일한 _resolve_lang)."""
+    user = await login(client, db_session)
+    from app.models import UserSettings
+
+    # upsert_google_user 가 로그인 시 기본 UserSettings 를 이미 만들어 둔다 —
+    # 새 행을 add 하면 UNIQUE(user_id) 충돌이라 기존 행을 조회해 갱신한다.
+    settings = await db_session.get(UserSettings, user.id)
+    settings.learning_langs = ["ja"]
+    await db_session.commit()
+
+    ja_words = await seed_items(db_session, count=1, lang="ja")
+    en_words = await seed_items(db_session, count=1, lang="en")
+    for item in [*ja_words, *en_words]:
+        await client.post("/api/cards", json={"item_id": item.id})
+
+    res = (await client.get("/api/study/network")).json()
+    assert res["lang"] == "ja"
+    assert [n["item_id"] for n in res["nodes"]] == [ja_words[0].id]
+
+
+async def test_network_endpoint_invalid_lang_rejected(client, db_session):
+    await login(client, db_session)
+    res = await client.get("/api/study/network?lang=fr")
+    assert res.status_code == 422

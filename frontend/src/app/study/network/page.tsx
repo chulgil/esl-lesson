@@ -9,9 +9,16 @@ import {
   type GraphEdge,
   type GraphNode,
 } from "@/components/study/VocabGraph";
+import { VocabLangChips } from "@/components/study/VocabLangChips";
 import { fetchMe, loginUrl } from "@/lib/api";
 import { myApi } from "@/lib/my-api";
 import { studyApi, type VocabNetwork } from "@/lib/study-api";
+import {
+  isVocabLang,
+  readVocabLang,
+  writeVocabLang,
+  type VocabLang,
+} from "@/lib/vocab-lang";
 
 const STATE_LEGEND = [
   { state: "new", label: "새 단어", cls: "bg-brick-blue" },
@@ -25,9 +32,16 @@ const STATE_LEGEND = [
   },
 ];
 
-/** 어휘망 — 내 어휘를 임베딩 근접 관계로 잇는 그래프 (word-insight P3) */
+/** 어휘망 — 내 어휘를 임베딩 근접 관계로 잇는 그래프 (word-insight P3).
+ *  학습언어가 복수면 언어 칩으로 네트워크를 나눠 보여준다 (2026-08-14 개정,
+ *  §어휘망 언어별 분리) — MyPhrasesCard 의 언어 탭과 동일한 패턴. */
 export default function VocabNetworkPage() {
   const [data, setData] = useState<VocabNetwork | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [learningLangs, setLearningLangs] = useState<VocabLang[] | null>(
+    null,
+  );
+  const [lang, setLang] = useState<VocabLang | null>(null);
   const [error, setError] = useState(false);
   const [needLogin, setNeedLogin] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -45,20 +59,60 @@ export default function VocabNetworkPage() {
         return;
       }
       studyApi
-        .network()
-        .then((res) => {
-          setData(res);
-          // 노드 0의 원인 구분 — 담은 콘텐츠가 없으면 라이브러리 유도 문구로 분기
-          if (res.nodes.length === 0) {
-            myApi
-              .list()
-              .then((my) => setHasContents(my.total > 0))
-              .catch(() => setHasContents(true)); // 판별 실패 시 기존 문구 유지
-          }
+        .getSettings()
+        .then((s) => {
+          const langs = s.learning_langs.filter(isVocabLang);
+          setLearningLangs(langs);
+          const saved = readVocabLang();
+          const initial =
+            saved && langs.includes(saved) ? saved : (langs[0] ?? "en");
+          setLang(initial);
+          writeVocabLang(initial);
         })
-        .catch(() => setError(true));
+        .catch(() => {
+          setLearningLangs([]);
+          setLang("en");
+        });
     });
   }, []);
+
+  useEffect(() => {
+    if (!lang) return;
+    setData(null);
+    setError(false);
+    studyApi
+      .network(lang)
+      .then((res) => {
+        setData(res);
+        setCounts(res.counts);
+        // 노드 0의 원인 구분 — 담은 콘텐츠가 없으면 라이브러리 유도 문구로 분기
+        if (res.nodes.length === 0) {
+          myApi
+            .list()
+            .then((my) => setHasContents(my.total > 0))
+            .catch(() => setHasContents(true)); // 판별 실패 시 기존 문구 유지
+        }
+      })
+      .catch(() => setError(true));
+  }, [lang]);
+
+  const chooseLang = useCallback((l: VocabLang) => {
+    setLang(l);
+    writeVocabLang(l);
+    setSelectedId(null);
+    setShowInsight(false);
+  }, []);
+
+  // 칩은 학습 데이터가 있는 언어만 — counts 는 언어 무관 전체 집계라 lang
+  // 전환과 무관하게 유지된다
+  const activeLangs = useMemo(
+    () => (learningLangs ?? []).filter((l) => (counts[l] ?? 0) > 0),
+    [learningLangs, counts],
+  );
+  const totalCount = useMemo(
+    () => Object.values(counts).reduce((a, b) => a + b, 0),
+    [counts],
+  );
 
   const { nodes, edges } = useMemo(() => {
     if (!data) return { nodes: [] as GraphNode[], edges: [] as GraphEdge[] };
@@ -121,6 +175,14 @@ export default function VocabNetworkPage() {
         </h1>
       </header>
 
+      {lang && (
+        <VocabLangChips
+          langs={activeLangs}
+          lang={lang}
+          onChange={chooseLang}
+        />
+      )}
+
       {needLogin && (
         <div className="flex flex-col items-start gap-4">
           <p>
@@ -152,6 +214,12 @@ export default function VocabNetworkPage() {
               라이브러리 구경하기
             </Brick>
           </div>
+        ) : totalCount > 0 ? (
+          // 다른 언어엔 어휘망이 있지만 이 언어는 아직 없는 경우
+          <p className="text-sm opacity-70">
+            이 언어 학습 데이터가 아직 없어요 — 위 언어 칩에서 다른 언어를
+            골라보세요.
+          </p>
         ) : (
           <div className="flex flex-col items-start gap-4">
             <p>
