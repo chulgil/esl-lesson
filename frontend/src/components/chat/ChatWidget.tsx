@@ -228,20 +228,24 @@ export function ChatWidget() {
     return () => document.body.classList.remove("mascot-launcher");
   }, [mascotLauncher]);
 
-  // Esc 한 번으로 즉시 닫기 — 플로팅 전용 (빠른 숨김)
+  // Esc 한 번으로 즉시 닫기 — 플로팅 전용 (빠른 숨김).
+  // 방 생성 시트가 열려 있는 동안은 시트가 Esc 를 소유한다 (시트만 닫힘)
   useEffect(() => {
-    if (!effFloating || !open) return;
+    if (!effFloating || !open || creating) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [effFloating, open]);
+  }, [effFloating, open, creating]);
 
   // 바깥 영역 클릭 시 닫기 — 플로팅 전용. 런처는 제외해야 한다:
-  // pointerdown(닫힘) 직후 런처의 click 토글이 다시 열어 닫기가 무력화됨
+  // pointerdown(닫힘) 직후 런처의 click 토글이 다시 열어 닫기가 무력화됨.
+  // 방 생성 시트는 위젯 DOM 밖 전면 오버레이라 시트 안 클릭이 전부 "바깥"으로
+  // 판정돼 위젯이 닫히고, 생성 완료 후 방 화면이 안 뜨던 버그 (2026-08-14) —
+  // 시트가 열려 있는 동안은 바깥 클릭 닫기를 통째로 보류한다
   useEffect(() => {
-    if (!effFloating || !open) return;
+    if (!effFloating || !open || creating) return;
     function onPointerDown(e: PointerEvent) {
       const target = e.target as Node;
       if (
@@ -254,7 +258,7 @@ export function ChatWidget() {
     }
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [effFloating, open]);
+  }, [effFloating, open, creating]);
 
   // 열린 대화방 추적 — 전역 토스트·OS 알림 중복 억제. room id 기준이라야
   // 같은 상대의 다른 언어쌍 방과 섞이지 않는다 (2026-08-14 room 확장)
@@ -424,6 +428,8 @@ export function ChatWidget() {
         onCreated={(r) => {
           setCreating(false);
           setRoom(r);
+          // 시트 조작 중 위젯이 닫혔더라도(과거 바깥클릭 판정 등) 방 화면 보장
+          setOpen(true);
         }}
       />
 

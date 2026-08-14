@@ -125,6 +125,20 @@ export function RoomCreateSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
+  // Esc = 시트 닫기 — 위젯은 시트가 열려 있는 동안 Esc 를 보류한다 (ChatWidget).
+  // step 을 deps 에 포함해 매칭 대기 중 Esc 도 최신 step 으로 취소를 태운다
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (step === "matching") matchApi.cancel().catch(() => {});
+      onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, step]);
+
   if (!open) return null;
 
   function swap() {
@@ -164,10 +178,17 @@ export function RoomCreateSheet({
     setStep("lang");
   }
 
+  // 닫기 = 매칭 대기 중이면 대기열도 취소 — 시트가 닫힌 뒤 성사되면 아무도
+  // chat.matched 를 처리하지 못해 조용히 방만 생기는 누수 방지 (2026-08-14)
+  function handleClose() {
+    if (step === "matching") matchApi.cancel().catch(() => {});
+    onClose();
+  }
+
   return (
     <div
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="w-full max-w-sm rounded-t-2xl border-2 border-ink/10 bg-white p-5 shadow-2xl sm:rounded-2xl"
@@ -177,7 +198,7 @@ export function RoomCreateSheet({
           <h2 className="font-hand text-xl font-bold">새 노트 만들기</h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="닫기"
             className="ml-auto flex min-h-10 min-w-10 items-center justify-center text-xl opacity-50 hover:opacity-100"
           >
