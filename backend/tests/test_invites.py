@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.models import PushSubscription, User
 from app.models.friend import Friendship
 from app.services import push
-from app.services.friends import are_friends
+from app.services.friends import are_friends, friend_ids_of
 from app.services.game.invites import GAME_LABELS, GAMES, InviteHub, invite_push_payload
 from tests.test_game_manager import Collector
 
@@ -101,6 +101,32 @@ async def test_are_friends_requires_accepted(db_session):
     assert await are_friends(db_session, b.id, a.id) is True  # 방향 무관
     assert await are_friends(db_session, a.id, c.id) is False  # pending 은 친구 아님
     assert await are_friends(db_session, b.id, c.id) is False
+
+
+async def test_friend_ids_of_returns_accepted_only_both_directions(db_session):
+    """학습 중 알림 릴레이(study-spectate.md) 대상 조회 — accepted 만, 방향 무관."""
+    a, b, c = await make_users(db_session, "fa", "fb", "fc")
+    db_session.add(Friendship(requester_id=a.id, addressee_id=b.id, status="accepted"))
+    db_session.add(Friendship(requester_id=c.id, addressee_id=a.id, status="accepted"))
+    db_session.add(Friendship(requester_id=a.id, addressee_id=c.id, status="pending"))
+    await db_session.commit()
+
+    ids = await friend_ids_of(db_session, a.id)
+    assert set(ids) == {b.id, c.id}
+    assert await friend_ids_of(db_session, b.id) == [a.id]
+
+
+async def test_notify_sends_to_all_sockets_and_false_when_offline():
+    hub = InviteHub()
+    s1, s2 = Collector(), Collector()
+    hub.attach(1, "철수", s1)
+    hub.attach(1, "철수", s2)
+
+    ok = await hub.notify(1, {"t": "st.friend_studying", "user_id": 9})
+    assert ok is True
+    assert all(any(m["t"] == "st.friend_studying" for m in c.messages) for c in (s1, s2))
+
+    assert await hub.notify(99, {"t": "st.friend_studying", "user_id": 9}) is False
 
 
 async def test_send_to_user_delivers_and_prunes_dead_subs(db_session, vapid_keys, monkeypatch):

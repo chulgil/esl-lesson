@@ -18,10 +18,11 @@ from sqlalchemy import select
 
 from app.core.db import get_session_factory
 from app.models import Content, DictationRace, ItemOccurrence, LearningItem, TranscriptSegment
-from app.services.game.manager import WordPoolError, review_items
+from app.services.game.manager import DEFAULT_GAME_LANG, WordPoolError, review_items
 from app.services.game.profiles import safe_player_badges
 from app.services.game.typing_race import mastered_item_clause, pick_sentences
-from app.services.visibility import visible_item_clause
+from app.services.langs import SUPPORTED_LANGS
+from app.services.visibility import lang_item_clause, visible_item_clause
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +77,9 @@ def rank_players(players: list["DictatorState"]) -> tuple[str | None, int | None
     return top.name, top.user_id
 
 
-async def load_dictation_pool(user_id: int) -> list[dict]:
-    """유튜브 구간이 있는 문장만 — {en, video_id, start_ms, end_ms}."""
+async def load_dictation_pool(user_id: int, lang: str = DEFAULT_GAME_LANG) -> list[dict]:
+    """유튜브 구간이 있는 lang 문장만 — {en, video_id, start_ms, end_ms}
+    (게임 언어 분리 chat-language-rooms.md §게임 언어 분리)."""
     async with get_session_factory()() as db:
         rows = (
             await db.execute(
@@ -97,6 +99,7 @@ async def load_dictation_pool(user_id: int) -> list[dict]:
                     visible_item_clause(user_id),
                     # 장기기억 도달 문장 제외 — 익히는 중인 표현 위주 (2026-08-12)
                     mastered_item_clause(user_id),
+                    lang_item_clause(lang),
                     Content.youtube_video_id.is_not(None),
                     TranscriptSegment.start_ms.is_not(None),
                 )
@@ -142,6 +145,7 @@ class DictationSession:
     mode: str  # solo | race
     players: list[DictatorState]
     rounds: list[dict] = field(default_factory=list)
+    lang: str = DEFAULT_GAME_LANG
     started: bool = False
     round_no: int = -1
     round_started: float = 0.0
@@ -156,18 +160,22 @@ class DictationManager:
 
     # --- 진입 (어순 레이스와 동일 패턴) ---
 
-    async def solo(self, user_id: int, name: str, send: Sender) -> DictationSession:
+    async def solo(
+        self, user_id: int, name: str, send: Sender, lang: str = DEFAULT_GAME_LANG
+    ) -> DictationSession:
         await self._leave_if_idle(user_id)
-        pool = await self._pool(user_id)
-        session = await self._new_session(user_id, name, send, "solo", None)
+        pool = await self._pool(user_id, lang)
+        session = await self._new_session(user_id, name, send, "solo", None, lang)
         await self._start(session, pool)
         return session
 
-    async def create(self, user_id: int, name: str, send: Sender) -> str:
+    async def create(
+        self, user_id: int, name: str, send: Sender, lang: str = DEFAULT_GAME_LANG
+    ) -> str:
         await self._leave_if_idle(user_id)
-        await self._pool(user_id)
+        await self._pool(user_id, lang)
         code = secrets.token_hex(3).upper()
-        session = await self._new_session(user_id, name, send, "race", code)
+        session = await self._new_session(user_id, name, send, "race", code, lang)
         self.rooms[code] = session.match_id
         await self._broadcast_room(session)
         return code
@@ -194,7 +202,7 @@ class DictationManager:
             or len(session.players) < 2
         ):
             return
-        pool = await self._pool(session.host_id)
+        pool = await self._pool(session.host_id, session.lang)
         if session.code:
             self.rooms.pop(session.code, None)
         await self._start(session, pool)
@@ -245,6 +253,7 @@ class DictationManager:
             player,
             {
                 "t": "dt.start",
+                "lang": session.lang,
                 # 정답(en)은 내리지 않는다 — 클립 정보만
                 "clips": [
                     {"video_id": r["video_id"], "start_ms": r["start_ms"], "end_ms": r["end_ms"]}
@@ -292,6 +301,7 @@ class DictationManager:
             session,
             {
                 "t": "dt.start",
+                "lang": session.lang,
                 # 정답(en)은 내리지 않는다 — 클립 정보만
                 "clips": [
                     {
@@ -366,14 +376,22 @@ class DictationManager:
 
     # --- 헬퍼 ---
 
-    async def _pool(self, user_id: int) -> list[dict]:
-        pool = await load_dictation_pool(user_id)
+    async def _pool(self, user_id: int, lang: str) -> list[dict]:
+        if lang not in SUPPORTED_LANGS:
+            raise WordPoolError("invalid_lang")
+        pool = await load_dictation_pool(user_id, lang)
         if len(pool) < MIN_SENTENCES:
             raise WordPoolError("sentences_insufficient")
         return pool
 
     async def _new_session(
-        self, user_id: int, name: str, send: Sender, mode: str, code: str | None
+        self,
+        user_id: int,
+        name: str,
+        send: Sender,
+        mode: str,
+        code: str | None,
+        lang: str = DEFAULT_GAME_LANG,
     ) -> DictationSession:
         async with get_session_factory()() as db:
             row = DictationRace(mode=mode, status="waiting", player1_id=user_id)
@@ -385,6 +403,7 @@ class DictationManager:
             code=code,
             host_id=user_id,
             mode=mode,
+            lang=lang,
             players=[DictatorState(user_id=user_id, name=name, send=send)],
         )
         self.sessions[match_id] = session
@@ -423,6 +442,7 @@ class DictationManager:
             {
                 "t": "dt.room",
                 "code": session.code,
+                "lang": session.lang,
                 "host": session.players[0].name if session.players else "",
                 "players": [p.name for p in session.players],
                 "profiles": await self._profiles(session),

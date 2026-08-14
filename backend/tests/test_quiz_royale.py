@@ -8,7 +8,12 @@ import pytest
 from app.models import QuizRoyaleMatch, User
 from app.services.game import quiz_royale as qr
 from app.services.game.manager import WordPoolError
-from tests.test_game_manager import Collector, seed_user_and_words, wired_db  # noqa: F401
+from tests.test_game_manager import (  # noqa: F401
+    Collector,
+    seed_user_and_words,
+    seed_words_for,
+    wired_db,
+)
 
 
 def _pool(n=30):
@@ -264,3 +269,75 @@ async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  
     assert any(m.get("code") == "room_closed" for m in s2.messages)
     assert p2.id not in manager.by_user  # 세션 정리됨
     assert not manager.sessions
+
+
+# --- 게임 언어 분리 (docs/specs/chat-language-rooms.md §게임 언어 분리) ---
+
+
+async def test_solo_rejects_invalid_lang(wired_db):  # noqa: F811
+    user = await seed_user_and_words(wired_db)
+    manager = qr.QuizRoyaleManager()
+    with pytest.raises(WordPoolError, match="invalid_lang"):
+        await manager.solo(user.id, user.name, Collector(), bot_level=1, bots=1, lang="fr")
+
+
+async def test_solo_meaning_pool_filtered_by_lang(wired_db, fast_rounds):  # noqa: F811
+    """en 콘텐츠와 ja 콘텐츠가 섞여 있어도 출제가 lang 콘텐츠에서만 나온다."""
+    user = await seed_user_and_words(wired_db, count=20, lang="en")
+    ja_items = await seed_words_for(wired_db, user, "ja", count=20)
+    ja_ids = {i.id for i in ja_items}
+
+    manager = qr.QuizRoyaleManager()
+    session = await manager.solo(user.id, user.name, Collector(), bot_level=1, bots=1, lang="ja")
+    assert session.questions  # 출제 완료
+    assert all(q.item_id in ja_ids for q in session.questions)
+    session.task.cancel()
+
+
+async def test_nuance_questions_filtered_by_lang(db_session, monkeypatch):
+    """뉘앙스(odd-one-out) 변형도 lang 콘텐츠 안에서만 후보를 뽑는다."""
+    import random
+
+    from app.services.game import quiz_royale as qr_mod
+
+    user = await seed_user_and_words(db_session, count=25, lang="en")
+    ja_items = await seed_words_for(db_session, user, "ja", count=25)
+
+    monkeypatch.setattr(qr_mod.embeddings, "enabled", lambda db: True)
+
+    async def fake_similar(db, item_id, k=2):
+        others = [i for i in ja_items if i.id != item_id]
+        return [{"id": p.id, "en_text": p.en_text} for p in others[:2]]
+
+    monkeypatch.setattr(qr_mod.embeddings, "similar_items", fake_similar)
+
+    rng = random.Random(1)
+    questions = await qr_mod.build_nuance_questions(
+        db_session, user.id, rounds=3, rng=rng, lang="ja"
+    )
+    assert len(questions) == 3
+    ja_texts = {i.en_text for i in ja_items}
+    for q in questions:
+        assert set(q.choices) <= ja_texts
+
+
+async def test_room_lang_stored_and_broadcast(wired_db, fast_rounds):  # noqa: F811
+    """방장이 고른 lang 이 qr.room 으로 전파되고, 참가자 풀도 그 lang."""
+    p1 = await seed_user_and_words(wired_db, count=20, lang="en")
+    ja_items = await seed_words_for(wired_db, p1, "ja", count=20)
+    ja_ids = {i.id for i in ja_items}
+    p2 = User(google_sub="g-qrlang", email="qrlang@example.com", name="QL")
+    wired_db.add(p2)
+    await wired_db.commit()
+
+    manager = qr.QuizRoyaleManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(p1.id, p1.name, s1, lang="ja")
+    room = next(m for m in s1.messages if m["t"] == "qr.room")
+    assert room["lang"] == "ja"
+
+    await manager.join(p2.id, p2.name, s2, code)
+    await manager.start(p1.id)
+    session = manager.sessions[manager.by_user[p1.id]]
+    assert all(q.item_id in ja_ids for q in session.questions)
+    session.task.cancel()

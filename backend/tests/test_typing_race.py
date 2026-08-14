@@ -275,3 +275,91 @@ async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  
     assert any(m.get("code") == "room_closed" for m in s2.messages)
     assert guest.id not in manager.by_user  # 세션 정리됨
     assert not manager.sessions
+
+
+# --- 게임 언어 분리 (docs/specs/chat-language-rooms.md §게임 언어 분리) ---
+
+_lang_batch = 0
+
+
+async def seed_lang_sentences(db, lang, count=6):
+    """lang 콘텐츠의 문장 시딩. test_study.seed_items 는 lang 파라미터가 없어
+    (그 파일은 소유 범위 밖) 로컬로 별도 시딩한다."""
+    from sqlalchemy import select
+
+    from app.models import Content, ContentSubscription, ItemOccurrence, LearningItem, User
+
+    global _lang_batch
+    _lang_batch += 1
+    batch = _lang_batch
+    content = Content(
+        source="manual",
+        title=f"lang-seed-{lang}-{batch}",
+        status="ready",
+        visibility="public",
+        lang=lang,
+    )
+    db.add(content)
+    await db.flush()
+    items = []
+    for i in range(count):
+        item = LearningItem(
+            item_type="sentence",
+            en_text=f"{lang} sentence {batch} number {i}",
+            ko_text=f"{lang} 문장 {batch} {i}",
+            normalized_key=f"lang-sent-{lang}-{batch}-{i}",
+            review_status="approved",
+        )
+        db.add(item)
+        await db.flush()
+        db.add(ItemOccurrence(item_id=item.id, content_id=content.id))
+        items.append(item)
+    for user_id in (await db.execute(select(User.id))).scalars().all():
+        db.add(ContentSubscription(content_id=content.id, user_id=user_id))
+    await db.commit()
+    return items
+
+
+async def test_load_sentence_pool_filters_by_lang(wired_db):  # noqa: F811
+    """en 콘텐츠와 ja 콘텐츠가 섞여 있어도 lang 별로 분리된 풀만 나온다."""
+    user = await seed_user_and_words(wired_db)
+    en_items = await seed_lang_sentences(wired_db, "en", count=6)
+    ja_items = await seed_lang_sentences(wired_db, "ja", count=6)
+
+    en_pool = await tr.load_sentence_pool(user.id, lang="en")
+    ja_pool = await tr.load_sentence_pool(user.id, lang="ja")
+
+    assert {p["item_id"] for p in en_pool} == {i.id for i in en_items}
+    assert {p["item_id"] for p in ja_pool} == {i.id for i in ja_items}
+
+
+async def test_solo_rejects_invalid_lang(wired_db):  # noqa: F811
+    user = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db)
+    manager = tr.TypingRaceManager()
+    with pytest.raises(WordPoolError, match="invalid_lang"):
+        await manager.solo(user.id, user.name, Collector(), lang="fr")
+
+
+async def test_room_lang_stored_and_broadcast_through_start(wired_db, fast_race):  # noqa: F811
+    """방장이 고른 lang 이 tp.room·tp.start 로 전파되고, 참가자 풀도 같은 lang."""
+    host = await seed_user_and_words(wired_db)
+    await seed_lang_sentences(wired_db, "ja", count=6)
+    guest = User(google_sub="g-lang", email="lang@example.com", name="LG")
+    wired_db.add(guest)
+    await wired_db.commit()
+
+    manager = tr.TypingRaceManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1, lang="ja")
+    room = next(m for m in s1.messages if m["t"] == "tp.room")
+    assert room["lang"] == "ja"
+
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    start = next(m for m in s1.messages if m["t"] == "tp.start")
+    assert start["lang"] == "ja"
+    assert all(s["en"].startswith("ja sentence") for s in start["sentences"])
+
+    session.task.cancel()

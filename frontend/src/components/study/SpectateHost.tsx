@@ -6,6 +6,7 @@ import {
   useFloatingCheers,
 } from "@/components/study/FloatingCheers";
 import { GameSocket, type ServerMsg, type StEventPayload } from "@/lib/game-ws";
+import { getSpectateEnabled, setSpectateEnabled } from "@/lib/spectate-mode";
 
 /** 학습 관전 호스트 — 허용 토글 + 관전 요청 수락/거절 (승인제, study-spectate.md).
  *  snapshot 이 바뀔 때마다 수락된 관전자에게 화면 상태를 릴레이한다. */
@@ -53,6 +54,21 @@ export function SpectateHost({
     [pushCheer],
   );
 
+  // 마지막 값 복원 — 이전에 ON 이었으면 학습 화면 진입 시 자동 ON (기본은 여전히
+  // OFF). SSR/최초 렌더는 false 로 통일해 하이드레이션 불일치를 피하고, 마운트
+  // 직후 기억된 값이 있으면 즉시 켠다.
+  useEffect(() => {
+    if (getSpectateEnabled()) setEnabled(true);
+  }, []);
+
+  function toggle() {
+    setEnabled((prev) => {
+      const next = !prev;
+      setSpectateEnabled(next);
+      return next;
+    });
+  }
+
   // 토글 on → 연결 + 호스팅, off → 정리
   useEffect(() => {
     if (!enabled) return;
@@ -88,7 +104,7 @@ export function SpectateHost({
     <>
       <button
         type="button"
-        onClick={() => setEnabled((v) => !v)}
+        onClick={toggle}
         aria-pressed={enabled}
         title="친구가 내 학습을 관전할 수 있게 허용 (요청마다 수락 필요)"
         className={`inline-flex min-h-11 items-center gap-2 rounded-md border-2 px-3 text-sm font-bold shadow-sm transition ${

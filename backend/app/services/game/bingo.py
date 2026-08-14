@@ -17,6 +17,7 @@ from sqlalchemy import select
 from app.core.db import get_session_factory
 from app.models import BingoMatch, Content, ItemOccurrence, TranscriptSegment
 from app.services.game.manager import (
+    DEFAULT_GAME_LANG,
     Sender,
     WordPoolError,
     load_word_pool,
@@ -24,6 +25,7 @@ from app.services.game.manager import (
     safe_priority_items,
 )
 from app.services.game.profiles import safe_player_badges
+from app.services.langs import SUPPORTED_LANGS
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +124,7 @@ class BingoSession:
     words: dict[int, tuple[str, str]] = field(default_factory=dict)  # item_id -> (en, ko)
     call_order: list[int] = field(default_factory=list)
     media: dict[int, dict] = field(default_factory=dict)
+    lang: str = DEFAULT_GAME_LANG
     started: bool = False
     round_no: int = -1
     round_started: float = 0.0
@@ -136,18 +139,22 @@ class BingoManager:
 
     # --- 진입 ---
 
-    async def solo(self, user_id: int, name: str, send: Sender) -> BingoSession:
+    async def solo(
+        self, user_id: int, name: str, send: Sender, lang: str = DEFAULT_GAME_LANG
+    ) -> BingoSession:
         await self._leave_if_idle(user_id)
-        await self._pool(user_id)  # 시작 전에 단어 부족을 미리 알림
-        session = await self._new_session(user_id, name, send, "solo", None)
+        await self._pool(user_id, lang)  # 시작 전에 단어 부족을 미리 알림
+        session = await self._new_session(user_id, name, send, "solo", None, lang)
         await self._start(session)
         return session
 
-    async def create(self, user_id: int, name: str, send: Sender) -> str:
+    async def create(
+        self, user_id: int, name: str, send: Sender, lang: str = DEFAULT_GAME_LANG
+    ) -> str:
         await self._leave_if_idle(user_id)
-        await self._pool(user_id)
+        await self._pool(user_id, lang)
         code = secrets.token_hex(3).upper()
-        session = await self._new_session(user_id, name, send, "room", code)
+        session = await self._new_session(user_id, name, send, "room", code, lang)
         self.rooms[code] = session.match_id
         await self._broadcast_room(session)
         return code
@@ -222,6 +229,7 @@ class BingoManager:
                 "t": "bg.start",
                 "board": [{"item_id": i, "en": session.words[i][0]} for i in player.arrangement],
                 "total": len(session.call_order),
+                "lang": session.lang,
                 "round_seconds": ROUND_SECONDS,
                 "countdown": 0,
                 "players": [p.name for p in session.players],
@@ -266,7 +274,7 @@ class BingoManager:
     # --- 루프 ---
 
     async def _start(self, session: BingoSession) -> None:
-        pool = await self._pool(session.host_id)
+        pool = await self._pool(session.host_id, session.lang)
         priority = await safe_priority_items([p.user_id for p in session.players])
         media_all = await load_media_map([w[0] for w in pool])
         seed = secrets.randbits(32)
@@ -291,6 +299,7 @@ class BingoManager:
                         {"item_id": i, "en": session.words[i][0]} for i in player.arrangement
                     ],
                     "total": len(session.call_order),
+                    "lang": session.lang,
                     "round_seconds": ROUND_SECONDS,
                     "countdown": COUNTDOWN_SECONDS,
                     "players": [p.name for p in session.players],
@@ -402,14 +411,22 @@ class BingoManager:
 
     # --- 헬퍼 ---
 
-    async def _pool(self, user_id: int) -> list[tuple[int, str, str]]:
-        pool = await load_word_pool(user_id)
+    async def _pool(self, user_id: int, lang: str) -> list[tuple[int, str, str]]:
+        if lang not in SUPPORTED_LANGS:
+            raise WordPoolError("invalid_lang")
+        pool = await load_word_pool(user_id, lang)
         if len(pool) < BOARD_CELLS:
             raise WordPoolError("words_insufficient")
         return pool
 
     async def _new_session(
-        self, user_id: int, name: str, send: Sender, mode: str, code: str | None
+        self,
+        user_id: int,
+        name: str,
+        send: Sender,
+        mode: str,
+        code: str | None,
+        lang: str = DEFAULT_GAME_LANG,
     ) -> BingoSession:
         async with get_session_factory()() as db:
             row = BingoMatch(mode=mode, status="waiting", player1_id=user_id)
@@ -421,6 +438,7 @@ class BingoManager:
             code=code,
             host_id=user_id,
             mode=mode,
+            lang=lang,
             players=[BingoPlayer(user_id=user_id, name=name, send=send)],
         )
         self.sessions[match_id] = session
@@ -456,6 +474,7 @@ class BingoManager:
             {
                 "t": "bg.room",
                 "code": session.code,
+                "lang": session.lang,
                 "host": session.players[0].name if session.players else "",
                 "players": [p.name for p in session.players],
                 "profiles": await self._profiles(session),

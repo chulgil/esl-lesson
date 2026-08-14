@@ -10,15 +10,18 @@ import { ReplyQuote } from "@/components/chat/ReplyQuote";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { GoalBoard, type GoalBoardHandle } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
+import { LangPairBadge } from "@/components/chat/LangPairBadge";
+import { MessageBody } from "@/components/chat/MessageBody";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
-import { LinkifiedText } from "@/components/chat/LinkifiedText";
 import { NoticeBar, type NoticeBarHandle } from "@/components/chat/NoticeBar";
 import { NoticeSystemLine } from "@/components/chat/NoticeSystemLine";
-import { TranslationLine } from "@/components/chat/TranslationLine";
+import { RoomCreateSheet } from "@/components/chat/RoomCreateSheet";
+import { StudyingBadge } from "@/components/chat/StudyingBadge";
 import { useChatRoom } from "@/components/chat/useChatRoom";
 import { MascotSvg } from "@/components/theme/mascots";
 import { fetchMe } from "@/lib/api";
-import { chatApi, type ChatConversation } from "@/lib/chat-api";
+import { chatApi, roomsApi, type ChatRoom } from "@/lib/chat-api";
+import { roomInputPlaceholder } from "@/lib/chat-lang";
 import { onChatEvent, setActiveChatRoom } from "@/lib/chat-signals";
 import { useChatFloating } from "@/lib/chat-mode";
 import { setFaviconBadge } from "@/lib/favicon-badge";
@@ -53,9 +56,8 @@ export function ChatWidget() {
   const floating = useChatFloating();
   const [loggedIn, setLoggedIn] = useState(false);
   const [open, setOpen] = useState(false);
-  const [room, setRoom] = useState<{ userId: number; name: string } | null>(
-    null,
-  );
+  const [room, setRoom] = useState<ChatRoom | null>(null);
+  const [creating, setCreating] = useState(false);
   const [unread, setUnread] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
@@ -254,9 +256,10 @@ export function ChatWidget() {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [effFloating, open]);
 
-  // 열린 대화방 추적 — 전역 토스트·OS 알림 중복 억제
+  // 열린 대화방 추적 — 전역 토스트·OS 알림 중복 억제. room id 기준이라야
+  // 같은 상대의 다른 언어쌍 방과 섞이지 않는다 (2026-08-14 room 확장)
   useEffect(() => {
-    setActiveChatRoom(panelOpen && room ? room.userId : null);
+    setActiveChatRoom(panelOpen && room ? room.id : null);
     return () => setActiveChatRoom(null);
   }, [panelOpen, room]);
 
@@ -349,12 +352,25 @@ export function ChatWidget() {
             >
               {excel
                 ? room
-                  ? `${room.name}_공유.xlsx`
+                  ? `${room.peer.nickname}_공유.xlsx`
                   : "공유 메모"
                 : room
-                  ? `${room.name} 와의 교환 노트`
+                  ? `${room.peer.nickname} 와의 교환 노트`
                   : "교환 노트"}
             </b>
+            {room && (
+              <LangPairBadge
+                source={room.source_lang}
+                target={room.target_lang}
+                variant={excel ? "excel" : "note"}
+              />
+            )}
+            {room && (
+              <StudyingBadge
+                peerId={room.peer.id}
+                variant={excel ? "excel" : "note"}
+              />
+            )}
             {room && (
               <ChatHeaderMenu
                 excel={excel}
@@ -387,7 +403,7 @@ export function ChatWidget() {
 
           {room ? (
             <WidgetRoom
-              userId={room.userId}
+              roomId={room.id}
               excel={excel}
               noticeRef={noticeRef}
               goalsRef={goalsRef}
@@ -395,11 +411,20 @@ export function ChatWidget() {
           ) : (
             <WidgetList
               excel={excel}
-              onPick={(c) => setRoom({ userId: c.user_id, name: c.name })}
+              onPick={setRoom}
+              onCreate={() => setCreating(true)}
             />
           )}
         </div>
       )}
+      <RoomCreateSheet
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={(r) => {
+          setCreating(false);
+          setRoom(r);
+        }}
+      />
 
       {/* 런처 — 도킹 모드는 상시 열려있어 런처가 필요 없다. 오피스: 메모 pill / 그 외: 연필 노트 원형.
           열기 전용(토글 아님): 토글은 바깥클릭 닫힘과의 이벤트 순서 경합으로
@@ -455,25 +480,31 @@ export function ChatWidget() {
 function WidgetList({
   excel,
   onPick,
+  onCreate,
 }: {
   excel: boolean;
-  onPick: (c: ChatConversation) => void;
+  onPick: (r: ChatRoom) => void;
+  onCreate: () => void;
 }) {
-  const [items, setItems] = useState<ChatConversation[] | null>(null);
+  const [items, setItems] = useState<ChatRoom[] | null>(null);
 
   useEffect(() => {
     const load = () =>
-      chatApi
-        .conversations()
-        .then((res) => setItems(res.items))
+      roomsApi
+        .list()
+        .then(setItems)
         .catch(() => setItems([]));
     load();
     return onChatEvent((msg) => {
-      // chat.deleted: 삭제된 마지막 메시지 미리보기("삭제되었습니다") 즉시 반영
+      // chat.deleted: 삭제된 마지막 메시지 미리보기("삭제되었습니다") 즉시 반영.
+      // chat.room_created/room_closed/chat.matched: 새 방 등장·종료 반영
       if (
         msg.t === "chat.message" ||
         msg.t === "presence" ||
-        msg.t === "chat.deleted"
+        msg.t === "chat.deleted" ||
+        msg.t === "chat.room_created" ||
+        msg.t === "chat.room_closed" ||
+        msg.t === "chat.matched"
       )
         load();
     });
@@ -482,18 +513,31 @@ function WidgetList({
   return (
     <div className="flex-1 overflow-y-auto">
       {/* 브라우저 알림 허용 진입점 — 수락하면 백그라운드·오프라인에도 알림 */}
-      <div className="px-3 pt-2 pb-1">
+      <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+        <button
+          type="button"
+          onClick={onCreate}
+          className={
+            excel
+              ? "rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] px-2 py-1 text-xs font-bold hover:bg-[#e2efda]"
+              : "rounded-md border-2 border-dashed border-brick-blue/40 px-2 py-1 text-xs font-bold text-brick-blue hover:border-brick-blue/70"
+          }
+        >
+          + 새 노트
+        </button>
         <NotifyEnableButton
           label={excel ? "변경 알림 받기" : "새 글 알림 켜기"}
           variant={excel ? "excel" : "note"}
         />
       </div>
-      {items?.map((c) => (
+      {items?.map((r) => (
         <button
-          key={c.conversation_id}
+          key={r.id}
           type="button"
-          onClick={() => onPick(c)}
+          onClick={() => onPick(r)}
           className={`flex w-full items-center gap-2 px-3 py-2 text-left ${
+            r.status === "closed" ? "opacity-50" : ""
+          } ${
             excel
               ? "border-b border-[#e4e8ec] hover:bg-[#f6f8f9]"
               : "border-b border-ink/5 hover:bg-white"
@@ -501,7 +545,7 @@ function WidgetList({
         >
           <span
             className={`h-2 w-2 shrink-0 rounded-full ${
-              c.online
+              r.peer.online
                 ? excel
                   ? "bg-[#217346]"
                   : "bg-brick-green"
@@ -511,16 +555,23 @@ function WidgetList({
             }`}
           />
           <span className="min-w-0 flex-1">
-            <b className="block truncate text-sm">
-              {excel ? `${c.name}_공유.xlsx` : c.name}
-            </b>
+            <span className="flex items-center gap-1.5">
+              <b className="truncate text-sm">
+                {excel ? `${r.peer.nickname}_공유.xlsx` : r.peer.nickname}
+              </b>
+              <LangPairBadge
+                source={r.source_lang}
+                target={r.target_lang}
+                variant={excel ? "excel" : "note"}
+              />
+            </span>
             <span
               className={`block truncate text-xs ${excel ? "text-[#888]" : "opacity-50"}`}
             >
-              {c.last_message ?? (excel ? "-" : "첫 줄을 적어보세요")}
+              {r.preview ?? (excel ? "-" : "첫 줄을 적어보세요")}
             </span>
           </span>
-          {c.unread > 0 && (
+          {r.unread > 0 && (
             <span
               className={
                 excel
@@ -528,7 +579,7 @@ function WidgetList({
                   : "rounded-full bg-brick-red px-1.5 py-0.5 text-[10px] font-bold text-brick-label"
               }
             >
-              {excel ? `+${c.unread}` : c.unread}
+              {excel ? `+${r.unread}` : r.unread}
             </span>
           )}
         </button>
@@ -554,27 +605,32 @@ function WidgetList({
 /* --- 대화 뷰 (useChatRoom 재사용) -------------------------------------------- */
 
 function WidgetRoom({
-  userId,
+  roomId,
   excel,
   noticeRef,
   goalsRef,
 }: {
-  userId: number;
+  roomId: number;
   excel: boolean;
   noticeRef: RefObject<NoticeBarHandle | null>;
   goalsRef: RefObject<GoalBoardHandle | null>;
 }) {
-  const p = useChatRoom(userId);
+  const p = useChatRoom(roomId);
+  const closed = p.status === "closed";
 
   return (
     <>
-      <NoticeBar otherId={userId} excel={excel} apiRef={noticeRef} />
-      <GoalBoard
-        otherId={userId}
-        excel={excel}
-        peerName={p.peerName}
-        apiRef={goalsRef}
-      />
+      {p.peerId != null && (
+        <>
+          <NoticeBar otherId={p.peerId} excel={excel} apiRef={noticeRef} />
+          <GoalBoard
+            otherId={p.peerId}
+            excel={excel}
+            peerName={p.peerName}
+            apiRef={goalsRef}
+          />
+        </>
+      )}
       <div
         ref={p.listRef}
         onScroll={p.onScroll}
@@ -696,13 +752,13 @@ function WidgetRoom({
                   />
                 </button>
               )}
-              <span className="break-words whitespace-pre-wrap">
-                <LinkifiedText text={m.body} />
-              </span>
-              <TranslationLine
-                translation={m.translation}
-                variant={excel ? "excel" : "note"}
-              />
+              {!m.deleted && (
+                <MessageBody
+                  body={m.body}
+                  translation={m.translation}
+                  variant={excel ? "excel" : "note"}
+                />
+              )}
             </div>
           );
         })}
@@ -822,45 +878,55 @@ function WidgetRoom({
           </button>
         </div>
       )}
-      <div
-        className={`flex items-end gap-1 border-t p-1.5 ${
-          excel ? "border-[#d8dde3]" : "border-ink/10 bg-white"
-        }`}
-      >
-        <ChatToolsMenu
-          variant={excel ? "excel" : "note"}
-          onPickItem={p.onAttachItem}
-          onPickImage={p.onAttachImageFile}
-          onPickKaomoji={p.onPickKaomoji}
-        />
-        <ChatTextarea
-          value={p.input}
-          onChange={p.onInputChange}
-          onSend={p.onSend}
-          onPasteImage={p.onAttachImageFile}
-          placeholder={excel ? "내용 입력" : "한 줄 적기..."}
-          className={`min-h-11 min-w-0 flex-1 px-2 py-2.5 text-base focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px] ${
-            excel
-              ? "rounded-sm border border-[#c9cfd6] focus:border-[#217346]"
-              : "rounded-md border-2 border-ink/20 focus:border-brick-blue"
-          }`}
-        />
-        <button
-          type="button"
-          onClick={p.onSend}
-          disabled={
-            (!p.input.trim() && !p.attachedItem && !p.attachedImage) ||
-            Boolean(p.attachedImage?.uploading)
-          }
-          className={`min-h-9 px-2.5 text-xs font-bold disabled:opacity-40 ${
-            excel
-              ? "rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] hover:bg-[#e2efda]"
-              : "rounded-md bg-brick-blue text-brick-label hover:bg-brick-blue/85"
+      {closed ? (
+        <p
+          className={`border-t px-3 py-2 text-center text-xs ${
+            excel ? "border-[#d8dde3] text-[#999]" : "border-ink/10 opacity-50"
           }`}
         >
-          {excel ? "입력" : "적기"}
-        </button>
-      </div>
+          종료된 방이에요 — 더 이상 보낼 수 없어요
+        </p>
+      ) : (
+        <div
+          className={`flex items-end gap-1 border-t p-1.5 ${
+            excel ? "border-[#d8dde3]" : "border-ink/10 bg-white"
+          }`}
+        >
+          <ChatToolsMenu
+            variant={excel ? "excel" : "note"}
+            onPickItem={p.onAttachItem}
+            onPickImage={p.onAttachImageFile}
+            onPickKaomoji={p.onPickKaomoji}
+          />
+          <ChatTextarea
+            value={p.input}
+            onChange={p.onInputChange}
+            onSend={p.onSend}
+            onPasteImage={p.onAttachImageFile}
+            placeholder={roomInputPlaceholder(p.sourceLang, p.targetLang)}
+            className={`min-h-11 min-w-0 flex-1 px-2 py-2.5 text-base focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px] ${
+              excel
+                ? "rounded-sm border border-[#c9cfd6] focus:border-[#217346]"
+                : "rounded-md border-2 border-ink/20 focus:border-brick-blue"
+            }`}
+          />
+          <button
+            type="button"
+            onClick={p.onSend}
+            disabled={
+              (!p.input.trim() && !p.attachedItem && !p.attachedImage) ||
+              Boolean(p.attachedImage?.uploading)
+            }
+            className={`min-h-9 px-2.5 text-xs font-bold disabled:opacity-40 ${
+              excel
+                ? "rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] hover:bg-[#e2efda]"
+                : "rounded-md bg-brick-blue text-brick-label hover:bg-brick-blue/85"
+            }`}
+          >
+            {excel ? "입력" : "적기"}
+          </button>
+        </div>
+      )}
     </>
   );
 }

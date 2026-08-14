@@ -194,7 +194,7 @@ function ScrambleInner() {
         case "error":
           setError(
             msg.code === "sentences_insufficient"
-              ? "조립할 문장이 아직 부족해요 — 영상을 등록하면 문장이 쌓여요"
+              ? "조립할 문장이 아직 부족해요 — 영상을 등록하거나 채팅으로 모아보세요"
               : msg.code === "room_not_found"
                 ? "방을 찾을 수 없어요 — 코드를 확인해주세요"
                 : msg.code === "room_closed"

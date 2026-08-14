@@ -2,6 +2,7 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     ForeignKey,
+    Integer,
     Text,
     UniqueConstraint,
 )
@@ -75,6 +76,9 @@ class ItemOccurrence(Base, PkMixin):
     )
     context_en: Mapped[str | None] = mapped_column(Text)
     context_ko: Mapped[str | None] = mapped_column(Text)
+    # 채팅 발화 빈도 — chat 덱(내가 쓰는 말)만 사용, 그 외 NULL
+    # (docs/specs/my-phrases.md 활성 100개 순환 보충의 정렬 근거)
+    freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     item: Mapped[LearningItem] = relationship(back_populates="occurrences")
 

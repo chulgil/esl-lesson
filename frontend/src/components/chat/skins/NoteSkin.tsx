@@ -7,24 +7,29 @@ import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { GoalBoard, type GoalBoardHandle } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
-import { LinkifiedText } from "@/components/chat/LinkifiedText";
+import { LangPairBadge } from "@/components/chat/LangPairBadge";
+import { MessageBody } from "@/components/chat/MessageBody";
 import { NoticeBar, type NoticeBarHandle } from "@/components/chat/NoticeBar";
 import { NoticeSystemLine } from "@/components/chat/NoticeSystemLine";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
-import { TranslationLine } from "@/components/chat/TranslationLine";
+import { StudyingBadge } from "@/components/chat/StudyingBadge";
 import { BackLink } from "@/components/nav/BackLink";
+import { roomInputPlaceholder } from "@/lib/chat-lang";
 import { setChatPanelVisible } from "@/lib/chat-signals";
 import type { ChatSkinProps } from "./types";
 
 /** 교환 노트 스킨 — 종이 테마(노트·캔디·레고·헤냥이) 공용 위장.
  *  말풍선 없이 필기 줄 형식: 힐끗 보면 학습 노트로 보인다 (docs/specs/chat.md).
- *  내 글 = 파란 잉크, 상대 글 = 검정 잉크. 창은 화면 우측에 도킹(컴팩트 max-w-md)된다. */
-export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
+ *  내 글 = 파란 잉크, 상대 글 = 검정 잉크. 창은 화면 우측에 도킹(컴팩트 max-w-md)된다.
+ *  2026-08-14: 언어쌍 학습 방으로 확장 — 본문은 번역문 우선, [원문] 토글로 원문
+ *  확인 (docs/specs/chat-language-rooms.md §UX). */
+export function NoteSkin(p: ChatSkinProps & { roomId: number }) {
   // 패널 밖(빈 종이) 클릭 = 채팅 패널 토글 — 힐끗 보일 때 빈 노트로 위장 (2026-07-31)
   const [panelHidden, setPanelHidden] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const noticeRef = useRef<NoticeBarHandle>(null);
   const goalsRef = useRef<GoalBoardHandle>(null);
+  const closed = p.status === "closed";
   // 접힘 상태를 전역 신호로 — 접힌 동안은 "안 보는 중"이라 배지·알림이 살아야
   // 하고, 다시 펼치면 밀린 메시지를 읽음 처리한다 (2026-08-10 버그 픽스)
   function togglePanel() {
@@ -49,12 +54,10 @@ export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
           panelHidden ? "hidden" : ""
         }`}
       >
-        <header className="mb-2 flex items-center gap-3">
+        <header className="mb-2 flex flex-wrap items-center gap-2">
           <BackLink href="/chat" label="목록" />
-          <h1 className="flex min-w-0 flex-1 items-center gap-2 font-hand text-xl font-bold">
-            <span className="hl truncate">
-              {p.peerName || "..."} 와의 교환 노트
-            </span>
+          <h1 className="flex min-w-0 items-center gap-2 font-hand text-xl font-bold">
+            <span className="hl truncate">{p.peerName || "..."}</span>
             <span
               aria-label={p.online ? "접속 중" : "미접속"}
               title={p.online ? "접속 중" : "미접속"}
@@ -63,29 +66,53 @@ export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
               }`}
             />
           </h1>
-          <ChatHeaderMenu
-            excel={false}
-            items={[
-              {
-                label: () =>
-                  noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
-                onClick: () => noticeRef.current?.openEditor(),
-              },
-              {
-                label: "함께 목표",
-                onClick: () => goalsRef.current?.open(),
-              },
-            ]}
-          />
+          {p.sourceLang && p.targetLang && (
+            <LangPairBadge source={p.sourceLang} target={p.targetLang} />
+          )}
+          {closed && (
+            <span className="shrink-0 rounded-full border-2 border-ink/15 px-2 py-0.5 text-[10px] font-bold opacity-50">
+              종료
+            </span>
+          )}
+          <StudyingBadge peerId={p.peerId} />
+          <div className="ml-auto flex items-center gap-1">
+            {p.origin === "match" && !closed && (
+              <button
+                type="button"
+                onClick={p.onLeaveRoom}
+                className="min-h-9 rounded-md px-2 text-xs font-bold opacity-50 hover:opacity-90"
+              >
+                나가기
+              </button>
+            )}
+            <ChatHeaderMenu
+              excel={false}
+              items={[
+                {
+                  label: () =>
+                    noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
+                  onClick: () => noticeRef.current?.openEditor(),
+                },
+                {
+                  label: "함께 목표",
+                  onClick: () => goalsRef.current?.open(),
+                },
+              ]}
+            />
+          </div>
         </header>
 
-        <NoticeBar otherId={p.otherId} excel={false} apiRef={noticeRef} />
-        <GoalBoard
-          otherId={p.otherId}
-          excel={false}
-          peerName={p.peerName}
-          apiRef={goalsRef}
-        />
+        {p.peerId != null && (
+          <>
+            <NoticeBar otherId={p.peerId} excel={false} apiRef={noticeRef} />
+            <GoalBoard
+              otherId={p.peerId}
+              excel={false}
+              peerName={p.peerName}
+              apiRef={goalsRef}
+            />
+          </>
+        )}
 
         {p.error && <p className="mb-2 text-sm text-brick-red">{p.error}</p>}
 
@@ -199,10 +226,13 @@ export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
                     />
                   </button>
                 )}
-                <span className="break-words whitespace-pre-wrap">
-                  <LinkifiedText text={m.body} />
-                </span>
-                <TranslationLine translation={m.translation} />
+                {!m.deleted && (
+                  <MessageBody
+                    body={m.body}
+                    translation={m.translation}
+                    variant="note"
+                  />
+                )}
               </div>
             );
           })}
@@ -310,32 +340,38 @@ export function NoteSkin(p: ChatSkinProps & { otherId: number }) {
           </div>
         )}
 
-        <div className="mt-2 flex items-end gap-1.5">
-          <ChatToolsMenu
-            onPickItem={p.onAttachItem}
-            onPickImage={p.onAttachImageFile}
-            onPickKaomoji={p.onPickKaomoji}
-          />
-          <ChatTextarea
-            value={p.input}
-            onChange={p.onInputChange}
-            onSend={p.onSend}
-            onPasteImage={p.onAttachImageFile}
-            placeholder="한 줄 적기..."
-            className="min-h-11 flex-1 rounded-md border-2 border-ink/20 px-3 py-2.5 text-base transition-colors focus:border-brick-blue focus:outline-none sm:text-sm"
-          />
-          <button
-            type="button"
-            onClick={p.onSend}
-            disabled={
-              (!p.input.trim() && !p.attachedItem && !p.attachedImage) ||
-              Boolean(p.attachedImage?.uploading)
-            }
-            className="min-h-11 rounded-md bg-brick-blue px-3.5 text-sm font-bold text-brick-label transition-colors hover:bg-brick-blue/85 disabled:opacity-40"
-          >
-            적기
-          </button>
-        </div>
+        {closed ? (
+          <p className="mt-2 rounded-md border-2 border-ink/10 bg-white/60 px-3 py-3 text-center text-xs opacity-50">
+            종료된 방이에요 — 더 이상 글을 남길 수 없어요
+          </p>
+        ) : (
+          <div className="mt-2 flex items-end gap-1.5">
+            <ChatToolsMenu
+              onPickItem={p.onAttachItem}
+              onPickImage={p.onAttachImageFile}
+              onPickKaomoji={p.onPickKaomoji}
+            />
+            <ChatTextarea
+              value={p.input}
+              onChange={p.onInputChange}
+              onSend={p.onSend}
+              onPasteImage={p.onAttachImageFile}
+              placeholder={roomInputPlaceholder(p.sourceLang, p.targetLang)}
+              className="min-h-11 flex-1 rounded-md border-2 border-ink/20 px-3 py-2.5 text-base transition-colors focus:border-brick-blue focus:outline-none sm:text-sm"
+            />
+            <button
+              type="button"
+              onClick={p.onSend}
+              disabled={
+                (!p.input.trim() && !p.attachedItem && !p.attachedImage) ||
+                Boolean(p.attachedImage?.uploading)
+              }
+              className="min-h-11 rounded-md bg-brick-blue px-3.5 text-sm font-bold text-brick-label transition-colors hover:bg-brick-blue/85 disabled:opacity-40"
+            >
+              적기
+            </button>
+          </div>
+        )}
       </div>
     </main>
   );

@@ -213,7 +213,7 @@ function TypingRaceInner() {
         setError(
           {
             sentences_insufficient:
-              "타자연습에 쓸 문장이 부족해요 — 콘텐츠를 등록하면 문장이 쌓여요.",
+              "타자연습에 쓸 문장이 부족해요 — 콘텐츠를 등록하거나 채팅으로 모아보세요.",
             room_not_found: "방을 찾을 수 없어요.",
             room_full: "방이 가득 찼어요 (최대 4명).",
             room_closed: "방장이 나가서 방이 닫혔어요.",

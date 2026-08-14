@@ -77,15 +77,18 @@ async def _within_budget(db: AsyncSession, user_id: int) -> bool:
     return today_calls < cfg.translate_user_daily_limit
 
 
-async def translate_chat(
-    db: AsyncSession, user_id: int, text: str, settings: UserSettings | None
-) -> dict | None:
-    """캐시 → 한도 게이트 → 엔진 체인. 성공 시 {"lang": ..., "text": ...}, 아니면 None."""
+async def translate_to(db: AsyncSession, user_id: int, text: str, target: str) -> dict | None:
+    """캐시 → 한도 게이트 → 엔진 체인. 타깃 언어를 호출자가 직접 지정한다 —
+    언어 학습 방의 번역 방향(방의 target_lang)에 사용 (docs/specs/chat-language-rooms.md).
+
+    detect_lang(text) == target 이면 이미 목표 언어로 쓴 것이므로 번역하지 않는다
+    (본문 = 원문 그대로 — 성장 루프의 목표 상태). 성공 시 {"lang": ..., "text": ...},
+    아니면 None. translate_chat 은 개인 설정으로 target 을 계산해 이 함수에 위임한다.
+    """
     # 이모티콘·초성 전용 메시지는 번역 대상 아님 (2026-08-12 실측 — 음차 오염 방지)
     if not has_translatable_text(text):
         return None
-    target = _target_lang(text, settings)
-    if target is None:
+    if detect_lang(text) == target:
         return None
 
     key = normalize_text_key(text)
@@ -137,6 +140,34 @@ async def translate_chat(
     db.add(TranslationUsage(user_id=user_id, chars=len(text), engine=engine))
     await db.flush()
     return {"lang": target, "text": translated}
+
+
+async def translate_chat(
+    db: AsyncSession, user_id: int, text: str, settings: UserSettings | None
+) -> dict | None:
+    """개인 설정(primary/learning) 기준으로 target 을 계산해 translate_to 에 위임 —
+    레거시 채팅 번역(chat_translate 토글, docs/specs/chat-translation.md)에서 계속 사용."""
+    if not has_translatable_text(text):
+        return None
+    target = _target_lang(text, settings)
+    if target is None:
+        return None
+    return await translate_to(db, user_id, text, target)
+
+
+async def cache_lookup(db: AsyncSession, text: str, target: str) -> str | None:
+    """전역 번역 캐시만 조회 — 엔진 호출·예산 소모 없음 (방 목록 미리보기 등 저비용 경로,
+    docs/specs/chat-language-rooms.md). 캐시 미스면 번역을 시도하지 않고 None."""
+    if not has_translatable_text(text) or detect_lang(text) == target:
+        return None
+    key = normalize_text_key(text)
+    return (
+        await db.execute(
+            select(ChatTranslation.text).where(
+                ChatTranslation.text_key == key, ChatTranslation.target_lang == target
+            )
+        )
+    ).scalar_one_or_none()
 
 
 async def _translate_via_chain(text: str, target: str) -> tuple[str, str] | None:

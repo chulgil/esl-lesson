@@ -342,7 +342,9 @@ def test_chat_push_payload_is_content_free():
     payload = chat_service.chat_push_payload(sender_id=7, conversation_id=42)
 
     assert payload["kind"] == "chat"  # 워커가 "내용 없는 알림"으로 분기하는 표식
-    assert payload["url"] == "/chat/7"
+    # 방 기준 딥링크 — 상대 기준 레거시 경로는 복수 방을 구분하지 못한다
+    # (docs/specs/chat-language-rooms.md 결정 #14)
+    assert payload["url"] == "/chat/room/42"
     assert payload["tag"] == "chat-42"
     # 폴백 문구도 중립 — 구형 워커에서도 내용이 새지 않는다
     assert payload["title"] and payload["body"]

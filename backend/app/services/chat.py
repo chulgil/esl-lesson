@@ -15,8 +15,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ChatMessage, ChatRead, Conversation, Friendship, LearningItem, User
+from app.services import translation
 from app.services.friends import are_friends
 from app.services.game.invites import invite_hub
+from app.services.langs import SUPPORTED_LANGS
 from app.services.visibility import visible_item_clause
 
 logger = logging.getLogger(__name__)
@@ -122,30 +124,117 @@ def _pair(a: int, b: int) -> tuple[int, int]:
     return (a, b) if a < b else (b, a)
 
 
-async def get_conversation(db: AsyncSession, a: int, b: int) -> Conversation | None:
+def validate_lang_pair(source_lang: str, target_lang: str) -> None:
+    """방 생성/매칭 참가 공용 검증 (docs/specs/chat-language-rooms.md)."""
+    if source_lang not in SUPPORTED_LANGS or target_lang not in SUPPORTED_LANGS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "unsupported_lang")
+    if source_lang == target_lang:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "same_lang")
+
+
+async def _oldest_active_room(db: AsyncSession, a: int, b: int) -> Conversation | None:
     lo, hi = _pair(a, b)
     return (
         await db.execute(
-            select(Conversation).where(Conversation.user_lo_id == lo, Conversation.user_hi_id == hi)
+            select(Conversation)
+            .where(
+                Conversation.user_lo_id == lo,
+                Conversation.user_hi_id == hi,
+                Conversation.status == "active",
+            )
+            .order_by(Conversation.id.asc())
+            .limit(1)
         )
     ).scalar_one_or_none()
 
 
-async def get_or_create_conversation(db: AsyncSession, a: int, b: int) -> Conversation:
-    conv = await get_conversation(db, a, b)
-    if conv is not None:
-        return conv
+async def _oldest_room_any_status(db: AsyncSession, a: int, b: int) -> Conversation | None:
     lo, hi = _pair(a, b)
-    conv = Conversation(user_lo_id=lo, user_hi_id=hi)
+    return (
+        await db.execute(
+            select(Conversation)
+            .where(Conversation.user_lo_id == lo, Conversation.user_hi_id == hi)
+            .order_by(Conversation.id.asc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def get_room_by_langs(
+    db: AsyncSession, a: int, b: int, source_lang: str, target_lang: str
+) -> Conversation | None:
+    lo, hi = _pair(a, b)
+    return (
+        await db.execute(
+            select(Conversation).where(
+                Conversation.user_lo_id == lo,
+                Conversation.user_hi_id == hi,
+                Conversation.source_lang == source_lang,
+                Conversation.target_lang == target_lang,
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def get_or_create_room(
+    db: AsyncSession,
+    a: int,
+    b: int,
+    source_lang: str,
+    target_lang: str,
+    origin: str = "friend",
+) -> tuple[Conversation, bool]:
+    """언어쌍 방 get-or-create (docs/specs/chat-language-rooms.md 결정 #1, #9).
+
+    종료된 방을 다시 찾으면 재오픈한다 — "이미 있는 방 열기" UX와 매칭 재회가
+    이 경로를 공유한다. 반환 (방, 신규 생성 여부)."""
+    conv = await get_room_by_langs(db, a, b, source_lang, target_lang)
+    if conv is not None:
+        if conv.status == "closed":
+            conv.status = "active"
+            conv.closed_by = None
+            conv.closed_at = None
+            await db.commit()
+        return conv, False
+    lo, hi = _pair(a, b)
+    conv = Conversation(
+        user_lo_id=lo,
+        user_hi_id=hi,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        origin=origin,
+    )
     db.add(conv)
     try:
         await db.commit()
     except IntegrityError:
-        # 동시 첫 전송 레이스 — 상대가 먼저 만든 행 사용
+        # 동시 첫 생성 레이스 — 상대가 먼저 만든 행 사용
         await db.rollback()
-        conv = await get_conversation(db, a, b)
+        conv = await get_room_by_langs(db, a, b, source_lang, target_lang)
         if conv is None:  # pragma: no cover
             raise
+        return conv, False
+    await db.refresh(conv)
+    return conv, True
+
+
+async def get_conversation(db: AsyncSession, a: int, b: int) -> Conversation | None:
+    """레거시 경로의 대표 방 — 활성 방이 있으면 가장 오래된 활성 방, 전부 종료됐으면
+    기록 보존을 위해 가장 오래된 방을 그대로 반환한다 (조회는 항상 허용,
+    docs/specs/chat-language-rooms.md 결정 #2)."""
+    conv = await _oldest_active_room(db, a, b)
+    if conv is not None:
+        return conv
+    return await _oldest_room_any_status(db, a, b)
+
+
+async def get_or_create_conversation(db: AsyncSession, a: int, b: int) -> Conversation:
+    """레거시 전송 경로 — 가장 오래된 활성 방, 없으면 ko→en 신규(또는 종료된 ko/en
+    방 재오픈) — get_or_create_room 에 위임한다 (스펙 결정 #2, #8)."""
+    conv = await _oldest_active_room(db, a, b)
+    if conv is not None:
+        return conv
+    conv, _created = await get_or_create_room(db, a, b, "ko", "en", origin="friend")
     return conv
 
 
@@ -169,34 +258,29 @@ async def snapshot_item(db: AsyncSession, user_id: int, item_id: int) -> dict:
     }
 
 
-async def send_message(
+def _validate_body(body: str, item_id: int | None, image_path: str | None) -> str:
+    body = body.strip()
+    if len(body) > BODY_MAX:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "body_too_long")
+    if not body and item_id is None and image_path is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty_message")
+    return body
+
+
+async def _send_into_conversation(
     db: AsyncSession,
+    conv: Conversation,
     sender: User,
-    to_user_id: int,
     body: str,
     client_msg_id: str,
     item_id: int | None = None,
     image_path: str | None = None,
     reply_to_id: int | None = None,
 ) -> tuple[dict, bool]:
-    """저장 + 캐시 갱신. 반환 (메시지 dict, 신규 여부). 멱등: 같은 client_msg_id 는 기존 행."""
-    if to_user_id == sender.id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot_chat_self")
-    body = body.strip()
-    if len(body) > BODY_MAX:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "body_too_long")
-    if not body and item_id is None and image_path is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty_message")
+    """검증된 방에 실제 저장 — send_message(레거시)/send_room_message 공용 코어.
 
-    # 친구 삭제 후에는 조회만 허용, 전송은 차단 (기록 보존 원칙)
-    if not await are_friends(db, sender.id, to_user_id):
-        conv = await get_conversation(db, sender.id, to_user_id)
-        if conv is not None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "not_friends")
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "friend_not_found")
-
+    저장 + 캐시 갱신. 반환 (메시지 dict, 신규 여부). 멱등: 같은 client_msg_id 는 기존 행."""
     item_ref = await snapshot_item(db, sender.id, item_id) if item_id is not None else None
-    conv = await get_or_create_conversation(db, sender.id, to_user_id)
 
     # 답장 대상 검증 — 반드시 같은 대화의 메시지 (타 대화 인용 = 정보 유출 경로).
     # 시스템 줄(kind 있음)은 인용 대상이 아님 (docs/specs/chat-notice.md)
@@ -228,6 +312,7 @@ async def send_message(
     db.add(msg)
     conv.last_message_at = datetime.now(UTC)
     conv_id = conv.id  # rollback 은 ORM 객체를 만료시킨다 — 값으로 캡처
+    other_id = conv.user_hi_id if conv.user_lo_id == sender.id else conv.user_lo_id
     try:
         await db.commit()
     except IntegrityError:
@@ -247,8 +332,61 @@ async def send_message(
     data = (await attach_reply_previews(db, [message_dict(msg)]))[0]
     if conv_id in _recent:
         _recent[conv_id].append(data)
-    _invalidate_unread(to_user_id)
+    _invalidate_unread(other_id)
     return data, True
+
+
+async def send_message(
+    db: AsyncSession,
+    sender: User,
+    to_user_id: int,
+    body: str,
+    client_msg_id: str,
+    item_id: int | None = None,
+    image_path: str | None = None,
+    reply_to_id: int | None = None,
+) -> tuple[dict, bool]:
+    """레거시 상대 기준 전송 — 가장 오래된 활성 방으로 위임(없으면 ko→en 신규,
+    docs/specs/chat-language-rooms.md 결정 #2)."""
+    if to_user_id == sender.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot_chat_self")
+    body = _validate_body(body, item_id, image_path)
+
+    # 친구 삭제 후에는 조회만 허용, 전송은 차단 (기록 보존 원칙)
+    if not await are_friends(db, sender.id, to_user_id):
+        conv = await get_conversation(db, sender.id, to_user_id)
+        if conv is not None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "not_friends")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "friend_not_found")
+
+    conv = await get_or_create_conversation(db, sender.id, to_user_id)
+    return await _send_into_conversation(
+        db, conv, sender, body, client_msg_id, item_id, image_path, reply_to_id
+    )
+
+
+async def send_room_message(
+    db: AsyncSession,
+    sender: User,
+    room: Conversation,
+    body: str,
+    client_msg_id: str,
+    item_id: int | None = None,
+    image_path: str | None = None,
+    reply_to_id: int | None = None,
+) -> tuple[dict, bool]:
+    """방 기준 전송 — origin/status 게이트만 다르고 나머지는 레거시와 공유
+    (docs/specs/chat-language-rooms.md 접근 규칙)."""
+    body = _validate_body(body, item_id, image_path)
+    if room.status == "closed":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "room_closed")
+    if room.origin == "friend":
+        other_id = room.user_hi_id if room.user_lo_id == sender.id else room.user_lo_id
+        if not await are_friends(db, sender.id, other_id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "not_friends")
+    return await _send_into_conversation(
+        db, room, sender, body, client_msg_id, item_id, image_path, reply_to_id
+    )
 
 
 async def delete_message(db: AsyncSession, user: User, message_id: int) -> None:
@@ -311,6 +449,34 @@ async def _load_recent(db: AsyncSession, conversation_id: int) -> deque[dict]:
     return buf
 
 
+async def _messages_for_conv(
+    db: AsyncSession,
+    conv_id: int,
+    before: int | None = None,
+    limit: int = RECENT_CACHE_SIZE,
+) -> list[dict]:
+    """conv_id 를 이미 아는 경로(방 기준 조회)의 공용 코어 — get_messages 와 공유."""
+    limit = max(1, min(limit, RECENT_CACHE_SIZE))
+    if before is None:
+        buf = _recent.get(conv_id)
+        if buf is None:
+            buf = await _load_recent(db, conv_id)
+        return await attach_reply_previews(db, list(buf)[-limit:])
+    rows = (
+        (
+            await db.execute(
+                select(ChatMessage)
+                .where(ChatMessage.conversation_id == conv_id, ChatMessage.id < before)
+                .order_by(ChatMessage.id.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return await attach_reply_previews(db, [message_dict(m) for m in reversed(rows)])
+
+
 async def get_messages(
     db: AsyncSession,
     user_id: int,
@@ -322,25 +488,17 @@ async def get_messages(
     conv = await get_conversation(db, user_id, other_id)
     if conv is None:
         return []
-    limit = max(1, min(limit, RECENT_CACHE_SIZE))
-    if before is None:
-        buf = _recent.get(conv.id)
-        if buf is None:
-            buf = await _load_recent(db, conv.id)
-        return await attach_reply_previews(db, list(buf)[-limit:])
-    rows = (
-        (
-            await db.execute(
-                select(ChatMessage)
-                .where(ChatMessage.conversation_id == conv.id, ChatMessage.id < before)
-                .order_by(ChatMessage.id.desc())
-                .limit(limit)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return await attach_reply_previews(db, [message_dict(m) for m in reversed(rows)])
+    return await _messages_for_conv(db, conv.id, before, limit)
+
+
+async def get_room_messages(
+    db: AsyncSession,
+    room_id: int,
+    before: int | None = None,
+    limit: int = RECENT_CACHE_SIZE,
+) -> list[dict]:
+    """방 id 를 이미 아는 경로 — GET /api/chat/rooms/{id}/messages 전용."""
+    return await _messages_for_conv(db, room_id, before, limit)
 
 
 async def list_conversations(db: AsyncSession, user: User) -> list[dict]:
@@ -417,6 +575,106 @@ async def list_conversations(db: AsyncSession, user: User) -> list[dict]:
     return out
 
 
+def _room_payload(
+    conv: Conversation, peer: User | None, unread: int = 0, preview: str | None = None
+) -> dict:
+    return {
+        "id": conv.id,
+        "peer": (
+            {"id": peer.id, "nickname": peer.nickname, "online": invite_hub.online(peer.id)}
+            if peer is not None
+            else None
+        ),
+        "source_lang": conv.source_lang,
+        "target_lang": conv.target_lang,
+        "origin": conv.origin,
+        "status": conv.status,
+        "last_message_at": conv.last_message_at.isoformat() if conv.last_message_at else None,
+        "unread": unread,
+        "preview": preview,
+    }
+
+
+async def room_dict(
+    db: AsyncSession,
+    conv: Conversation,
+    viewer_id: int,
+    unread: int = 0,
+    preview: str | None = None,
+) -> dict:
+    """단건 방 조회 컨텍스트(생성·헤더·WS 이벤트) 공용 — viewer_id 기준 상대를 조회한다."""
+    peer_id = conv.user_hi_id if conv.user_lo_id == viewer_id else conv.user_lo_id
+    peer = await db.get(User, peer_id)
+    return _room_payload(conv, peer, unread, preview)
+
+
+async def list_rooms(db: AsyncSession, user: User) -> list[dict]:
+    """GET /api/chat/rooms — last_message_at DESC, 미리보기는 방 target_lang 번역
+    캐시 히트 시 번역문 우선 (docs/specs/chat-language-rooms.md)."""
+    convs = (
+        (
+            await db.execute(
+                select(Conversation)
+                .where(
+                    or_(
+                        Conversation.user_lo_id == user.id,
+                        Conversation.user_hi_id == user.id,
+                    )
+                )
+                .order_by(Conversation.last_message_at.desc().nulls_last())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not convs:
+        return []
+    conv_ids = [c.id for c in convs]
+    peer_ids = [c.user_hi_id if c.user_lo_id == user.id else c.user_lo_id for c in convs]
+    peers = {
+        u.id: u for u in (await db.execute(select(User).where(User.id.in_(peer_ids)))).scalars()
+    }
+    last_rows = (
+        (
+            await db.execute(
+                select(ChatMessage).where(
+                    ChatMessage.id.in_(
+                        select(func.max(ChatMessage.id))
+                        .where(ChatMessage.conversation_id.in_(conv_ids))
+                        .group_by(ChatMessage.conversation_id)
+                    )
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    last_by_conv = {m.conversation_id: m for m in last_rows}
+    unread_by_conv = await _unread_by_conversation(db, user.id, conv_ids)
+
+    out = []
+    for conv in convs:
+        peer = peers.get(conv.user_hi_id if conv.user_lo_id == user.id else conv.user_lo_id)
+        last = last_by_conv.get(conv.id)
+        preview = None
+        if last is not None:
+            if last.deleted_at is not None:
+                preview = "삭제되었습니다"
+            elif last.body:
+                cached = (
+                    None
+                    if last.kind
+                    else await translation.cache_lookup(db, last.body, conv.target_lang)
+                )
+                preview = cached or last.body
+            else:
+                preview = "[사진]" if last.image_path else "[단어 카드]"
+        out.append(
+            _room_payload(conv, peer, unread=unread_by_conv.get(conv.id, 0), preview=preview)
+        )
+    return out
+
+
 async def _unread_by_conversation(
     db: AsyncSession, user_id: int, conv_ids: list[int]
 ) -> dict[int, int]:
@@ -474,11 +732,10 @@ async def unread_total(db: AsyncSession, user_id: int) -> int:
 # --- 읽음 ----------------------------------------------------------------------
 
 
-async def mark_read(db: AsyncSession, user_id: int, other_id: int) -> dict | None:
-    """지금까지의 메시지를 읽음 처리. 반환값은 상대에게 보낼 chat.read 페이로드."""
-    conv = await get_conversation(db, user_id, other_id)
-    if conv is None:
-        return None
+async def mark_read_conv(db: AsyncSession, conv: Conversation, user_id: int) -> dict:
+    """conv 를 이미 아는 경로(방 기준 읽음)의 공용 코어 — mark_read 와 공유.
+
+    반환값은 상대에게 보낼 chat.read 페이로드."""
     last_id = (
         await db.execute(
             select(func.max(ChatMessage.id)).where(ChatMessage.conversation_id == conv.id)
@@ -501,6 +758,28 @@ async def mark_read(db: AsyncSession, user_id: int, other_id: int) -> dict | Non
         "user_id": user_id,
         "last_read_message_id": last_id,
     }
+
+
+async def mark_read(db: AsyncSession, user_id: int, other_id: int) -> dict | None:
+    """지금까지의 메시지를 읽음 처리 (레거시 상대 기준). 반환값은 상대에게 보낼
+    chat.read 페이로드."""
+    conv = await get_conversation(db, user_id, other_id)
+    if conv is None:
+        return None
+    return await mark_read_conv(db, conv, user_id)
+
+
+async def leave_room(db: AsyncSession, conv: Conversation, user_id: int) -> int | None:
+    """방 나가기 — 멤버 누구나 → status='closed' (양쪽 종료). 이미 종료된 방은
+    멱등 no-op(None 반환, 상대에게 재알림하지 않음). 성공 시 상대 user_id 반환
+    (docs/specs/chat-language-rooms.md 접근 규칙)."""
+    if conv.status == "closed":
+        return None
+    conv.status = "closed"
+    conv.closed_by = user_id
+    conv.closed_at = datetime.now(UTC)
+    await db.commit()
+    return conv.user_hi_id if conv.user_lo_id == user_id else conv.user_lo_id
 
 
 async def get_read_positions(db: AsyncSession, conversation_id: int) -> dict[int, int]:
@@ -606,11 +885,14 @@ def chat_push_payload(sender_id: int, conversation_id: int) -> dict:
 
     표시 문구는 `kind: "chat"` 표식을 보고 서비스 워커가 수신자 테마 라벨
     ("교환 노트"/"공유 문서" 등)로 갈아끼운다. 여기 값은 표식을 모르는 구형
-    워커를 위한 폴백이라 그 자체로도 중립이어야 한다."""
+    워커를 위한 폴백이라 그 자체로도 중립이어야 한다.
+
+    url 은 방 기준 딥링크(`/chat/room/{id}`) — 상대 기준 레거시 경로는
+    복수 방을 구분하지 못한다 (docs/specs/chat-language-rooms.md 결정 #14)."""
     return {
         "kind": "chat",
         "title": "교환 노트",
         "body": "새 글이 있어요",
-        "url": f"/chat/{sender_id}",
+        "url": f"/chat/room/{conversation_id}",
         "tag": f"chat-{conversation_id}",
     }

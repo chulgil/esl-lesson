@@ -1,9 +1,43 @@
-/** 친구 1:1 채팅 API — 전송은 REST 멱등 POST, 수신은 WS (docs/specs/chat.md) */
+/** 친구 1:1 채팅 API — 전송은 REST 멱등 POST, 수신은 WS (docs/specs/chat.md).
+ *  2026-08-14: 언어쌍 학습 방(room)으로 확장 — docs/specs/chat-language-rooms.md.
+ *  conversations 테이블 확장이 곧 room 이라 room.id === conversation_id. */
+
+export type SupportedLang = "ko" | "en" | "ja";
 
 /** 자동 번역 결과 — 상대 언어 자동 감지 후 내 주언어/학습언어로 번역 (i18n) */
 export interface Translation {
-  lang: "ko" | "en" | "ja";
+  lang: SupportedLang;
   text: string;
+}
+
+export type RoomOrigin = "friend" | "match";
+export type RoomStatus = "active" | "closed";
+
+export interface ChatRoomPeer {
+  id: number;
+  nickname: string;
+  online: boolean;
+}
+
+/** 언어쌍 학습 방 — 상대 1명 + 언어쌍(source→target) 단위. 같은 상대와도
+ *  언어쌍이 다르면 별개 방이 될 수 있다 (chat-language-rooms.md §데이터 모델) */
+export interface ChatRoom {
+  id: number;
+  peer: ChatRoomPeer;
+  source_lang: SupportedLang;
+  target_lang: SupportedLang;
+  origin: RoomOrigin;
+  status: RoomStatus;
+  last_message_at: string | null;
+  unread: number;
+  /** 목록 미리보기 — 번역문 우선 (서버가 결정) */
+  preview: string | null;
+}
+
+export interface ChatRoomMessagesResponse {
+  room: ChatRoom;
+  items: ChatMessage[];
+  reads: Record<string, number>;
 }
 
 export interface ChatMessage {
@@ -35,16 +69,6 @@ export interface ChatMessage {
   /** 공지 변경 시스템 줄 (docs/specs/chat-notice.md) — null/미정의면 일반 메시지.
    *  notice_set 의 body 는 공지 첫 줄 스냅샷, notice_clear 의 body 는 빈 문자열 */
   kind?: "notice_set" | "notice_clear" | null;
-}
-
-export interface ChatConversation {
-  conversation_id: number;
-  user_id: number;
-  name: string;
-  online: boolean;
-  last_message: string | null;
-  last_message_at: string | null;
-  unread: number;
 }
 
 export interface ShareableItem {
@@ -103,41 +127,12 @@ export const chatApi = {
   deleteMessage: (id: number) =>
     request<void>(`/api/chat/messages/${id}`, { method: "DELETE" }),
 
-  conversations: () =>
-    request<{ items: ChatConversation[] }>("/api/chat/conversations"),
   unreadTotal: () => request<{ total: number }>("/api/chat/unread-total"),
-  messages: (userId: number, before?: number) =>
-    request<{
-      items: ChatMessage[];
-      reads: Record<string, number>;
-      online: boolean;
-      peer: { user_id: number; name: string } | null;
-      /** 이 대화에 자동번역이 켜져 있는가 — WS 수신 메시지 번역 조회 여부 판단 */
-      translate: boolean;
-      translate_mine: boolean;
-      translate_theirs: boolean;
-    }>(`/api/chat/with/${userId}/messages${before ? `?before=${before}` : ""}`),
   /** WS 로 도착한 메시지의 번역 — 비동기 완료 후 1회 조회 (i18n) */
   translation: (id: number) =>
     request<{ translation: Translation | null }>(
       `/api/chat/messages/${id}/translation`,
     ),
-  send: (body: {
-    to_user_id: number;
-    body: string;
-    client_msg_id: string;
-    item_id?: number;
-    image_id?: string;
-    reply_to_id?: number;
-  }) =>
-    request<ChatMessage & { created: boolean }>("/api/chat/messages", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  markRead: (userId: number) =>
-    request<{ ok: boolean }>(`/api/chat/with/${userId}/read`, {
-      method: "POST",
-    }),
   uploadImage: async (file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -190,6 +185,60 @@ export const chatApi = {
     }),
   clearNotice: (otherId: number) =>
     request<void>(`/api/chat/with/${otherId}/notice`, { method: "DELETE" }),
+};
+
+/** 언어 학습 대화방 API (docs/specs/chat-language-rooms.md §API) */
+export const roomsApi = {
+  list: () => request<ChatRoom[]>("/api/chat/rooms"),
+  create: (
+    peerId: number,
+    sourceLang: SupportedLang,
+    targetLang: SupportedLang,
+  ) =>
+    request<{ room: ChatRoom; created: boolean }>("/api/chat/rooms", {
+      method: "POST",
+      body: JSON.stringify({
+        peer_id: peerId,
+        source_lang: sourceLang,
+        target_lang: targetLang,
+      }),
+    }),
+  get: (id: number) => request<ChatRoom>(`/api/chat/rooms/${id}`),
+  messages: (id: number, before?: number) =>
+    request<ChatRoomMessagesResponse>(
+      `/api/chat/rooms/${id}/messages${before ? `?before=${before}` : ""}`,
+    ),
+  markRead: (id: number) =>
+    request<{ ok: boolean }>(`/api/chat/rooms/${id}/read`, { method: "POST" }),
+  /** 나가기 — 멱등, closed 로 전환 (204) */
+  leave: (id: number) =>
+    request<void>(`/api/chat/rooms/${id}/leave`, { method: "POST" }),
+  send: (body: {
+    room_id: number;
+    body: string;
+    client_msg_id: string;
+    item_id?: number;
+    image_id?: string;
+    reply_to_id?: number;
+  }) =>
+    request<ChatMessage & { created: boolean }>("/api/chat/messages", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+};
+
+/** 랜덤 매칭 대기열 (인프로세스, chat-language-rooms.md §랜덤 매칭) */
+export const matchApi = {
+  join: (sourceLang: SupportedLang, targetLang: SupportedLang) =>
+    request<{ room: ChatRoom } | { waiting: true }>("/api/chat/match", {
+      method: "POST",
+      body: JSON.stringify({
+        source_lang: sourceLang,
+        target_lang: targetLang,
+      }),
+    }),
+  status: () => request<{ waiting: boolean }>("/api/chat/match"),
+  cancel: () => request<void>("/api/chat/match", { method: "DELETE" }),
 };
 
 /** 멱등키 — 재시도해도 서버에 한 건만 저장된다 */

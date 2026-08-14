@@ -20,3 +20,17 @@ async def are_friends(db: AsyncSession, user_a: int, user_b: int) -> bool:
         )
     ).scalar_one_or_none()
     return row is not None
+
+
+async def friend_ids_of(db: AsyncSession, user_id: int) -> list[int]:
+    """수락(accepted)된 친구의 user_id 목록 — 학습 중 알림 등 프레즌스 릴레이 대상 조회
+    (docs/specs/study-spectate.md §진입 경로 재설계)."""
+    rows = (
+        await db.execute(
+            select(Friendship).where(
+                Friendship.status == "accepted",
+                or_(Friendship.requester_id == user_id, Friendship.addressee_id == user_id),
+            )
+        )
+    ).scalars()
+    return [r.addressee_id if r.requester_id == user_id else r.requester_id for r in rows]

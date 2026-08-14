@@ -1,5 +1,7 @@
 /** 워드 테트리스 WS 클라이언트 (docs/specs/word-tetris.md 프로토콜) */
 
+import type { ChatRoom, Translation } from "@/lib/chat-api";
+import { readGameLang } from "@/lib/game-lang";
 import { getAppTheme } from "@/lib/theme";
 
 export interface BrickState {
@@ -370,7 +372,11 @@ export type StMsg =
   | { t: "st.left"; name: string }
   | { t: "st.chat"; name: string; text: string }
   | { t: "st.cheer"; name: string; kind: string }
-  | { t: "st.end" };
+  | { t: "st.end" }
+  // 친구 학습 시작 알림 (docs/specs/study-spectate.md 진입 경로 #1) — 접속 중
+  // 친구에게만, 관전 ON(opt-in) 인 학습자만 릴레이된다
+  | { t: "st.friend_studying"; user_id: number; nickname: string; code: string }
+  | { t: "st.friend_study_end"; user_id: number };
 
 /** 친구 게임 초대 (P2) */
 export type IvMsg =
@@ -405,6 +411,9 @@ export type ChatServerMsg =
       created_at: string | null;
       /** 공지 변경 시스템 줄 (docs/specs/chat-notice.md) — null/미정의면 일반 메시지 */
       kind?: "notice_set" | "notice_clear" | null;
+      /** 방 기준 자동 번역 — room_id 로 보낸 메시지는 항상 동봉된다
+       *  (chat-language-rooms.md §번역 규칙). 레거시 to_user_id 전송은 null */
+      translation?: Translation | null;
     }
   | {
       t: "chat.read";
@@ -420,6 +429,10 @@ export type ChatServerMsg =
   | { t: "goal.sync"; conversation_id: number }
   // 공지 등록/수정/내리기 브로드캐스트 — 클라는 재조회 (docs/specs/chat-notice.md)
   | { t: "chat.notice"; conversation_id: number }
+  // 언어 학습 방 이벤트 (docs/specs/chat-language-rooms.md §WS 이벤트)
+  | { t: "chat.matched"; room: ChatRoom }
+  | { t: "chat.room_created"; room: ChatRoom }
+  | { t: "chat.room_closed"; room_id: number }
   // 클라 합성 신호 (서버 발신 아님) — WS 재접속 시 열린 대화방 재동기화 트리거
   | { t: "chat.resync" };
 
@@ -445,7 +458,7 @@ export type ServerMsg =
   | BgMsg
   | StMsg
   | { t: "queue.waiting" }
-  | { t: "room.created"; code: string }
+  | { t: "room.created"; code: string; lang?: string }
   | { t: "attack.recv"; count: number }
   // 테트리스 종료 시 못 지운 단어 — 원탭 학습 추가 (P0-A 게임-복습 편입)
   | { t: "match.review"; items: GameReviewItem[] }
@@ -491,6 +504,13 @@ export class GameSocket {
     }
   }
 
+  /** 게임 언어 — 허브 언어 칩 선택값을 시작·방 생성 메시지에 자동 동봉
+   *  (테마 동봉과 동일한 송신부 단일 지점 패턴). 미선택(null)이면 필드 생략
+   *  — 서버 resolve_lang 이 학습언어[0] 로 보완한다. */
+  private gameLang(): string | undefined {
+    return readGameLang() ?? undefined;
+  }
+
   /** 하트비트 — 서버가 pong 응답 + last_seen 갱신 (좀비 판정 근거) */
   ping(): void {
     this.send({ t: "ping" });
@@ -507,10 +527,11 @@ export class GameSocket {
       quiz,
       bot_level: botLevel,
       content_ids: contentIds,
+      lang: this.gameLang(),
     });
   }
   joinPvp(quiz: string): void {
-    this.send({ t: "queue.join", mode: "pvp", quiz });
+    this.send({ t: "queue.join", mode: "pvp", quiz, lang: this.gameLang() });
   }
   leaveQueue(): void {
     this.send({ t: "queue.leave" });
@@ -519,7 +540,7 @@ export class GameSocket {
     this.send({ t: "chat.typing", to: toUserId });
   }
   createRoom(quiz: string, contentIds?: number[]): void {
-    this.send({ t: "room.create", quiz, content_ids: contentIds });
+    this.send({ t: "room.create", quiz, content_ids: contentIds, lang: this.gameLang() });
   }
   joinRoom(code: string): void {
     this.send({ t: "room.join", code });
@@ -544,10 +565,11 @@ export class GameSocket {
       bots,
       content_ids: contentIds,
       variant,
+      lang: this.gameLang(),
     });
   }
   qrCreate(contentIds?: number[], variant: string = "meaning"): void {
-    this.send({ t: "qr.create", content_ids: contentIds, variant });
+    this.send({ t: "qr.create", content_ids: contentIds, variant, lang: this.gameLang() });
   }
   qrJoin(code: string): void {
     this.send({ t: "qr.join", code });
@@ -562,10 +584,10 @@ export class GameSocket {
     this.send({ t: "qr.leave" });
   }
   tpSolo(): void {
-    this.send({ t: "tp.solo" });
+    this.send({ t: "tp.solo", lang: this.gameLang() });
   }
   tpCreate(): void {
-    this.send({ t: "tp.create" });
+    this.send({ t: "tp.create", lang: this.gameLang() });
   }
   tpJoin(code: string): void {
     this.send({ t: "tp.join", code });
@@ -596,10 +618,10 @@ export class GameSocket {
     this.send({ t: "st.event", payload: { ...payload, theme: getAppTheme() } });
   }
   scSolo(): void {
-    this.send({ t: "sc.solo" });
+    this.send({ t: "sc.solo", lang: this.gameLang() });
   }
   scCreate(): void {
-    this.send({ t: "sc.create" });
+    this.send({ t: "sc.create", lang: this.gameLang() });
   }
   scJoin(code: string): void {
     this.send({ t: "sc.join", code });
@@ -617,10 +639,10 @@ export class GameSocket {
     this.send({ t: "sc.leave" });
   }
   dtSolo(): void {
-    this.send({ t: "dt.solo" });
+    this.send({ t: "dt.solo", lang: this.gameLang() });
   }
   dtCreate(): void {
-    this.send({ t: "dt.create" });
+    this.send({ t: "dt.create", lang: this.gameLang() });
   }
   dtJoin(code: string): void {
     this.send({ t: "dt.join", code });
@@ -635,10 +657,10 @@ export class GameSocket {
     this.send({ t: "dt.leave" });
   }
   bgSolo(): void {
-    this.send({ t: "bg.solo" });
+    this.send({ t: "bg.solo", lang: this.gameLang() });
   }
   bgCreate(): void {
-    this.send({ t: "bg.create" });
+    this.send({ t: "bg.create", lang: this.gameLang() });
   }
   bgJoin(code: string): void {
     this.send({ t: "bg.join", code });

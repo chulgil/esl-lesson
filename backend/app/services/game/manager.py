@@ -24,11 +24,13 @@ from app.models import (
     ReviewCard,
     ReviewLog,
 )
+from app.models.user import UserSettings
 from app.services.game import records
 from app.services.game.bots import Bot
 from app.services.game.engine import Board, Match, build_word_queue
 from app.services.game.profiles import safe_player_badges
-from app.services.visibility import visible_item_clause
+from app.services.langs import SUPPORTED_LANGS
+from app.services.visibility import lang_item_clause, visible_item_clause
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,7 @@ RECONNECT_GRACE_SECONDS = 10.0
 COUNTDOWN_SECONDS = 3.0
 WORD_POOL_MIN = 40
 WORD_LEN_RANGE = (3, 12)
+DEFAULT_GAME_LANG = "en"
 
 Sender = Callable[[dict], Awaitable[None]]
 
@@ -60,6 +63,9 @@ class MatchSession:
     bot: Bot | None = None
     room_code: str | None = None
     content_ids: list[int] | None = None  # 방장이 선택한 소재 콘텐츠 (None=공용/기본)
+    # 소재 언어(ko/en/ja) — 방장이 방 생성 시 선택, 참가자 풀도 동일 언어로
+    # (docs/specs/chat-language-rooms.md §게임 언어 분리)
+    lang: str = DEFAULT_GAME_LANG
     started: bool = False
     task: asyncio.Task | None = None
     input_seq: dict[int, int] = field(default_factory=dict)
@@ -71,7 +77,8 @@ class GameManager:
     def __init__(self) -> None:
         self.sessions: dict[int, MatchSession] = {}  # match_id -> session
         self.by_user: dict[int, int] = {}  # user_id -> match_id
-        self.pvp_queue: list[tuple[int, str, str, Sender]] = []  # (user_id, name, quiz, send)
+        # (user_id, name, quiz, lang, send)
+        self.pvp_queue: list[tuple[int, str, str, str, Sender]] = []
         self.rooms: dict[str, int] = {}  # room_code -> match_id
 
     # --- 진입점 ---
@@ -89,15 +96,17 @@ class GameManager:
         bot_level: int,
         send: Sender,
         content_ids: list[int] | None = None,
+        lang: str = DEFAULT_GAME_LANG,
     ) -> MatchSession:
         self._guard_not_in_match(user_id)
-        words = await select_word_pool(user_id, content_ids)
+        words = await select_word_pool(user_id, content_ids, lang)
         priority = await safe_priority_items([user_id])
         seed = secrets.randbits(32)
         session = MatchSession(
             match_id=await self._create_match_row("pve", user_id, None, bot_level),
             mode="pve",
             quiz=quiz,
+            lang=lang,
             match=Match(
                 board1=Board(
                     word_queue=build_word_queue(words, seed, priority=priority), _rng_seed=seed
@@ -114,15 +123,21 @@ class GameManager:
         await self._start(session, opponent_name=f"봇 Lv.{session.bot.level}")
         return session
 
-    async def join_pvp_queue(self, user_id: int, name: str, quiz: str, send: Sender) -> None:
+    async def join_pvp_queue(
+        self, user_id: int, name: str, quiz: str, send: Sender, lang: str = DEFAULT_GAME_LANG
+    ) -> None:
         self._guard_not_in_match(user_id)
-        waiting = next((w for w in self.pvp_queue if w[2] == quiz and w[0] != user_id), None)
+        if lang not in SUPPORTED_LANGS:
+            raise WordPoolError("invalid_lang")
+        waiting = next(
+            (w for w in self.pvp_queue if w[2] == quiz and w[3] == lang and w[0] != user_id), None
+        )
         if waiting is None:
-            self.pvp_queue.append((user_id, name, quiz, send))
+            self.pvp_queue.append((user_id, name, quiz, lang, send))
             await send({"t": "queue.waiting"})
             return
         self.pvp_queue.remove(waiting)
-        await self._start_pvp(waiting[0], waiting[1], waiting[3], user_id, name, send, quiz)
+        await self._start_pvp(waiting[0], waiting[1], waiting[4], user_id, name, send, quiz, lang)
 
     async def create_room(
         self,
@@ -131,16 +146,18 @@ class GameManager:
         quiz: str,
         send: Sender,
         content_ids: list[int] | None = None,
+        lang: str = DEFAULT_GAME_LANG,
     ) -> str:
         self._guard_not_in_match(user_id)
-        # 소재 유효성(소유/공용, 최소 단어 수)은 방 생성 시점에 검증
-        await select_word_pool(user_id, content_ids)
+        # 소재 유효성(소유/공용, 최소 단어 수, lang)은 방 생성 시점에 검증
+        await select_word_pool(user_id, content_ids, lang)
         code = secrets.token_hex(3).upper()
         match_id = await self._create_match_row("pvp", user_id, None, None, room_code=code)
         session = MatchSession(
             match_id=match_id,
             mode="pvp",
             quiz=quiz,
+            lang=lang,
             match=Match(board1=Board(word_queue=[]), board2=Board(word_queue=[])),
             players={1: PlayerSlot(user_id=user_id, name=name, send=send)},
             room_code=code,
@@ -148,7 +165,7 @@ class GameManager:
         )
         self._register(session)
         self.rooms[code] = match_id
-        await send({"t": "room.created", "code": code})
+        await send({"t": "room.created", "code": code, "lang": lang})
         return code
 
     async def join_room(self, user_id: int, name: str, code: str, send: Sender) -> None:
@@ -158,7 +175,9 @@ class GameManager:
         if session is None or session.started or 2 in session.players:
             await send({"t": "error", "code": "room_not_found"})
             return
-        words = await select_word_pool(session.players[1].user_id, session.content_ids)
+        words = await select_word_pool(
+            session.players[1].user_id, session.content_ids, session.lang
+        )
         # 두 플레이어 due·오답의 합집합 — 같은 큐를 쓰므로 공정성 유지 (P0-A)
         priority = await safe_priority_items([session.players[1].user_id, user_id])
         seed = secrets.randbits(32)
@@ -171,15 +190,24 @@ class GameManager:
         await self._start(session)
 
     async def _start_pvp(
-        self, uid1: int, name1: str, send1: Sender, uid2: int, name2: str, send2: Sender, quiz: str
+        self,
+        uid1: int,
+        name1: str,
+        send1: Sender,
+        uid2: int,
+        name2: str,
+        send2: Sender,
+        quiz: str,
+        lang: str = DEFAULT_GAME_LANG,
     ) -> None:
-        words = await load_public_word_pool()
+        words = await load_public_word_pool(lang)
         priority = await safe_priority_items([uid1, uid2])
         seed = secrets.randbits(32)
         session = MatchSession(
             match_id=await self._create_match_row("pvp", uid1, uid2, None),
             mode="pvp",
             quiz=quiz,
+            lang=lang,
             match=Match(
                 board1=Board(
                     word_queue=build_word_queue(words, seed, priority=priority), _rng_seed=seed
@@ -214,6 +242,7 @@ class GameManager:
                     "match_id": session.match_id,
                     "mode": session.mode,
                     "quiz": session.quiz,
+                    "lang": session.lang,
                     "you": player_no,
                     "opponent": other.name if other else (opponent_name or "봇"),
                     # 상대 배지 — 마스코트·칭호로 경쟁 동기 (mascot-shop.md 플레이어 배지)
@@ -341,6 +370,7 @@ class GameManager:
                 "match_id": session.match_id,
                 "mode": session.mode,
                 "quiz": session.quiz,
+                "lang": session.lang,
                 "you": player_no,
                 "opponent": other.name
                 if other
@@ -549,16 +579,31 @@ CONTENT_POOL_MIN = 10  # 콘텐츠 선택 대전의 최소 단어 수
 
 
 async def select_word_pool(
-    user_id: int, content_ids: list[int] | None
+    user_id: int, content_ids: list[int] | None, lang: str = DEFAULT_GAME_LANG
 ) -> list[tuple[int, str, str]]:
-    """소재 선택: content_ids 지정 시 해당 콘텐츠 단어, 아니면 기본 풀 (word-tetris.md)."""
+    """소재 선택: content_ids 지정 시 해당 콘텐츠 단어(명시 선택이라 lang 무관),
+    아니면 lang 기본 풀 (word-tetris.md, 게임 언어 분리 chat-language-rooms.md)."""
     if content_ids:
         return await load_word_pool_from_contents(user_id, content_ids)
-    pool = await load_word_pool(user_id)
+    if lang not in SUPPORTED_LANGS:
+        raise WordPoolError("invalid_lang")
+    pool = await load_word_pool(user_id, lang)
     if len(pool) < CONTENT_POOL_MIN:
         # 빈 보드로 시작하는 크래시 방지 (2026-07-11 운영 실측) — 시작 전에 안내
         raise WordPoolError("words_insufficient")
     return pool
+
+
+async def resolve_lang(user_id: int, requested: str | None) -> str:
+    """게임 lang 파라미터 해석 — 값이 있으면 그대로 전달(검증은 각 매니저의
+    WordPoolError), 생략 시 settings.learning_langs[0] (게임 언어 분리
+    chat-language-rooms.md §게임 언어 분리)."""
+    if requested:
+        return str(requested)
+    async with get_session_factory()() as db:
+        settings = await db.get(UserSettings, user_id)
+    langs = settings.learning_langs if settings and settings.learning_langs else []
+    return langs[0] if langs else DEFAULT_GAME_LANG
 
 
 async def priority_item_ids(user_ids: list[int]) -> set[int]:
@@ -677,8 +722,8 @@ async def load_word_pool_from_contents(
     return _to_pool(pool)
 
 
-async def load_public_word_pool() -> list[tuple[int, str, str]]:
-    """빠른 대전용 공용 풀 — 공용 콘텐츠 출처가 있는 approved word."""
+async def load_public_word_pool(lang: str = DEFAULT_GAME_LANG) -> list[tuple[int, str, str]]:
+    """빠른 대전용 공용 풀 — 공용 콘텐츠 출처가 있는 approved word (lang 콘텐츠만)."""
     async with get_session_factory()() as db:
         items = (
             (
@@ -690,6 +735,7 @@ async def load_public_word_pool() -> list[tuple[int, str, str]]:
                         Content.visibility == "public",
                         LearningItem.item_type == "word",
                         LearningItem.review_status == "approved",
+                        lang_item_clause(lang),
                     )
                     .distinct()
                     .limit(300)
@@ -701,8 +747,9 @@ async def load_public_word_pool() -> list[tuple[int, str, str]]:
     return _to_pool([i for i in items if _playable(i)])
 
 
-async def load_word_pool(user_id: int) -> list[tuple[int, str, str]]:
-    """기본 풀: 내가 학습한 word 우선(지금 담긴 것만), 부족하면 보이는 단어로 보충."""
+async def load_word_pool(user_id: int, lang: str = DEFAULT_GAME_LANG) -> list[tuple[int, str, str]]:
+    """기본 풀: 내가 학습한 lang 콘텐츠의 word 우선(지금 담긴 것만), 부족하면
+    보이는 lang 단어로 보충 (게임 언어 분리 chat-language-rooms.md)."""
     async with get_session_factory()() as db:
         learned = (
             (
@@ -716,6 +763,7 @@ async def load_word_pool(user_id: int) -> list[tuple[int, str, str]]:
                         # 카드가 남아 있어도 구독 해제한 콘텐츠의 단어는 제외 —
                         # 학습 재료 = 담은 콘텐츠 (content-governance.md)
                         visible_item_clause(user_id),
+                        lang_item_clause(lang),
                     )
                 )
             )
@@ -732,6 +780,7 @@ async def load_word_pool(user_id: int) -> list[tuple[int, str, str]]:
                         .where(
                             LearningItem.item_type == "word",
                             visible_item_clause(user_id),
+                            lang_item_clause(lang),
                         )
                         .distinct()
                         .limit(300)

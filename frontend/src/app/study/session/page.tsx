@@ -451,6 +451,15 @@ function QuestionCard({
           onSubmit={onSubmit}
         />
       )}
+      {question.quiz_mode === "sentence_assemble" && (
+        <SentenceAssembleQuiz
+          question={question}
+          disabled={disabled}
+          hintOn={hintOn}
+          onActivity={noteActivity}
+          onSubmit={onSubmit}
+        />
+      )}
       {question.media && (
         <div className="mt-5 border-t border-ink/10 pt-4">
           <SegmentPlayer media={question.media} />
@@ -569,6 +578,95 @@ function PatternQuiz({
               onClick={() => {
                 setPicked((p) => [...p, chipIdx]);
                 onActivity(); // 칩을 넣으면 힌트 타이머 리셋 (2026-08-05 보고)
+              }}
+              className={`min-h-10 rounded-md border-2 px-3 py-1 text-sm transition hover:border-brick-blue active:scale-95 ${
+                nextWord && chip === nextWord
+                  ? "border-brick-yellow bg-highlight/60 font-bold"
+                  : "border-ink/15 bg-white"
+              }`}
+            >
+              {chip}
+            </button>
+          ),
+        )}
+      </div>
+      <div className="mt-4 flex items-center gap-4">
+        <Brick
+          color="green"
+          onClick={
+            disabled || picked.length === 0
+              ? undefined
+              : () => onSubmit(picked.map((i) => chips[i]).join(" "))
+          }
+        >
+          제출
+        </Brick>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onSubmit("")}
+          className="min-h-11 rounded-md px-3 text-sm opacity-60 hover:underline"
+        >
+          모르겠어요 (정답 보기)
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** 내가 쓰는 말 덱 전용 — 초·중급 카드는 문장 전체를 칩 조립으로 (레벨3
+ *  패턴 조립과 동일 UI 계열, docs/specs/my-phrases.md 레벨별 학습카드).
+ *  문제 = 내 원문, 칩 = 번역문 단어 + 오답 2~3개. 채점은 조립 결과를 그대로
+ *  기존 sentence 채점 경로(정규화+Levenshtein)에 태운다. */
+function SentenceAssembleQuiz({
+  question,
+  disabled,
+  hintOn,
+  onActivity,
+  onSubmit,
+}: {
+  question: Question;
+  disabled: boolean;
+  hintOn: boolean;
+  onActivity: () => void;
+  onSubmit: (answer: string) => void;
+}) {
+  const [picked, setPicked] = useState<number[]>([]);
+  const chips = question.chips ?? [];
+
+  // 진행형 힌트: 지금까지 고른 칩 다음에 올 "한 단어"만 강조 (패턴 조립과 동일)
+  const expected = (question.hint_answer ?? "").split(/\s+/).filter(Boolean);
+  const nextWord = hintOn ? expected[picked.length] : undefined;
+
+  return (
+    <div>
+      <p className="text-lg font-bold">{question.prompt_ko}</p>
+      <div className="mt-4 min-h-11 rounded border-2 border-dashed border-ink/20 bg-paper p-2">
+        {picked.map((chipIdx, i) => (
+          <button
+            key={`${chipIdx}-${i}`}
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              setPicked((p) => p.filter((_, j) => j !== i));
+              onActivity(); // 칩을 빼도 활동 — 힌트 타이머 리셋
+            }}
+            className="mb-1 mr-1 min-h-10 rounded-md bg-brick-blue px-3 py-1 text-sm font-bold text-brick-label transition-colors hover:bg-brick-blue/80"
+          >
+            {chips[chipIdx]}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {chips.map((chip, chipIdx) =>
+          picked.includes(chipIdx) ? null : (
+            <button
+              key={chipIdx}
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                setPicked((p) => [...p, chipIdx]);
+                onActivity(); // 칩을 넣으면 힌트 타이머 리셋
               }}
               className={`min-h-10 rounded-md border-2 px-3 py-1 text-sm transition hover:border-brick-blue active:scale-95 ${
                 nextWord && chip === nextWord

@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -78,6 +78,22 @@ def content_item_clause(content_id: int):
     )
 
 
+def _chat_deck_item_clause():
+    """내가 쓰는 말 덱(chat 콘텐츠)에 속한 항목 — 문장 게임 3종과 별개로,
+    학습 큐에서는 levels_enabled 와 무관하게 항상 대상 (my-phrases.md
+    레벨별 학습카드: 일반 sentence 는 레벨4 전용, chat 덱만 예외)."""
+    return LearningItem.id.in_(
+        select(ItemOccurrence.item_id)
+        .join(Content, Content.id == ItemOccurrence.content_id)
+        .where(Content.source == "chat")
+    )
+
+
+def queue_type_clause(types: list[str]):
+    """레벨 필터 + chat 덱 문장은 레벨 무관 출제 예외를 합친 절."""
+    return or_(LearningItem.item_type.in_(types), _chat_deck_item_clause())
+
+
 @router.get("/queue")
 async def get_queue(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -114,7 +130,7 @@ async def get_queue(
         weak = await progress.weak_cards(
             db, user.id, types, now, limit=QUEUE_PAGE_SIZE, extra=tuple(deck_scope)
         )
-        questions = await _build_questions(db, weak, user.id)
+        questions = await _build_questions(db, weak, user.id, settings.study_level)
         await db.commit()
         return {
             "total_due": len(weak),
@@ -146,7 +162,7 @@ async def get_queue(
                         ReviewCard.due_at <= now,
                         ReviewCard.suspended.is_(False),
                         visible_item_clause(user.id),
-                        LearningItem.item_type.in_(types),
+                        queue_type_clause(types),
                         *deck_scope,
                     )
                     .order_by(ReviewCard.due_at)
@@ -182,7 +198,7 @@ async def get_queue(
                     select(LearningItem)
                     .where(
                         visible_item_clause(user.id),
-                        LearningItem.item_type.in_(types),
+                        queue_type_clause(types),
                         LearningItem.id.not_in(existing),
                         *deck_scope,
                     )
@@ -239,7 +255,7 @@ async def get_queue(
 
     ordered = due_cards + new_cards
     page = ordered[:QUEUE_PAGE_SIZE]
-    questions = await _build_questions(db, page, user.id)
+    questions = await _build_questions(db, page, user.id, settings.study_level)
     await db.commit()
     return {
         "total_due": len(due_cards),
@@ -353,7 +369,50 @@ async def get_decks(
     return {"items": items}
 
 
-async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: int) -> list[dict]:
+CHAT_ASSEMBLE_POOL_LIMIT = 40  # 덱당 오답 칩 재료로 뽑아올 문장 수
+
+
+async def _chat_sentence_pools(db: AsyncSession, items: list[LearningItem]) -> dict[int, list[str]]:
+    """chat 덱 문장 item_id -> 오답 칩 후보 단어 (같은 덱의 다른 문장에서 샘플링).
+
+    레벨 1~3 단어 칩 조립(my-phrases.md 레벨별 학습카드)의 재료. 언어가 섞이지
+    않게 전역 문장 풀이 아니라 **항목이 속한 덱 안**에서만 뽑는다.
+    """
+    sentence_ids = [i.id for i in items if i.item_type == "sentence"]
+    if not sentence_ids:
+        return {}
+    memberships = (
+        await db.execute(
+            select(ItemOccurrence.item_id, ItemOccurrence.content_id)
+            .join(Content, Content.id == ItemOccurrence.content_id)
+            .where(ItemOccurrence.item_id.in_(sentence_ids), Content.source == "chat")
+        )
+    ).all()
+    if not memberships:
+        return {}
+    deck_by_item = dict(memberships)
+    words_by_deck: dict[int, list[str]] = {}
+    for deck_id in set(deck_by_item.values()):
+        texts = (
+            (
+                await db.execute(
+                    select(LearningItem.en_text)
+                    .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+                    .where(ItemOccurrence.content_id == deck_id)
+                    .limit(CHAT_ASSEMBLE_POOL_LIMIT)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        pool = [w.strip(".,!?;:\"'") for text in texts for w in text.split()]
+        words_by_deck[deck_id] = [w for w in pool if w]
+    return {item_id: words_by_deck.get(deck_id, []) for item_id, deck_id in deck_by_item.items()}
+
+
+async def _build_questions(
+    db: AsyncSession, cards: list[ReviewCard], user_id: int, study_level: int = 4
+) -> list[dict]:
     if not cards:
         return []
     items = (
@@ -369,6 +428,7 @@ async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: i
     )
     items_by_id = {i.id: i for i in items}
     types_needed = {i.item_type for i in items}
+    chat_pools = await _chat_sentence_pools(db, items)
     pools: dict[str, list[LearningItem]] = {}
     for item_type in types_needed:
         pools[item_type] = list(
@@ -416,7 +476,11 @@ async def _build_questions(db: AsyncSession, cards: list[ReviewCard], user_id: i
         if item is None:
             continue
         question = quiz.build_question(
-            item, pools[item.item_type], similar_by_item.get(card.item_id)
+            item,
+            pools[item.item_type],
+            similar_by_item.get(card.item_id),
+            study_level=study_level,
+            assemble_pool_words=chat_pools.get(item.id),
         )
         questions.append(
             {
@@ -815,26 +879,32 @@ async def get_quests(
     return await retention.compute_quests(db, user.id)
 
 
+def _resolve_lang(settings: UserSettings, lang: str | None) -> str:
+    resolved = lang or (settings.learning_langs[0] if settings.learning_langs else "en")
+    if resolved not in SUPPORTED_LANGS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_lang")
+    return resolved
+
+
 @router.get("/my-phrases")
 async def my_phrases(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    lang: str | None = None,
 ) -> dict:
     """내가 쓰는 말 덱 — lazy 동기화 후 현황 (docs/specs/my-phrases.md).
 
-    채팅 발화(번역 캐시 쌍)를 개인 콘텐츠 항목으로 합류 — 복습·문장 게임에
-    자동 출제된다. 조회 시 동기화(멱등)라 별도 배치가 없다."""
+    채팅 발화(번역 캐시 쌍)를 방의 target_lang 별 개인 콘텐츠 항목으로 합류
+    — 복습·문장 게임에 자동 출제된다. 조회 시 동기화(멱등)라 별도 배치가
+    없다. lang 생략 시 learning_langs[0]."""
     from app.services import my_phrases as my_phrases_service
 
     settings = await get_user_settings(db, user)
-    deck, added = await my_phrases_service.sync_my_phrases(db, user, settings)
+    resolved_lang = _resolve_lang(settings, lang)
+    deck, added = await my_phrases_service.sync_my_phrases(db, user, settings, resolved_lang)
     await db.commit()
 
-    total = (
-        await db.execute(
-            select(func.count(ItemOccurrence.id)).where(ItemOccurrence.content_id == deck.id)
-        )
-    ).scalar_one()
+    active, total = await my_phrases_service.deck_counts(db, user.id, deck.id)
     recent = (
         await db.execute(
             select(LearningItem.en_text, LearningItem.ko_text)
@@ -846,7 +916,10 @@ async def my_phrases(
     ).all()
     return {
         "content_id": deck.id,
+        "lang": resolved_lang,
         "total": total,
+        "active": active,
+        "graduated": total - active,
         "added_now": added,
         "recent": [{"en": en, "ko": ko or ""} for en, ko in recent],
     }
@@ -856,24 +929,46 @@ async def my_phrases(
 async def my_phrases_items(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    lang: str | None = None,
 ) -> dict:
-    """편집용 전체 목록 — 문장 빼기 화면 (my-phrases.md 편집)."""
+    """편집용 목록 — 활성(freq 내림차순) + 졸업(장기기억 도달) (my-phrases.md 편집)."""
     from app.services import my_phrases as my_phrases_service
+    from app.services.game.typing_race import mastered_item_clause
 
     settings = await get_user_settings(db, user)
-    deck, _ = await my_phrases_service.sync_my_phrases(db, user, settings)
+    resolved_lang = _resolve_lang(settings, lang)
+    deck, _ = await my_phrases_service.sync_my_phrases(db, user, settings, resolved_lang)
     await db.commit()
-    rows = (
+
+    not_graduated = mastered_item_clause(user.id)
+
+    def _rows_to_items(rows) -> list[dict]:
+        return [
+            {"id": item_id, "en_text": en, "ko_text": ko or "", "freq": freq or 0}
+            for item_id, en, ko, freq in rows
+        ]
+
+    active_rows = (
         await db.execute(
-            select(LearningItem.id, LearningItem.en_text, LearningItem.ko_text)
+            select(LearningItem.id, LearningItem.en_text, LearningItem.ko_text, ItemOccurrence.freq)
             .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
-            .where(ItemOccurrence.content_id == deck.id)
+            .where(ItemOccurrence.content_id == deck.id, not_graduated)
+            .order_by(ItemOccurrence.freq.desc(), ItemOccurrence.id.desc())
+        )
+    ).all()
+    graduated_rows = (
+        await db.execute(
+            select(LearningItem.id, LearningItem.en_text, LearningItem.ko_text, ItemOccurrence.freq)
+            .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+            .where(ItemOccurrence.content_id == deck.id, ~not_graduated)
             .order_by(ItemOccurrence.id.desc())
         )
     ).all()
     return {
-        "content_id": deck.id,
-        "items": [{"item_id": i, "en": en, "ko": ko or ""} for i, en, ko in rows],
+        "lang": resolved_lang,
+        "graduated": len(graduated_rows),
+        "items": _rows_to_items(active_rows),
+        "graduated_items": _rows_to_items(graduated_rows),
     }
 
 
@@ -881,15 +976,17 @@ async def my_phrases_items(
 async def refresh_my_phrases(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    lang: str | None = None,
 ) -> dict:
     """내 덱 번역 품질 새로고침 — 엔진·프롬프트 개선분을 기존 문장에 적용.
 
-    항목 ID 유지(복습 진행도 보존), 실명 치환 + 재번역. 본인 덱만.
+    항목 ID 유지(복습 진행도 보존), 실명 치환 + 재번역. 본인 덱만(언어별).
     사용량은 translation_usage 로 예산 회계에 포함된다."""
     from app.services import my_phrases as my_phrases_service
 
     settings = await get_user_settings(db, user)
-    updated = await my_phrases_service.refresh_my_phrases(db, user, settings)
+    resolved_lang = _resolve_lang(settings, lang)
+    updated = await my_phrases_service.refresh_my_phrases(db, user, settings, resolved_lang)
     await db.commit()
     return {"updated": updated}
 
@@ -918,7 +1015,7 @@ async def study_leaderboard(
 
     0건 친구도 표시한다 — "친구가 아직 0개"가 곧 동기부여라서.
     """
-    from sqlalchemy import and_, or_
+    from sqlalchemy import and_
 
     from app.models.friend import Friendship
 

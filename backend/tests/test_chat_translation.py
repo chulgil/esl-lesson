@@ -140,13 +140,14 @@ async def test_messages_translation_window_caps_at_30(client, db_session, monkey
 
 
 async def test_single_message_translation_requires_participant(client, db_session, monkeypatch):
+    """단건 엔드포인트는 방 기준 번역 — 뷰어 설정(chat_translate) 과 무관하게 항상
+    시도한다 (docs/specs/chat-language-rooms.md 번역 규칙, 2026-08-14 개편)."""
     a, b = await two_friends(client, db_session)
-    await stub_translation(monkeypatch, {"secret": ("hi", "haiku")})
+    await stub_translation(monkeypatch, {"안녕": ("hi", "haiku")})
     await login(client, db_session, a)
     sent = (
-        await client.post("/api/chat/messages", json=send_body(b.id, "secret", "cid-tr00005"))
+        await client.post("/api/chat/messages", json=send_body(b.id, "안녕", "cid-tr00005"))
     ).json()
-    await enable_translate(db_session, a.id)
 
     await login_as(client, db_session, "outsider@example.com")
     res = await client.get(f"/api/chat/messages/{sent['id']}/translation")
@@ -155,8 +156,8 @@ async def test_single_message_translation_requires_participant(client, db_sessio
     await login(client, db_session, a)
     ok = await client.get(f"/api/chat/messages/{sent['id']}/translation")
     assert ok.status_code == 200
-    # "secret" 은 영문 → 뷰어 primary=ko 와 달라 target=ko(모국어로 번역)
-    assert ok.json()["translation"] == {"lang": "ko", "text": "hi"}
+    # 방 기본 언어쌍은 ko→en — "안녕"(ko) 은 방 target(en) 과 달라 항상 번역된다
+    assert ok.json()["translation"] == {"lang": "en", "text": "hi"}
 
 
 async def test_single_message_translation_missing_message_is_404(client, db_session):
@@ -200,13 +201,15 @@ async def test_scope_default_translates_only_my_messages(client, db_session, mon
 
 
 async def test_scope_checkboxes_control_each_side(client, db_session, monkeypatch):
-    """둘 다 체크 = 전체 번역 / 상대만 체크 = 상대 글만 (단건 엔드포인트 포함)."""
+    """둘 다 체크 = 전체 번역 / 상대만 체크 = 상대 글만 (목록 조회 — 개인 설정 기반).
+
+    단건 엔드포인트(GET /messages/{id}/translation)는 2026-08-14 개편으로 방
+    기준 번역으로 전환돼 이 scope 설정과 무관해졌다 — test_chat_translation.py
+    의 단건 테스트들 참조."""
     a, b = await two_friends(client, db_session)
     await stub_translation(monkeypatch, {"mine2": ("m", "haiku"), "theirs2": ("t", "haiku")})
     await login(client, db_session, b)
-    sent_theirs = (
-        await client.post("/api/chat/messages", json=send_body(a.id, "theirs2", "cid-sc00003"))
-    ).json()
+    await client.post("/api/chat/messages", json=send_body(a.id, "theirs2", "cid-sc00003"))
     await login(client, db_session, a)
     await client.post("/api/chat/messages", json=send_body(b.id, "mine2", "cid-sc00004"))
     settings = await enable_translate(db_session, a.id)
@@ -220,14 +223,12 @@ async def test_scope_checkboxes_control_each_side(client, db_session, monkeypatc
         m["translation"] is not None for m in res["items"] if m["body"] in ("mine2", "theirs2")
     )
 
-    # 상대 글만 체크 — 내 글은 번역 안 붙음, 단건 엔드포인트도 동일 규칙
+    # 상대 글만 체크 — 내 글은 번역 안 붙음
     settings.translate_mine = False
     await db_session.commit()
     res = (await client.get(f"/api/chat/with/{b.id}/messages")).json()
     mine = next(m for m in res["items"] if m["body"] == "mine2")
     assert mine["translation"] is None
-    single = await client.get(f"/api/chat/messages/{sent_theirs['id']}/translation")
-    assert single.json()["translation"] == {"lang": "ko", "text": "t"}
 
 
 async def test_single_message_translation_scope_blocks_theirs_by_default(

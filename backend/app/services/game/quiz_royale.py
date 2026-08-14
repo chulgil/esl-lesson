@@ -19,9 +19,15 @@ from sqlalchemy import select
 from app.core.db import get_session_factory
 from app.models import LearningItem, QuizRoyaleMatch, QuizRoyalePlayer
 from app.services import embeddings
-from app.services.game.manager import WordPoolError, safe_priority_items, select_word_pool
+from app.services.game.manager import (
+    DEFAULT_GAME_LANG,
+    WordPoolError,
+    safe_priority_items,
+    select_word_pool,
+)
 from app.services.game.profiles import safe_player_badges
-from app.services.visibility import visible_item_clause
+from app.services.langs import SUPPORTED_LANGS
+from app.services.visibility import lang_item_clause, visible_item_clause
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +72,7 @@ class QuizSession:
     players: list[QuizPlayer]
     variant: str = "meaning"  # meaning | nuance (임베딩 odd-one-out)
     content_ids: list[int] | None = None
+    lang: str = DEFAULT_GAME_LANG
     questions: list[Question] = field(default_factory=list)
     started: bool = False
     round_no: int = -1
@@ -128,7 +135,7 @@ MIN_NUANCE_WORDS = 20
 
 
 async def build_nuance_questions(
-    db, user_id: int, rounds: int, rng: random.Random
+    db, user_id: int, rounds: int, rng: random.Random, lang: str = DEFAULT_GAME_LANG
 ) -> list["Question"]:
     """뉘앙스 저격 — 임베딩 최근접 2개+앵커(비슷한 3) vs 먼 단어 1 (odd-one-out)."""
     if not embeddings.enabled(db):
@@ -136,7 +143,11 @@ async def build_nuance_questions(
     rows = (
         await db.execute(
             select(LearningItem.id, LearningItem.en_text, LearningItem.ko_text)
-            .where(LearningItem.item_type == "word", visible_item_clause(user_id))
+            .where(
+                LearningItem.item_type == "word",
+                visible_item_clause(user_id),
+                lang_item_clause(lang),
+            )
             .limit(300)
         )
     ).all()
@@ -230,11 +241,14 @@ class QuizRoyaleManager:
         bots: int = 1,
         content_ids: list[int] | None = None,
         variant: str = "meaning",
+        lang: str = DEFAULT_GAME_LANG,
     ) -> QuizSession:
         """나 + 봇 1~3 — 만들자마자 바로 시작."""
         await self._leave_if_idle(user_id)
-        pool = [] if variant == "nuance" else await self._load_pool(user_id, content_ids)
-        session = await self._new_session(user_id, name, send, "solo", None, content_ids)
+        if lang not in SUPPORTED_LANGS:
+            raise WordPoolError("invalid_lang")
+        pool = [] if variant == "nuance" else await self._load_pool(user_id, content_ids, lang)
+        session = await self._new_session(user_id, name, send, "solo", None, content_ids, lang)
         session.variant = variant
         for i in range(min(max(bots, 1), MAX_PLAYERS - 1)):
             session.players.append(QuizPlayer(user_id=None, name=BOT_NAMES[i], bot_level=bot_level))
@@ -249,12 +263,15 @@ class QuizRoyaleManager:
         send: Sender,
         content_ids: list[int] | None = None,
         variant: str = "meaning",
+        lang: str = DEFAULT_GAME_LANG,
     ) -> str:
         await self._leave_if_idle(user_id)
+        if lang not in SUPPORTED_LANGS:
+            raise WordPoolError("invalid_lang")
         if variant != "nuance":
-            await self._load_pool(user_id, content_ids)  # 시작 전에 풀 부족을 미리 알림
+            await self._load_pool(user_id, content_ids, lang)  # 시작 전에 풀 부족을 미리 알림
         code = secrets.token_hex(3).upper()
-        session = await self._new_session(user_id, name, send, "room", code, content_ids)
+        session = await self._new_session(user_id, name, send, "room", code, content_ids, lang)
         session.variant = variant
         self.rooms[code] = session.match_id
         await self._broadcast_room(session)
@@ -286,7 +303,7 @@ class QuizRoyaleManager:
         pool = (
             []
             if session.variant == "nuance"
-            else await self._load_pool(session.host_id, session.content_ids)
+            else await self._load_pool(session.host_id, session.content_ids, session.lang)
         )
         if session.code:
             self.rooms.pop(session.code, None)
@@ -365,7 +382,7 @@ class QuizRoyaleManager:
         if session.variant == "nuance":
             async with get_session_factory()() as db:
                 session.questions = await build_nuance_questions(
-                    db, session.host_id, ROUNDS, session.rng
+                    db, session.host_id, ROUNDS, session.rng, session.lang
                 )
         else:
             # 참가 인원(사람)의 due·최근 오답 합집합 우선 출제 (P0-A 게임-복습 편입)
@@ -476,6 +493,7 @@ class QuizRoyaleManager:
         mode: str,
         code: str | None,
         content_ids: list[int] | None,
+        lang: str = DEFAULT_GAME_LANG,
     ) -> QuizSession:
         async with get_session_factory()() as db:
             row = QuizRoyaleMatch(host_id=user_id, mode=mode, status="waiting")
@@ -489,15 +507,16 @@ class QuizRoyaleManager:
             mode=mode,
             players=[QuizPlayer(user_id=user_id, name=name, send=send)],
             content_ids=content_ids,
+            lang=lang,
         )
         self.sessions[match_id] = session
         self.by_user[user_id] = match_id
         return session
 
     async def _load_pool(
-        self, user_id: int, content_ids: list[int] | None
+        self, user_id: int, content_ids: list[int] | None, lang: str = DEFAULT_GAME_LANG
     ) -> list[tuple[int, str, str]]:
-        pool = await select_word_pool(user_id, content_ids)
+        pool = await select_word_pool(user_id, content_ids, lang)
         if len(pool) < MIN_POOL:
             raise WordPoolError("words_insufficient")
         return pool
@@ -538,6 +557,7 @@ class QuizRoyaleManager:
                 "t": "qr.room",
                 "code": session.code,
                 "mode": session.mode,
+                "lang": session.lang,
                 "host": session.players[0].name if session.players else "",
                 "players": [
                     {

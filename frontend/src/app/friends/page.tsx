@@ -145,7 +145,8 @@ export default function FriendsPage() {
               >
                 <span className="font-bold">{f.name}</span>
                 {f.studying ? (
-                  <span className="rounded-full bg-brick-green/15 px-2 py-0.5 text-xs font-bold text-brick-green">
+                  <span className="flex items-center gap-1 rounded-full bg-brick-green/15 px-2 py-0.5 text-xs font-bold text-brick-green">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brick-green" />
                     학습 중
                   </span>
                 ) : f.gaming ? (
@@ -176,9 +177,9 @@ export default function FriendsPage() {
                       onClick={() =>
                         router.push(`/study/watch?code=${f.watch_code}`)
                       }
-                      className="min-h-10 rounded-md bg-brick-blue px-3 text-sm font-bold text-brick-label transition-colors hover:bg-brick-blue/85"
+                      className="min-h-10 rounded-md bg-brick-green px-3 text-sm font-bold text-brick-label transition-colors hover:bg-brick-green/85"
                     >
-                      관전 요청
+                      관전
                     </button>
                   )}
                   <button

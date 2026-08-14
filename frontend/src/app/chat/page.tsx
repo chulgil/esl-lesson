@@ -2,41 +2,51 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { LangPairBadge } from "@/components/chat/LangPairBadge";
 import { NotifyEnableButton } from "@/components/chat/NotifyEnableButton";
+import { RoomCreateSheet } from "@/components/chat/RoomCreateSheet";
 import {
   BlankSheet,
   ExcelChrome,
   fakeFilename,
 } from "@/components/chat/skins/ExcelChrome";
+import { StudyingBadge } from "@/components/chat/StudyingBadge";
 import { BackLink } from "@/components/nav/BackLink";
-import { chatApi, type ChatConversation } from "@/lib/chat-api";
+import { roomsApi, type ChatRoom } from "@/lib/chat-api";
 import { onChatEvent } from "@/lib/chat-signals";
 import { useAppTheme } from "@/lib/theme";
 import { CHAT_LABEL_OF } from "@/lib/theme-surfaces";
 import { timeAgo } from "@/lib/time";
 
-/** 대화 목록 — 테마별 위장 (docs/specs/chat.md 위장 테마).
- *  오피스 테마 = 공유 문서 목록(시트), 그 외 = 교환 노트 목록. */
+/** 방 목록 — 언어쌍 학습 방 단위 (docs/specs/chat-language-rooms.md §UX).
+ *  테마별 위장: 오피스 = 공유 문서 목록(시트), 그 외 = 교환 노트 목록. */
 export default function ChatListPage() {
   const theme = useAppTheme();
-  const [items, setItems] = useState<ChatConversation[] | null>(null);
+  const router = useRouter();
+  const [items, setItems] = useState<ChatRoom[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(() => {
-    chatApi
-      .conversations()
-      .then((res) => setItems(res.items))
+    roomsApi
+      .list()
+      .then(setItems)
       .catch((e) => setError(e.message));
   }, []);
 
   useEffect(() => {
     load();
     return onChatEvent((msg) => {
-      // chat.deleted: 삭제된 마지막 메시지 미리보기("삭제되었습니다") 즉시 반영
+      // chat.deleted: 삭제된 마지막 메시지 미리보기("삭제되었습니다") 즉시 반영.
+      // chat.room_created/room_closed: 새 방 등장·종료 반영
       if (
         msg.t === "chat.message" ||
         msg.t === "presence" ||
-        msg.t === "chat.deleted"
+        msg.t === "chat.deleted" ||
+        msg.t === "chat.room_created" ||
+        msg.t === "chat.room_closed" ||
+        msg.t === "chat.matched"
       )
         load();
     });
@@ -53,8 +63,38 @@ export default function ChatListPage() {
     };
   }, [theme]);
 
-  if (theme === "excel") return <ExcelList items={items} error={error} />;
-  return <NoteList items={items} error={error} />;
+  const sheet = (
+    <RoomCreateSheet
+      open={creating}
+      onClose={() => setCreating(false)}
+      onCreated={(room) => {
+        setCreating(false);
+        router.push(`/chat/room/${room.id}`);
+      }}
+    />
+  );
+
+  if (theme === "excel")
+    return (
+      <>
+        <ExcelList
+          items={items}
+          error={error}
+          onCreate={() => setCreating(true)}
+        />
+        {sheet}
+      </>
+    );
+  return (
+    <>
+      <NoteList
+        items={items}
+        error={error}
+        onCreate={() => setCreating(true)}
+      />
+      {sheet}
+    </>
+  );
 }
 
 /* --- 교환 노트 목록 (종이 테마 공용) --------------------------------------- */
@@ -62,9 +102,11 @@ export default function ChatListPage() {
 function NoteList({
   items,
   error,
+  onCreate,
 }: {
-  items: ChatConversation[] | null;
+  items: ChatRoom[] | null;
   error: string | null;
+  onCreate: () => void;
 }) {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
@@ -84,38 +126,54 @@ function NoteList({
       {error && <p className="mb-4 text-sm text-brick-red">{error}</p>}
 
       <div className="mx-auto flex max-w-md flex-col gap-2">
+        <button
+          type="button"
+          onClick={onCreate}
+          className="min-h-11 rounded-lg border-2 border-dashed border-brick-blue/40 bg-brick-blue/5 px-4 text-sm font-bold text-brick-blue transition hover:border-brick-blue/70"
+        >
+          + 새 노트
+        </button>
         <NotifyEnableButton label="새 글 알림 켜기" />
-        {items?.map((c) => (
+        {items?.map((r) => (
           <Link
-            key={c.conversation_id}
-            href={`/chat/${c.user_id}`}
-            className="flex items-center gap-3 rounded-lg border-2 border-ink/10 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-brick-blue/40"
+            key={r.id}
+            href={`/chat/room/${r.id}`}
+            className={`flex items-center gap-3 rounded-lg border-2 border-ink/10 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-brick-blue/40 ${
+              r.status === "closed" ? "opacity-50" : ""
+            }`}
           >
             <span className="relative">
-              <Avatar name={c.name} />
+              <Avatar name={r.peer.nickname} />
               <span
-                aria-label={c.online ? "접속 중" : "미접속"}
+                aria-label={r.peer.online ? "접속 중" : "미접속"}
                 className={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-white ${
-                  c.online ? "bg-brick-green" : "bg-ink/20"
+                  r.peer.online ? "bg-brick-green" : "bg-ink/20"
                 }`}
               />
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex items-baseline gap-2">
-                <b className="truncate">{c.name}</b>
-                {c.last_message_at && (
+                <b className="truncate">{r.peer.nickname}</b>
+                <LangPairBadge source={r.source_lang} target={r.target_lang} />
+                {r.status === "closed" && (
+                  <span className="shrink-0 text-[10px] font-bold opacity-50">
+                    종료
+                  </span>
+                )}
+                <StudyingBadge peerId={r.peer.id} />
+                {r.last_message_at && (
                   <span className="ml-auto shrink-0 text-xs opacity-40">
-                    {timeAgo(c.last_message_at)}
+                    {timeAgo(r.last_message_at)}
                   </span>
                 )}
               </span>
               <span className="mt-0.5 flex items-center gap-2">
                 <span className="truncate text-sm opacity-60">
-                  {c.last_message ?? "첫 줄을 적어보세요"}
+                  {r.preview ?? "첫 줄을 적어보세요"}
                 </span>
-                {c.unread > 0 && (
+                {r.unread > 0 && (
                   <span className="ml-auto shrink-0 rounded-full bg-brick-red px-2 py-0.5 text-xs font-bold text-brick-label">
-                    {c.unread > 99 ? "99+" : c.unread}
+                    {r.unread > 99 ? "99+" : r.unread}
                   </span>
                 )}
               </span>
@@ -127,10 +185,7 @@ function NoteList({
           <div className="rounded-lg border-2 border-ink/10 bg-white p-6 text-center text-sm opacity-60">
             아직 노트가 없어요.
             <br />
-            <Link href="/friends" className="font-bold text-brick-blue">
-              친구 목록
-            </Link>
-            에서 첫 줄을 적어보세요 (๑˃ᴗ˂)ﻭ
+            위의 [+ 새 노트]로 시작해보세요 (๑˃ᴗ˂)ﻭ
           </div>
         )}
         {items === null && !error && (
@@ -169,9 +224,11 @@ function Avatar({ name }: { name: string }) {
 function ExcelList({
   items,
   error,
+  onCreate,
 }: {
-  items: ChatConversation[] | null;
+  items: ChatRoom[] | null;
   error: string | null;
+  onCreate: () => void;
 }) {
   return (
     <ExcelChrome
@@ -188,6 +245,13 @@ function ExcelList({
         </p>
       )}
       <div className="flex items-center gap-2 border-b border-[#d8dde3] bg-white px-2 py-1">
+        <button
+          type="button"
+          onClick={onCreate}
+          className="rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] px-2 py-1 text-xs font-bold hover:bg-[#e2efda]"
+        >
+          + 새 문서
+        </button>
         <NotifyEnableButton label="변경 알림 받기" variant="excel" />
         <Link
           href="/friends"
@@ -206,6 +270,9 @@ function ExcelList({
               <th className="border border-[#d8dde3] px-2 py-0.5 font-normal">
                 이름
               </th>
+              <th className="w-16 border border-[#d8dde3] px-2 py-0.5 font-normal">
+                언어
+              </th>
               <th className="w-28 border border-[#d8dde3] px-2 py-0.5 font-normal">
                 수정한 날짜
               </th>
@@ -218,39 +285,48 @@ function ExcelList({
             </tr>
           </thead>
           <tbody>
-            {items?.map((c, i) => (
-              <tr key={c.conversation_id} className="hover:bg-[#f6f8f9]">
+            {items?.map((r, i) => (
+              <tr
+                key={r.id}
+                className={`hover:bg-[#f6f8f9] ${r.status === "closed" ? "opacity-50" : ""}`}
+              >
                 <td className="border border-[#e4e8ec] px-1.5 py-1.5 text-center text-xs text-[#888]">
                   {i + 1}
                 </td>
                 <td className="border border-[#e4e8ec] px-2 py-1.5">
                   <Link
-                    href={`/chat/${c.user_id}`}
+                    href={`/chat/room/${r.id}`}
                     className="flex items-center gap-1.5 hover:underline"
                   >
                     <SheetIcon />
-                    {c.name}_공유.xlsx
+                    {r.peer.nickname}_공유.xlsx
+                    {r.status === "closed" && (
+                      <span className="text-[#999]">(종료)</span>
+                    )}
                   </Link>
                 </td>
+                <td className="border border-[#e4e8ec] px-2 py-1.5 text-xs">
+                  {r.source_lang.toUpperCase()}→{r.target_lang.toUpperCase()}
+                </td>
                 <td className="border border-[#e4e8ec] px-2 py-1.5 text-xs text-[#666]">
-                  {c.last_message_at ? timeAgo(c.last_message_at) : "-"}
+                  {r.last_message_at ? timeAgo(r.last_message_at) : "-"}
                 </td>
                 <td className="border border-[#e4e8ec] px-2 py-1.5 text-xs">
-                  {c.unread > 0 ? (
-                    <b className="text-[#217346]">변경 {c.unread}건</b>
+                  {r.unread > 0 ? (
+                    <b className="text-[#217346]">변경 {r.unread}건</b>
                   ) : (
                     <span className="text-[#999]">-</span>
                   )}
                 </td>
                 <td className="border border-[#e4e8ec] px-2 py-1.5 text-xs text-[#666]">
-                  {c.online ? "1명" : "0명"}
+                  {r.peer.online ? "1명" : "0명"}
                 </td>
               </tr>
             ))}
             {items && items.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="border border-[#e4e8ec] px-2 py-6 text-center text-xs text-[#999]"
                 >
                   공유된 문서가 없습니다.{" "}
@@ -270,6 +346,7 @@ function ExcelList({
                   <td className="border border-[#e4e8ec] px-1.5 py-1.5 text-center text-xs text-[#bbb]">
                     {(items?.length ?? 0) + i + 1}
                   </td>
+                  <td className="border border-[#e4e8ec]"> </td>
                   <td className="border border-[#e4e8ec]"> </td>
                   <td className="border border-[#e4e8ec]"> </td>
                   <td className="border border-[#e4e8ec]"> </td>

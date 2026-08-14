@@ -8,6 +8,7 @@ import { DailyQuestsCard } from "@/components/study/DailyQuestsCard";
 import { OnboardingChecklist } from "@/components/study/OnboardingChecklist";
 import { StreakCelebration } from "@/components/study/StreakCelebration";
 import { StreakSaverThanks } from "@/components/study/StreakSaverThanks";
+import { StudyingFriendsCard } from "@/components/study/StudyingFriendsCard";
 import { WeeklyReportBanner } from "@/components/study/WeeklyReportBanner";
 import { fetchMe, type Me } from "@/lib/api";
 import { studyApi, type Stats } from "@/lib/study-api";
@@ -114,6 +115,9 @@ function Dashboard({ me }: { me: Me }) {
           카드가 만들어져요.
         </p>
       )}
+
+      {/* 지금 학습 중인 친구 — 관전 진입점 (study-spectate.md 진입 경로 재설계) */}
+      <StudyingFriendsCard />
 
       {/* 복귀 감사 — 책갈피가 지켜준 다음 방문에 1회 (user-journey-motivation P1) */}
       {stats && (

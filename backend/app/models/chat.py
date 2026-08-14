@@ -20,18 +20,37 @@ from app.models.types import JsonDict
 
 
 class Conversation(Base, PkMixin, CreatedAtMixin):
-    """1:1 대화방 — user_lo < user_hi 정규화로 쌍당 1행."""
+    """언어 학습 대화방 — user_lo < user_hi 정규화, 쌍+언어쌍당 1행
+    (docs/specs/chat-language-rooms.md)."""
 
     __tablename__ = "conversations"
     __table_args__ = (
-        UniqueConstraint("user_lo_id", "user_hi_id", name="uq_conversations_pair"),
+        UniqueConstraint(
+            "user_lo_id",
+            "user_hi_id",
+            "source_lang",
+            "target_lang",
+            name="uq_conversations_pair_langs",
+        ),
         CheckConstraint("user_lo_id < user_hi_id", name="ck_conversations_ordered"),
+        CheckConstraint("source_lang <> target_lang", name="ck_conversations_lang_pair"),
     )
 
     user_lo_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
     user_hi_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
     # 비정규화 — 대화 목록 정렬에 메시지 조인 불필요
     last_message_at: Mapped[datetime | None]
+    # 언어쌍 — 원문(주로 쓰는) 언어 → 학습(표시) 언어. 기존 방은 ko→en 백필
+    source_lang: Mapped[str] = mapped_column(String(5), default="ko", server_default="ko")
+    target_lang: Mapped[str] = mapped_column(String(5), default="en", server_default="en")
+    # 'friend'(친구 초대) | 'match'(랜덤 매칭 — 친구 게이트 미적용)
+    origin: Mapped[str] = mapped_column(String(8), default="friend", server_default="friend")
+    # 'active' | 'closed' — 나가기 시 양쪽 종료 (전송 403, 조회는 기록 보존)
+    status: Mapped[str] = mapped_column(String(8), default="active", server_default="active")
+    closed_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    closed_at: Mapped[datetime | None]
 
 
 class ChatMessage(Base, PkMixin):
