@@ -17,7 +17,7 @@ from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models import ChatMessage, Conversation, LearningItem, User
 from app.models.user import UserSettings
-from app.services import chat
+from app.services import chat, chat_match
 from app.services import goals as goals_service
 from app.services import notice as notice_service
 from app.services import push as push_service
@@ -44,6 +44,153 @@ async def unread_total(
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     return {"total": await chat.unread_total(db, user.id)}
+
+
+# --- 언어 학습 방 (docs/specs/chat-language-rooms.md) ------------------------------
+
+
+async def _get_room_or_404(db: AsyncSession, room_id: int, user_id: int) -> Conversation:
+    room = await db.get(Conversation, room_id)
+    if room is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "room_not_found")
+    if user_id not in (room.user_lo_id, room.user_hi_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_participant")
+    return room
+
+
+@router.get("/rooms")
+async def rooms(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> list[dict]:
+    return await chat.list_rooms(db, user)
+
+
+class RoomCreateBody(BaseModel):
+    peer_id: int
+    source_lang: str
+    target_lang: str
+
+
+@router.post("/rooms", status_code=status.HTTP_201_CREATED)
+async def create_room(
+    payload: RoomCreateBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """친구 초대로 방 생성 — get-or-create (중복 생성 시도 = 기존 방 열기, 스펙 결정 #9)."""
+    if payload.peer_id == user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot_chat_self")
+    chat.validate_lang_pair(payload.source_lang, payload.target_lang)
+    await chat.require_friend(db, user.id, payload.peer_id)
+    room, created = await chat.get_or_create_room(
+        db, user.id, payload.peer_id, payload.source_lang, payload.target_lang
+    )
+    if created:
+        peer_view = await chat.room_dict(db, room, payload.peer_id)
+        delivered = await chat.deliver_ws(
+            payload.peer_id, {"t": "chat.room_created", "room": peer_view}
+        )
+        if not delivered:
+            try:
+                await push_service.send_to_user(
+                    db, payload.peer_id, chat.chat_push_payload(user.id, room.id)
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("chat room_created push failed to=%s", payload.peer_id)
+    return {"room": await chat.room_dict(db, room, user.id), "created": created}
+
+
+@router.get("/rooms/{room_id}")
+async def get_room(
+    room_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    room = await _get_room_or_404(db, room_id, user.id)
+    return await chat.room_dict(db, room, user.id)
+
+
+@router.get("/rooms/{room_id}/messages")
+async def room_messages(
+    room_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    before: int | None = None,
+    limit: int = 50,
+) -> dict:
+    room = await _get_room_or_404(db, room_id, user.id)
+    items = await chat.get_room_messages(db, room.id, before=before, limit=limit)
+    reads = await chat.get_read_positions(db, room.id)
+    items = await _attach_room_translations(db, user.id, items, room.target_lang)
+    await db.commit()
+    return {
+        "items": items,
+        "reads": {str(uid): mid for uid, mid in reads.items()},
+        "room": await chat.room_dict(db, room, user.id),
+    }
+
+
+@router.post("/rooms/{room_id}/read")
+async def room_read(
+    room_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    room = await _get_room_or_404(db, room_id, user.id)
+    payload = await chat.mark_read_conv(db, room, user.id)
+    peer_id = room.user_hi_id if room.user_lo_id == user.id else room.user_lo_id
+    await chat.deliver_ws(peer_id, {"t": "chat.read", **payload})
+    return {"ok": True}
+
+
+@router.post("/rooms/{room_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
+async def room_leave(
+    room_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> None:
+    """멤버 누구나 나가면 양쪽 종료 — 멱등 204 (docs/specs/chat-language-rooms.md)."""
+    room = await _get_room_or_404(db, room_id, user.id)
+    peer_id = await chat.leave_room(db, room, user.id)
+    if peer_id is not None:
+        await chat.deliver_ws(peer_id, {"t": "chat.room_closed", "room_id": room.id})
+
+
+class MatchJoinBody(BaseModel):
+    source_lang: str
+    target_lang: str
+
+
+@router.post("/match")
+async def join_match(
+    payload: MatchJoinBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """대기열 참가 — 즉시 성사 시 {room}, 아니면 {waiting: true}."""
+    chat.validate_lang_pair(payload.source_lang, payload.target_lang)
+    room = await chat_match.join(db, user.id, payload.source_lang, payload.target_lang)
+    if room is None:
+        return {"waiting": True}
+    peer_id = room.user_hi_id if room.user_lo_id == user.id else room.user_lo_id
+    await chat.deliver_ws(
+        user.id, {"t": "chat.matched", "room": await chat.room_dict(db, room, user.id)}
+    )
+    await chat.deliver_ws(
+        peer_id, {"t": "chat.matched", "room": await chat.room_dict(db, room, peer_id)}
+    )
+    return {"room": await chat.room_dict(db, room, user.id)}
+
+
+@router.get("/match")
+async def match_status(user: Annotated[User, Depends(get_current_user)]) -> dict:
+    return {"waiting": chat_match.waiting(user.id)}
+
+
+@router.delete("/match", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_match(user: Annotated[User, Depends(get_current_user)]) -> None:
+    chat_match.cancel(user.id)
 
 
 # --- 자동번역 동봉 (docs/specs/chat-translation.md) -------------------------------
@@ -129,30 +276,39 @@ async def messages(
     }
 
 
+async def _attach_room_translations(
+    db: AsyncSession, viewer_id: int, items: list[dict], target: str
+) -> list[dict]:
+    """방 기준 번역 동봉 — 뷰어 설정 무관, 방의 target_lang 을 항상 시도한다
+    (docs/specs/chat-language-rooms.md 번역 규칙)."""
+    out = []
+    for m in items:
+        if m["deleted"] or m.get("kind") or not m["body"]:
+            out.append({**m, "translation": None})
+            continue
+        t = await translation_service.translate_to(db, viewer_id, m["body"], target)
+        out.append({**m, "translation": t})
+    return out
+
+
 @router.get("/messages/{message_id}/translation")
 async def message_translation(
     message_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
-    """WS 로 막 수신한 메시지의 번역 — 목록 조회(30개 창) 밖의 개별 메시지용."""
+    """방 기준 번역 — 방의 target_lang 을 항상 시도한다(뷰어 설정 무관,
+    docs/specs/chat-language-rooms.md 번역 규칙). WS 로 막 수신한 메시지의
+    지연 로드용."""
     msg = await db.get(ChatMessage, message_id)
     if msg is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "message_not_found")
     conv = await db.get(Conversation, msg.conversation_id)
     if conv is None or user.id not in (conv.user_lo_id, conv.user_hi_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not_participant")
-    viewer_settings = await db.get(UserSettings, user.id)
-    if not (viewer_settings and viewer_settings.chat_translate):
+    if msg.deleted_at is not None or not msg.body or msg.kind is not None:
         return {"translation": None}
-    if msg.deleted_at is not None or not msg.body:
-        return {"translation": None}
-    if msg.kind is not None:  # 시스템 줄 제외 (docs/specs/chat-notice.md)
-        return {"translation": None}
-    # 범위 체크 — 내 글/상대 글 개별 설정 (2026-08-12)
-    if not _in_scope({"sender_id": msg.sender_id}, user.id, viewer_settings):
-        return {"translation": None}
-    result = await translation_service.translate_chat(db, user.id, msg.body, viewer_settings)
+    result = await translation_service.translate_to(db, user.id, msg.body, conv.target_lang)
     await db.commit()
     return {"translation": result}
 
@@ -220,7 +376,8 @@ async def serve_image(
 
 
 class SendBody(BaseModel):
-    to_user_id: int
+    to_user_id: int | None = None  # 레거시 — room_id 가 있으면 무시 (가장 오래된 활성 방 위임)
+    room_id: int | None = None
     body: str = Field(default="", max_length=chat.BODY_MAX)
     client_msg_id: str = Field(min_length=8, max_length=64)
     item_id: int | None = None
@@ -239,31 +396,63 @@ async def send(
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_image_id")
         if not (Path(get_settings().chat_upload_dir) / payload.image_id).is_file():
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "image_not_uploaded")
-    data, created = await chat.send_message(
-        db,
-        user,
-        payload.to_user_id,
-        payload.body,
-        payload.client_msg_id,
-        item_id=payload.item_id,
-        image_path=payload.image_id,
-        reply_to_id=payload.reply_to_id,
-    )
+
+    translation = None
+    if payload.room_id is not None:
+        room = await _get_room_or_404(db, payload.room_id, user.id)
+        data, created = await chat.send_room_message(
+            db,
+            user,
+            room,
+            payload.body,
+            payload.client_msg_id,
+            item_id=payload.item_id,
+            image_path=payload.image_id,
+            reply_to_id=payload.reply_to_id,
+        )
+        peer_id = room.user_hi_id if room.user_lo_id == user.id else room.user_lo_id
+        # 방 기준 번역 동봉(낙관 렌더 치환용) — 방 UX 로만 한정, 레거시 to_user_id
+        # 전송은 여전히 개인 설정(chat_translate) 기반 조회 경로를 따른다
+        if data.get("body") and not data.get("kind"):
+            translation = await translation_service.translate_to(
+                db, user.id, data["body"], room.target_lang
+            )
+            await db.commit()
+    elif payload.to_user_id is not None:
+        data, created = await chat.send_message(
+            db,
+            user,
+            payload.to_user_id,
+            payload.body,
+            payload.client_msg_id,
+            item_id=payload.item_id,
+            image_path=payload.image_id,
+            reply_to_id=payload.reply_to_id,
+        )
+        peer_id = payload.to_user_id
+    else:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "room_id_or_to_user_id_required")
+
     if created:
-        message = {"t": "chat.message", "from_name": user.nickname, **data}
-        delivered = await chat.deliver_ws(payload.to_user_id, message)
+        message = {
+            "t": "chat.message",
+            "from_name": user.nickname,
+            **data,
+            "translation": translation,
+        }
+        delivered = await chat.deliver_ws(peer_id, message)
         # 미접속이면 웹푸시 (5분 스로틀) — 실패해도 전송 자체는 성공
-        if not delivered and chat.should_push(data["conversation_id"], payload.to_user_id):
+        if not delivered and chat.should_push(data["conversation_id"], peer_id):
             try:
                 await push_service.send_to_user(
                     db,
-                    payload.to_user_id,
+                    peer_id,
                     # 내용 없는 알림 — 잠금화면에 발신자·본문을 싣지 않는다
                     chat.chat_push_payload(user.id, data["conversation_id"]),
                 )
             except Exception:  # noqa: BLE001
-                logger.warning("chat push failed to=%s", payload.to_user_id)
-    return {**data, "created": created}
+                logger.warning("chat push failed to=%s", peer_id)
+    return {**data, "created": created, "translation": translation}
 
 
 @router.delete("/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
