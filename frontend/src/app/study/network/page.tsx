@@ -84,7 +84,8 @@ export default function VocabNetworkPage() {
       .network(lang)
       .then((res) => {
         setData(res);
-        setCounts(res.counts);
+        // 구버전 API(counts 미동봉) 응답에도 깨지지 않게 — 배포 순단·캐시 대비
+        setCounts(res.counts ?? {});
         // 노드 0의 원인 구분 — 담은 콘텐츠가 없으면 라이브러리 유도 문구로 분기
         if (res.nodes.length === 0) {
           myApi
