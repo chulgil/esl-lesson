@@ -21,7 +21,7 @@ _seed_counter = 0
 
 
 async def seed_items(
-    db, count=5, item_type="word", status="approved", visibility="public", owner=None
+    db, count=5, item_type="word", status="approved", visibility="public", owner=None, lang="en"
 ):
     """가시성 규칙 대응: 항목은 콘텐츠 출처(occurrence)가 있고 담겨(구독) 있어야 노출된다.
 
@@ -29,6 +29,9 @@ async def seed_items(
     시점에 존재하는 사용자를 자동 구독시킨다. 시드 후 로그인하는 경우는 login()
     이 기존 공용 콘텐츠를 담아 준다. 담기 게이트 자체를 검증하는 테스트는 이
     헬퍼를 쓰지 않고 콘텐츠·구독을 직접 만든다.
+
+    lang 은 Content.lang(기본 "en") — 어휘망 언어별 분리 테스트가 en/ja 콘텐츠를
+    구분해서 시드할 때 쓴다 (word-insight.md §어휘망 언어별 분리).
     """
     from app.models import Content, ContentSubscription, ItemOccurrence, User
 
@@ -42,6 +45,7 @@ async def seed_items(
         status="ready",
         visibility=visibility,
         created_by=owner,
+        lang=lang,
     )
     db.add(content)
     await db.flush()

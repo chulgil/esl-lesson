@@ -96,6 +96,11 @@ export interface VocabNetwork {
   edges: NetworkEdge[];
   suggestions: NetworkSuggestion[];
   embeddings_enabled: boolean;
+  /** 조회한 언어 — lang 생략 시 서버가 learning_langs[0] 로 해석 (2026-08-14) */
+  lang: "ko" | "en" | "ja";
+  /** 언어 무관 전체 집계(언어별 내 단어·숙어 카드 수) — 0인 언어는 칩에서
+   *  숨긴다 (word-insight.md §어휘망 언어별 분리) */
+  counts: Record<string, number>;
 }
 
 /** 업적 배지 — 로그 실시간 집계, 소급 반영 (P3) */
@@ -402,7 +407,12 @@ export const studyApi = {
     }),
   insight: (itemId: number) =>
     request<WordInsight>(`/api/study/items/${itemId}/insight`),
-  network: () => request<VocabNetwork>("/api/study/network"),
+  /** 어휘망 — 언어별 복수 네트워크(word-insight.md §어휘망 언어별 분리).
+   *  lang 생략 시 서버가 learning_langs[0] 을 기본으로 잡는다. */
+  network: (lang?: string) =>
+    request<VocabNetwork>(
+      lang ? `/api/study/network?lang=${lang}` : "/api/study/network",
+    ),
   achievements: () =>
     request<{ items: Achievement[]; achieved_count: number; total: number }>(
       "/api/study/achievements",

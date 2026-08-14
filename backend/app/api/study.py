@@ -39,7 +39,11 @@ from app.services import (
 )
 from app.services.langs import SUPPORTED_LANGS
 from app.services.theme_rewards import sync_theme_rewards
-from app.services.visibility import subscribed_content_ids, visible_item_clause
+from app.services.visibility import (
+    lang_item_clause,
+    subscribed_content_ids,
+    visible_item_clause,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1083,20 +1087,29 @@ MAX_NETWORK_NODES = 300
 async def get_network(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    lang: str | None = None,
 ) -> dict:
-    """어휘망 그래프 — 내 단어·숙어 카드 노드 + 임베딩 근접 엣지 + 덱 밖 추천 (P3)."""
+    """어휘망 그래프 — 내 단어·숙어 카드 노드 + 임베딩 근접 엣지 + 덱 밖 추천 (P3).
+
+    학습 데이터의 언어별로 복수 네트워크로 분리 (2026-08-14) — lang 생략 시
+    learning_langs[0]. counts 는 언어 무관 전체 집계로, 프론트가 데이터 있는
+    언어만 칩으로 노출하는 데 쓴다(word-insight.md §어휘망 언어별 분리)."""
+    settings = await get_user_settings(db, user)
+    resolved_lang = _resolve_lang(settings, lang)
+
+    node_clause = (
+        ReviewCard.user_id == user.id,
+        ReviewCard.suspended.is_(False),
+        # 구독 해제한 콘텐츠의 단어는 노드에서 제외 — 카드는 보존되므로
+        # 다시 담으면 그대로 복귀한다 (content-governance.md 가시성 규칙)
+        visible_item_clause(user.id),
+        LearningItem.item_type.in_(("word", "idiom")),
+    )
     rows = (
         await db.execute(
             select(ReviewCard, LearningItem)
             .join(LearningItem, LearningItem.id == ReviewCard.item_id)
-            .where(
-                ReviewCard.user_id == user.id,
-                ReviewCard.suspended.is_(False),
-                # 구독 해제한 콘텐츠의 단어는 노드에서 제외 — 카드는 보존되므로
-                # 다시 담으면 그대로 복귀한다 (content-governance.md 가시성 규칙)
-                visible_item_clause(user.id),
-                LearningItem.item_type.in_(("word", "idiom")),
-            )
+            .where(*node_clause, lang_item_clause(resolved_lang))
             .order_by(ReviewCard.created_at.desc(), ReviewCard.id.desc())
             .limit(MAX_NETWORK_NODES)
         )
@@ -1113,6 +1126,19 @@ async def get_network(
         for card, item in rows
     ]
 
+    count_rows = (
+        await db.execute(
+            select(Content.lang, func.count(func.distinct(ReviewCard.item_id)))
+            .select_from(ReviewCard)
+            .join(LearningItem, LearningItem.id == ReviewCard.item_id)
+            .join(ItemOccurrence, ItemOccurrence.item_id == LearningItem.id)
+            .join(Content, Content.id == ItemOccurrence.content_id)
+            .where(*node_clause)
+            .group_by(Content.lang)
+        )
+    ).all()
+    counts = dict(count_rows)
+
     edges: list[dict] = []
     suggestions: list[dict] = []
     enabled = embeddings.enabled(db)
@@ -1122,13 +1148,15 @@ async def get_network(
             neighbor = await vocab_network.neighbor_rows(db, my_ids)
             edges, candidates = vocab_network.build_network(set(my_ids), neighbor)
             if candidates:
-                # 추천은 내 덱 밖 항목 — 가시성 규칙(공용 승인 ∪ 내 개인) 통과분만
+                # 추천은 내 덱 밖 항목 — 가시성 규칙(공용 승인 ∪ 내 개인) +
+                # 이 언어 네트워크(lang_item_clause) 통과분만
                 visible = set(
                     (
                         await db.execute(
                             select(LearningItem.id).where(
                                 LearningItem.id.in_([c["item_id"] for c in candidates]),
                                 visible_item_clause(user.id),
+                                lang_item_clause(resolved_lang),
                             )
                         )
                     ).scalars()
@@ -1143,6 +1171,8 @@ async def get_network(
         "edges": edges,
         "suggestions": suggestions,
         "embeddings_enabled": enabled,
+        "lang": resolved_lang,
+        "counts": counts,
     }
 
 
