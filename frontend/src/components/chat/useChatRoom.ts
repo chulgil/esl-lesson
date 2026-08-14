@@ -10,7 +10,9 @@ import {
 import {
   chatApi,
   newClientMsgId,
+  roomsApi,
   type ChatMessage,
+  type ChatRoom,
   type ShareableItem,
 } from "@/lib/chat-api";
 import {
@@ -21,11 +23,14 @@ import {
   setActiveChatRoom,
 } from "@/lib/chat-signals";
 
-/** 대화방 데이터·동작 훅 — 전체 페이지와 플로팅 위젯이 공유 (docs/specs/chat.md).
- *  표현(스킨)은 반환된 상태·핸들러만 사용한다. */
+/** 언어 학습 대화방 데이터·동작 훅 — 전체 페이지와 플로팅 위젯이 공유
+ *  (docs/specs/chat-language-rooms.md). room 기준(roomId)으로 동작한다 — 같은
+ *  상대와도 언어쌍이 다르면 별개 방이라, 필터링은 항상 conversation_id(=room.id)
+ *  기준이어야 한다(peer id 기준이면 다른 방 메시지가 섞인다). 표현(스킨)은
+ *  반환된 상태·핸들러만 사용한다. */
 
-// 대화별 메모리 캐시 — 재진입 시 즉시 복원 (스펙: 클라이언트 캐싱)
-const roomCache = new Map<number, ChatMessage[]>();
+// 방별 메모리 캐시 — 재진입 시 즉시 복원 (스펙: 클라이언트 캐싱)
+const roomMsgCache = new Map<number, ChatMessage[]>();
 
 export interface AttachedImage {
   url: string; // 로컬 미리보기 (objectURL)
@@ -33,20 +38,14 @@ export interface AttachedImage {
   uploading: boolean;
 }
 
-export function useChatRoom(otherId: number) {
+export function useChatRoom(roomId: number) {
   const [myId, setMyId] = useState<number | null>(null);
-  const [peerName, setPeerName] = useState("");
-  const [online, setOnline] = useState(false);
+  const [room, setRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(
-    () => roomCache.get(otherId) ?? [],
+    () => roomMsgCache.get(roomId) ?? [],
   );
   const [otherRead, setOtherRead] = useState(0);
   const [typing, setTyping] = useState(false);
-  // 이 대화의 자동번역 on/off — WS 로 새로 도착한 메시지의 번역을 조회할지 판단.
-  // 범위(내 글/상대 글)는 설정에서 개별 체크 (2026-08-12)
-  const [translate, setTranslate] = useState(false);
-  const [translateTheirs, setTranslateTheirs] = useState(false);
-  const [translateMine, setTranslateMine] = useState(false);
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [input, setInput] = useState("");
   const [attachedItem, setAttachedItem] = useState<ShareableItem | null>(null);
@@ -65,15 +64,21 @@ export function useChatRoom(otherId: number) {
   // 병렬 fetch 돼 수십 개씩 중복 프리펜드되던 버그 (2026-07-31 보고)
   const loadingOlder = useRef(false);
 
-  useEffect(() => {
-    if (messages.length > 0) roomCache.set(otherId, messages.slice(-100));
-  }, [messages, otherId]);
+  const peerId = room?.peer.id ?? null;
+  // WS 이벤트 핸들러가 최신 myId 를 읽도록 ref 로도 보관 (effect 재구독 최소화)
+  const myIdRef = useRef<number | null>(null);
+  myIdRef.current = myId;
 
-  // 보고 있는 대화 등록 — 전역 토스트·OS 알림 중복 억제 (위젯과 동일 경로)
   useEffect(() => {
-    setActiveChatRoom(otherId);
+    if (messages.length > 0) roomMsgCache.set(roomId, messages.slice(-100));
+  }, [messages, roomId]);
+
+  // 보고 있는 방 등록 — 전역 토스트·OS 알림 중복 억제 (위젯과 동일 경로).
+  // room id 기준이라야 같은 상대의 다른 언어쌍 방과 섞이지 않는다
+  useEffect(() => {
+    setActiveChatRoom(roomId);
     return () => setActiveChatRoom(null);
-  }, [otherId]);
+  }, [roomId]);
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
@@ -81,8 +86,6 @@ export function useChatRoom(otherId: number) {
   }, []);
 
   // 방 진입·위젯 재열림 시 항상 최신(최하단)부터 보여야 한다 (2026-07-28 보고).
-  // 초기 fetch 후 1회 스크롤만으로는 (a) 캐시 복원 렌더 (b) 이미지 로드로
-  // 높이가 늦게 자라는 경우 하단이 풀린다 — rAF + 지연 재고정 2회로 보강.
   useEffect(() => {
     requestAnimationFrame(scrollToBottom);
     const t1 = setTimeout(scrollToBottom, 300);
@@ -91,11 +94,11 @@ export function useChatRoom(otherId: number) {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [otherId, scrollToBottom]);
+  }, [roomId, scrollToBottom]);
 
   const markReadAndSignal = useCallback(() => {
-    chatApi
-      .markRead(otherId)
+    roomsApi
+      .markRead(roomId)
       .then(() =>
         dispatchChatEvent({
           t: "chat.read",
@@ -105,36 +108,49 @@ export function useChatRoom(otherId: number) {
         }),
       )
       .catch(() => {});
-  }, [otherId]);
+  }, [roomId]);
+
+  // WS 로 도착한 상대 메시지의 번역 — 방 번역은 항상 시도된다(설정 무관,
+  // chat-language-rooms.md §번역 규칙). 내 글은 send() 응답에 이미 동봉된다
+  const fetchTranslation = useCallback((messageId: number) => {
+    chatApi
+      .translation(messageId)
+      .then((res) => {
+        if (!res.translation) return;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageId ? { ...m, translation: res.translation } : m,
+          ),
+        );
+      })
+      .catch(() => {});
+  }, []);
 
   // 초기 로드
   useEffect(() => {
-    if (!Number.isFinite(otherId)) return;
+    if (!Number.isFinite(roomId)) return;
     fetchMe().then((me) => me && setMyId(me.id));
-    chatApi
-      .messages(otherId)
+    roomsApi
+      .messages(roomId)
       .then((res) => {
+        setRoom(res.room);
         setMessages(res.items);
-        setOnline(res.online);
-        setTranslate(res.translate);
-        setTranslateMine(res.translate_mine);
-        setTranslateTheirs(res.translate_theirs);
-        if (res.peer) setPeerName(res.peer.name);
-        const reads = res.reads[String(otherId)];
+        const reads = res.reads[String(res.room.peer.id)];
         if (reads) setOtherRead(reads);
         setHasMore(res.items.length >= 50);
         markReadAndSignal();
         requestAnimationFrame(scrollToBottom);
       })
       .catch((e) => setError(e.message));
-  }, [otherId, scrollToBottom, markReadAndSignal]);
+  }, [roomId, scrollToBottom, markReadAndSignal]);
 
   // 재동기화 — WS 끊김·백그라운드 동안 놓친 메시지를 최신 페이지와 병합.
   // id 오름차순 유지(서버 PK 단조 증가), 이미 아는 메시지는 그대로 둔다.
   const resync = useCallback(() => {
-    chatApi
-      .messages(otherId)
+    roomsApi
+      .messages(roomId)
       .then((res) => {
+        setRoom(res.room);
         setMessages((prev) => {
           const known = new Set(prev.map((m) => m.id));
           const byId = new Map(res.items.map((m) => [m.id, m]));
@@ -152,7 +168,6 @@ export function useChatRoom(otherId: number) {
           if (fresh.length === 0 && !changedKnown) return prev;
           // 최신 페이지가 기존과 전혀 안 겹치면(50개 초과 유실) 이어붙이지 않고
           // 최신 페이지로 리셋 — 중간 구멍이 영구 미표시되는 문제 방지.
-          // 과거분은 위로 스크롤 페이징이 새 oldest 부터 연속으로 채운다 (심층 리뷰)
           const prevMax = prev.length ? prev[prev.length - 1].id : 0;
           const overlaps = res.items.some((m) => known.has(m.id));
           if (
@@ -168,11 +183,7 @@ export function useChatRoom(otherId: number) {
             (a, b) => a.id - b.id,
           );
         });
-        setOnline(res.online);
-        setTranslate(res.translate);
-        setTranslateMine(res.translate_mine);
-        setTranslateTheirs(res.translate_theirs);
-        const reads = res.reads[String(otherId)];
+        const reads = res.reads[String(res.room.peer.id)];
         if (reads) setOtherRead(reads);
         // 패널을 접어둔(위장) 동안은 읽음 처리 보류 — 배지·알림이 살아야 한다
         // (2026-08-10 보고: 접힌 화면에서 알림이 전부 침묵)
@@ -180,11 +191,10 @@ export function useChatRoom(otherId: number) {
         if (stickBottom.current) requestAnimationFrame(scrollToBottom);
       })
       .catch(() => {});
-  }, [otherId, markReadAndSignal, scrollToBottom]);
+  }, [roomId, markReadAndSignal, scrollToBottom]);
 
   // 새 메시지(수신·낙관 렌더) 도착 시 최하단 고정 — WS 핸들러의 rAF 는 React
-  // 렌더 전에 돌아 옛 높이로 스크롤되는 경합이 있었다 (2026-07-31 보고:
-  // 챗이 와도 안 내려감). 렌더 후 effect 에서 스크롤해야 새 높이가 반영된다
+  // 렌더 전에 돌아 옛 높이로 스크롤되는 경합이 있었다 (2026-07-31 보고)
   const lastCount = useRef(0);
   useEffect(() => {
     const count = messages.length + pending.length;
@@ -195,7 +205,7 @@ export function useChatRoom(otherId: number) {
   }, [messages, pending, scrollToBottom]);
 
   // 탭 복귀·창 포커스 시 재동기화 — 백그라운드 스로틀/절전으로 WS 이벤트를
-  // 놓친 경우의 안전망 (2026-07-31 보고: 영역 이탈 후 갱신 안 됨)
+  // 놓친 경우의 안전망 (2026-07-31 보고)
   useEffect(() => {
     const onBack = () => {
       if (!document.hidden) resync();
@@ -208,12 +218,11 @@ export function useChatRoom(otherId: number) {
     };
   }, [resync]);
 
-  // WS 이벤트 구독
+  // WS 이벤트 구독 — conversation_id(=room.id) 기준으로 필터링해야 같은
+  // 상대의 다른 언어쌍 방과 메시지가 섞이지 않는다
   useEffect(() => {
     return onChatEvent((msg) => {
-      // 상대가 보낸 메시지 + 시스템 줄(kind — 내 공지 수정도 WS 로만 도착.
-      // 일반 내 글은 HTTP 응답으로 붙지만 시스템 줄은 이 경로가 유일, 2026-08-13)
-      if (msg.t === "chat.message" && (msg.sender_id === otherId || msg.kind)) {
+      if (msg.t === "chat.message" && msg.conversation_id === roomId) {
         setMessages((prev) =>
           prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
         );
@@ -221,31 +230,28 @@ export function useChatRoom(otherId: number) {
         // 접힌(위장) 패널에서는 읽음 보류 — 다시 펼치면 chat.resync 가 처리
         if (isChatPanelVisible()) markReadAndSignal();
         if (stickBottom.current) requestAnimationFrame(scrollToBottom);
-        // WS 는 번역을 실어오지 않는다(비동기 완료 전 도착) — 상대 글 번역이
-        // 켜져 있을 때만 1회 조회 (범위 밖이면 서버도 null 을 주지만 호출 자체를 아낀다)
+        // 상대 글만 번역 조회 — 내 글은 send() 응답에 이미 번역이 동봉된다.
+        // WS payload 가 이미 번역을 동봉했으면(방 기준 전송) 재조회하지 않는다
+        // (chat-language-rooms.md §API — 전송 응답과 동일하게 WS 도 동봉).
         // 공지 시스템 줄(kind)은 번역 대상이 아니다 (docs/specs/chat-notice.md)
-        if (!msg.kind && translate && translateTheirs) {
-          chatApi
-            .translation(msg.id)
-            .then((res) => {
-              if (!res.translation) return;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === msg.id ? { ...m, translation: res.translation } : m,
-                ),
-              );
-            })
-            .catch(() => {});
+        if (
+          !msg.kind &&
+          msg.sender_id !== myIdRef.current &&
+          msg.translation === undefined
+        ) {
+          fetchTranslation(msg.id);
         }
-      } else if (msg.t === "chat.read" && msg.user_id === otherId) {
+      } else if (msg.t === "chat.read" && msg.conversation_id === roomId) {
         setOtherRead(msg.last_read_message_id);
-      } else if (msg.t === "chat.typing" && msg.from_user_id === otherId) {
+      } else if (msg.t === "chat.typing" && msg.from_user_id === peerId) {
         setTyping(true);
         if (typingTimer.current) clearTimeout(typingTimer.current);
         typingTimer.current = setTimeout(() => setTyping(false), 5000);
-      } else if (msg.t === "presence" && msg.user_id === otherId) {
-        setOnline(msg.online);
-      } else if (msg.t === "chat.deleted") {
+      } else if (msg.t === "presence" && msg.user_id === peerId) {
+        setRoom((prev) =>
+          prev ? { ...prev, peer: { ...prev.peer, online: msg.online } } : prev,
+        );
+      } else if (msg.t === "chat.deleted" && msg.conversation_id === roomId) {
         // 상대(또는 내 다른 탭)가 삭제 — "삭제되었습니다" 로 즉시 치환
         setMessages((prev) =>
           prev.map((m) =>
@@ -261,18 +267,21 @@ export function useChatRoom(otherId: number) {
               : m,
           ),
         );
+      } else if (msg.t === "chat.room_closed" && msg.room_id === roomId) {
+        // 상대가 나감 — 방이 종료돼 더 이상 전송할 수 없다
+        setRoom((prev) => (prev ? { ...prev, status: "closed" } : prev));
       } else if (msg.t === "chat.resync") {
         // WS 재접속 — 끊김 동안 놓친 메시지 캐치업
         resync();
       }
     });
   }, [
-    otherId,
+    roomId,
+    peerId,
     scrollToBottom,
     markReadAndSignal,
     resync,
-    translate,
-    translateTheirs,
+    fetchTranslation,
   ]);
 
   // 내 메시지 삭제 — 낙관적 치환 후 서버 확정 (실패 시 재동기화로 복원)
@@ -297,6 +306,16 @@ export function useChatRoom(otherId: number) {
     [resync],
   );
 
+  // 방 나가기 — origin=match 방에서만 노출(스킨 판단), closed 로 낙관 반영
+  const onLeaveRoom = useCallback(() => {
+    roomsApi
+      .leave(roomId)
+      .then(() =>
+        setRoom((prev) => (prev ? { ...prev, status: "closed" } : prev)),
+      )
+      .catch(() => {});
+  }, [roomId]);
+
   // 위로 무한스크롤 — in-flight 가드 + id 중복 제거 (같은 페이지 이중 프리펜드 방지)
   const loadOlder = useCallback(async () => {
     const oldest = messages[0];
@@ -305,7 +324,7 @@ export function useChatRoom(otherId: number) {
     const el = listRef.current;
     const prevHeight = el?.scrollHeight ?? 0;
     try {
-      const res = await chatApi.messages(otherId, oldest.id);
+      const res = await roomsApi.messages(roomId, oldest.id);
       setMessages((prev) => {
         const known = new Set(prev.map((m) => m.id));
         const older = res.items.filter((m) => !known.has(m.id));
@@ -318,7 +337,7 @@ export function useChatRoom(otherId: number) {
     } finally {
       loadingOlder.current = false;
     }
-  }, [messages, hasMore, otherId]);
+  }, [messages, hasMore, roomId]);
 
   const onScroll = useCallback(() => {
     const el = listRef.current;
@@ -373,7 +392,8 @@ export function useChatRoom(otherId: number) {
     });
   }, []);
 
-  // 전송 — 낙관적 렌더 → 확정 치환, 실패 시 재시도
+  // 전송 — 낙관적 렌더 → 확정 치환, 실패 시 재시도. 번역은 응답에 동봉된다
+  // (chat-language-rooms.md §API — WS 조회 왕복 불필요)
   const send = useCallback(
     async (pendingEntry?: PendingMessage) => {
       const body = pendingEntry?.body ?? input.trim();
@@ -415,8 +435,8 @@ export function useChatRoom(otherId: number) {
       }
 
       try {
-        const saved = await chatApi.send({
-          to_user_id: otherId,
+        const saved = await roomsApi.send({
+          room_id: roomId,
           body,
           client_msg_id,
           item_id: item?.id,
@@ -430,48 +450,32 @@ export function useChatRoom(otherId: number) {
           prev.some((m) => m.id === saved.id) ? prev : [...prev, saved],
         );
         if (stickBottom.current) requestAnimationFrame(scrollToBottom);
-        // 내 글 번역 — 전송 응답에는 번역이 없다 (2026-08-12): 켜져 있으면 1회 조회
-        if (translate && translateMine) {
-          chatApi
-            .translation(saved.id)
-            .then((res) => {
-              if (!res.translation) return;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === saved.id
-                    ? { ...m, translation: res.translation }
-                    : m,
-                ),
-              );
-            })
-            .catch(() => {});
-        }
       } catch (e) {
         setPending((prev) =>
           prev.map((x) =>
             x.client_msg_id === client_msg_id ? { ...x, failed: true } : x,
           ),
         );
-        if (e instanceof Error && e.message === "not_friends") {
+        const code = e instanceof Error ? e.message : "";
+        if (code === "not_friends") {
           setError("친구 관계가 아니에요 — 다시 친구를 맺으면 보낼 수 있어요");
+        } else if (code === "room_closed") {
+          setError("종료된 방이에요 — 더 이상 보낼 수 없어요");
         }
       }
     },
-    [
-      input,
-      attachedItem,
-      attachedImage,
-      replyDraft,
-      otherId,
-      scrollToBottom,
-      translate,
-      translateMine,
-    ],
+    [input, attachedItem, attachedImage, replyDraft, roomId, scrollToBottom],
   );
 
   const skinProps = {
-    peerName,
-    online,
+    room,
+    peerName: room?.peer.nickname ?? "",
+    peerId,
+    online: room?.peer.online ?? false,
+    sourceLang: room?.source_lang ?? null,
+    targetLang: room?.target_lang ?? null,
+    origin: room?.origin ?? null,
+    status: room?.status ?? null,
     typing,
     myId,
     messages,
@@ -486,11 +490,12 @@ export function useChatRoom(otherId: number) {
     onScroll,
     onInputChange: (value: string) => {
       setInput(value);
-      sendTyping(otherId); // 클라 3초 스로틀 내장
+      if (peerId != null) sendTyping(peerId); // 클라 3초 스로틀 내장
     },
     onSend: () => send(),
     onRetry: (entry: PendingMessage) => send(entry),
     onDeleteMessage,
+    onLeaveRoom,
     replyDraft,
     onReplyTo: (msg: ChatMessage) =>
       setReplyDraft({

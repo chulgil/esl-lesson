@@ -56,6 +56,13 @@ export function InviteToaster() {
     themeKey: string;
     reason: string | null;
   } | null>(null);
+  // 친구 학습 시작 알림 (docs/specs/study-spectate.md §진입 경로 #1) — 접속
+  // 중 채널만, 웹푸시 폴백 없음
+  const [studyToast, setStudyToast] = useState<{
+    userId: number;
+    nickname: string;
+    code: string;
+  } | null>(null);
 
   const handleMessage = useCallback((msg: ServerMsg) => {
     if (msg.t === "iv.invited") {
@@ -71,10 +78,12 @@ export function InviteToaster() {
       // 이벤트 버스로 배급 (대화방·위젯·네비 배지가 구독)
       dispatchChatEvent(msg);
       // 위장 접기(빈 종이/시트) 상태는 "안 보는 중" — 접힌 화면에서 알림이
-      // 전부 침묵하던 버그 (2026-08-10 보고)
+      // 전부 침묵하던 버그 (2026-08-10 보고). room 기준 판정 — 같은 상대의
+      // 다른 언어쌍 방과 섞이지 않게 conversation_id(=room id) 로 비교한다
+      // (2026-08-14 언어 학습 방 확장)
       const viewing =
-        (pathRef.current === `/chat/${msg.sender_id}` ||
-          getActiveChatRoom() === msg.sender_id) &&
+        (pathRef.current === `/chat/room/${msg.conversation_id}` ||
+          getActiveChatRoom() === msg.conversation_id) &&
         isChatPanelVisible();
       // "실제로 대화 중"일 때만 알림 생략 = 그 방을 보는 중 + 탭 전면 + 창 포커스
       // + 입력창에 커서. 대화방을 켜두고 커서가 입력창 밖이면 자리 비움으로 보고
@@ -95,7 +104,11 @@ export function InviteToaster() {
         // 내용 없는 알림 — 발신자·본문 대신 테마 라벨만 (2026-08-04).
         // 잠금화면·알림센터 미리보기가 위장을 무력화한다. 웹푸시 경로(sw.js)와
         // 같은 문구를 쓴다 — 두 경로가 다르면 어느 쪽이 뜨느냐에 따라 노출된다.
-        notifyOs(chatNotice(getAppTheme()), `/chat/${msg.sender_id}`);
+        // 딥링크는 room 경로로 (chat-language-rooms.md §UX 딥링크)
+        notifyOs(
+          chatNotice(getAppTheme()),
+          `/chat/room/${msg.conversation_id}`,
+        );
       }
       return;
     }
@@ -105,7 +118,10 @@ export function InviteToaster() {
       msg.t === "chat.typing" ||
       msg.t === "presence" ||
       msg.t === "notif.new" ||
-      msg.t === "goal.sync"
+      msg.t === "goal.sync" ||
+      msg.t === "chat.matched" ||
+      msg.t === "chat.room_created" ||
+      msg.t === "chat.room_closed"
     ) {
       dispatchChatEvent(msg);
       // 테마 지급(업적 보상·이벤트)은 벨 적재에 더해 즉시 축하 — 획득 순간 각인
@@ -115,6 +131,18 @@ export function InviteToaster() {
           reason: msg.note ? String(msg.note) : null,
         });
       }
+      return;
+    }
+    if (msg.t === "st.friend_studying") {
+      setStudyToast({
+        userId: msg.user_id,
+        nickname: msg.nickname,
+        code: msg.code,
+      });
+      return;
+    }
+    if (msg.t === "st.friend_study_end") {
+      setStudyToast((prev) => (prev?.userId === msg.user_id ? null : prev));
     }
   }, []);
 
@@ -214,6 +242,13 @@ export function InviteToaster() {
     return () => clearTimeout(timer);
   }, [themeToast]);
 
+  // 친구 학습 시작 토스트 — 초대 토스트와 동형, 8초 후 자동 소멸
+  useEffect(() => {
+    if (!studyToast) return;
+    const timer = setTimeout(() => setStudyToast(null), 8000);
+    return () => clearTimeout(timer);
+  }, [studyToast]);
+
   return (
     <>
       {invite && (
@@ -239,6 +274,33 @@ export function InviteToaster() {
             type="button"
             onClick={() => setInvite(null)}
             aria-label="초대 닫기"
+            className="min-h-10 min-w-10 rounded-md text-lg opacity-50 hover:opacity-100"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {studyToast && (
+        <div className="fixed inset-x-4 top-16 z-50 mx-auto flex max-w-sm items-center gap-3 rounded-lg border-2 border-brick-green/60 bg-white p-3 shadow-lg">
+          <p className="flex-1 text-sm">
+            <b>{studyToast.nickname}</b> 님이 학습 중이에요
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const target = `/study/watch?code=${studyToast.code}`;
+              setStudyToast(null);
+              router.push(target);
+            }}
+            className="min-h-10 rounded-md bg-brick-green px-3 text-sm font-bold text-brick-label transition-colors hover:bg-brick-green/85"
+          >
+            관전
+          </button>
+          <button
+            type="button"
+            onClick={() => setStudyToast(null)}
+            aria-label="학습 중 알림 닫기"
             className="min-h-10 min-w-10 rounded-md text-lg opacity-50 hover:opacity-100"
           >
             ×

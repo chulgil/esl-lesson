@@ -140,7 +140,7 @@ function DictationInner() {
       case "error":
         setError(
           msg.code === "sentences_insufficient"
-            ? "받아쓸 문장이 아직 부족해요 — 유튜브 영상을 등록하면 쌓여요"
+            ? "받아쓸 문장이 아직 부족해요 — 유튜브 영상을 등록하거나 채팅으로 모아보세요"
             : msg.code === "room_not_found"
               ? "방을 찾을 수 없어요 — 코드를 확인해주세요"
               : msg.code === "room_closed"

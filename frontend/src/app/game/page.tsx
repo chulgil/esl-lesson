@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MyBests } from "@/components/game/MyBests";
 import { RecommendedMatch } from "@/components/game/RecommendedMatch";
 import { WeeklyLeaderboardsCard } from "@/components/game/WeeklyLeaderboardsCard";
+import { GameLangChips } from "@/app/game/GameLangChips";
 
 /** 게임 허브 — 종류별 카테고리 메뉴 + 게임 설명 (2026-07-14 개편) */
 const GAMES: {
@@ -108,6 +109,7 @@ export default function GameHubPage() {
         <p className="mt-2 text-sm opacity-70">
           배운 단어와 문장이 게임 소재가 돼요 — 놀수록 복습이 됩니다.
         </p>
+        <GameLangChips />
         <MyBests />
       </header>
 

@@ -8,6 +8,7 @@ import { AchievementBadges } from "@/components/study/AchievementBadges";
 import { CardCollection } from "@/components/study/CardCollection";
 import { LongTermMemoryCard } from "@/components/study/LongTermMemoryCard";
 import { MyPhrasesCard } from "@/components/study/MyPhrasesCard";
+import { StudyingFriendsCard } from "@/components/study/StudyingFriendsCard";
 import { WeeklyReportCard } from "@/components/study/WeeklyReportCard";
 import { examApi, type OpenExam } from "@/lib/exam-api";
 import { friendsApi } from "@/lib/friends-api";
@@ -103,6 +104,12 @@ export default function StudyHubPage() {
           </Link>
         </section>
       )}
+
+      {/* 지금 학습 중인 친구 — 관전 진입점, 친구 카드와 별개로 원탭 노출
+          (study-spectate.md 진입 경로 재설계, 홈 카드와 동일 컴포넌트 재사용) */}
+      <div className="mt-5">
+        <StudyingFriendsCard />
+      </div>
 
       {/* 지난주 성적표 — 주 단위 증거 서사, 그 주 내내 상시 (weekly-report.md) */}
       <WeeklyReportCard />

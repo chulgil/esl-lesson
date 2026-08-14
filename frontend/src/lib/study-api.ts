@@ -7,7 +7,13 @@ export interface Question {
   /** 직전 리뷰 등급(1~4) — null 은 처음 학습. 힌트 정책 분기: 쉬움(4)만
    *  시간차 힌트, 그 외는 순차 힌트 (learning.md 힌트 타이머) */
   last_rating: number | null;
-  quiz_mode: "choice_en2ko" | "choice_ko2en" | "cloze" | "pattern" | "compose";
+  quiz_mode:
+    | "choice_en2ko"
+    | "choice_ko2en"
+    | "cloze"
+    | "pattern"
+    | "compose"
+    | "sentence_assemble";
   level: number;
   prompt?: string;
   prompt_ko?: string;
@@ -128,6 +134,35 @@ export interface StudyRank {
 export interface LongTermMemory {
   count: number;
   weekly: { week_start: string; count: number }[];
+}
+
+/** 내가 쓰는 말 덱 요약 — 언어별 1개, 활성 100개 순환 보충 (docs/specs/my-phrases.md) */
+export interface MyPhrasesSummary {
+  content_id: number;
+  lang: "ko" | "en" | "ja";
+  total: number;
+  /** 장기기억 미도달(활성) 문장 수 — 목표 100 */
+  active: number;
+  /** 장기기억 도달로 목록에서 숨겨진 문장 수 */
+  graduated: number;
+  added_now: number;
+  recent: { en: string; ko: string }[];
+}
+
+export interface MyPhraseItem {
+  id: number;
+  en_text: string;
+  ko_text: string;
+  /** 채팅 발화 빈도 — 목록·출제 우선순위 (내림차순) */
+  freq: number | null;
+}
+
+/** 편집 화면용 — 활성 목록(빈도 내림차순) + 졸업 목록(접힘 섹션) */
+export interface MyPhrasesItemsResponse {
+  lang: "ko" | "en" | "ja";
+  graduated: number;
+  items: MyPhraseItem[];
+  graduated_items: MyPhraseItem[];
 }
 
 export interface Stats {
@@ -373,26 +408,26 @@ export const studyApi = {
       "/api/study/achievements",
     ),
   leaderboard: () => request<{ items: StudyRank[] }>("/api/study/leaderboard"),
-  /** 내가 쓰는 말 덱 — 조회 시 lazy 동기화 (docs/specs/my-phrases.md) */
-  myPhrases: () =>
-    request<{
-      content_id: number;
-      total: number;
-      added_now: number;
-      recent: { en: string; ko: string }[];
-    }>("/api/study/my-phrases"),
-  /** 편집용 전체 목록 + 문장 빼기 (재동기화에도 돌아오지 않음) */
-  myPhrasesItems: () =>
-    request<{
-      content_id: number;
-      items: { item_id: number; en: string; ko: string }[];
-    }>("/api/study/my-phrases/items"),
+  /** 내가 쓰는 말 덱 — 조회 시 lazy 동기화, 언어별(docs/specs/my-phrases.md).
+   *  lang 생략 시 서버가 learning_langs[0] 을 기본으로 잡는다. */
+  myPhrases: (lang?: string) =>
+    request<MyPhrasesSummary>(
+      lang ? `/api/study/my-phrases?lang=${lang}` : "/api/study/my-phrases",
+    ),
+  /** 편집용 활성/졸업 목록(빈도 내림차순) + 문장 빼기 (재동기화에도 돌아오지 않음) */
+  myPhrasesItems: (lang?: string) =>
+    request<MyPhrasesItemsResponse>(
+      lang
+        ? `/api/study/my-phrases/items?lang=${lang}`
+        : "/api/study/my-phrases/items",
+    ),
   removeMyPhrase: (itemId: number) =>
     request<void>(`/api/study/my-phrases/${itemId}`, { method: "DELETE" }),
   /** 번역 품질 새로고침 — 엔진 개선분을 기존 문장에 적용 (ID 유지) */
-  refreshMyPhrases: () =>
+  refreshMyPhrases: (lang?: string) =>
     request<{ updated: number }>("/api/study/my-phrases/refresh", {
       method: "POST",
+      body: JSON.stringify(lang ? { lang } : {}),
     }),
   quests: () => request<QuestBoard>("/api/study/quests"),
   stats: () => request<Stats>("/api/study/stats"),

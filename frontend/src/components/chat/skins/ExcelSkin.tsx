@@ -8,11 +8,13 @@ import { ChatTextarea } from "@/components/chat/ChatTextarea";
 import { DeleteMessageButton } from "@/components/chat/DeleteMessageButton";
 import { GoalBoard, type GoalBoardHandle } from "@/components/chat/GoalBoard";
 import { openImage } from "@/components/chat/ImageLightbox";
-import { LinkifiedText } from "@/components/chat/LinkifiedText";
+import { LangPairBadge } from "@/components/chat/LangPairBadge";
+import { MessageBody } from "@/components/chat/MessageBody";
 import { NoticeBar, type NoticeBarHandle } from "@/components/chat/NoticeBar";
 import { NoticeSystemLine } from "@/components/chat/NoticeSystemLine";
 import { ReplyQuote } from "@/components/chat/ReplyQuote";
-import { TranslationLine } from "@/components/chat/TranslationLine";
+import { StudyingBadge } from "@/components/chat/StudyingBadge";
+import { roomInputPlaceholder } from "@/lib/chat-lang";
 import { setChatPanelVisible } from "@/lib/chat-signals";
 import { BlankSheet, ExcelChrome, fakeFilename } from "./ExcelChrome";
 import type { ChatSkinProps } from "./types";
@@ -22,14 +24,16 @@ import type { ChatSkinProps } from "./types";
  *  좌측(빈 시트로 위장)+우측(화면 우측 도킹 채팅 리스트) 2단 레이아웃으로 구성한다.
  *  각 메시지는 [닉네임·시각] 헤더 줄 + 그 아래 내용 줄. 입력중 = 상태바
  *  "공동 작성자가 셀을 편집하는 중", 읽음 = 메시지 헤더의 확인/미확인,
- *  Esc ×2 = 빈 시트 (ExcelChrome 보스 키). */
+ *  Esc ×2 = 빈 시트 (ExcelChrome 보스 키).
+ *  2026-08-14: 언어쌍 학습 방으로 확장 — 본문은 번역문 우선 표시 (chat-language-rooms.md). */
 
 const COLS = ["A", "B", "C", "D"];
 
-export function ExcelSkin(p: ChatSkinProps & { otherId: number }) {
+export function ExcelSkin(p: ChatSkinProps & { roomId: number }) {
   const router = useRouter();
   const noticeRef = useRef<NoticeBarHandle>(null);
   const goalsRef = useRef<GoalBoardHandle>(null);
+  const closed = p.status === "closed";
   // 빈 시트 클릭 = 채팅 레일 토글 (위장 강화, 2026-07-31)
   const [railHidden, setRailHidden] = useState(false);
   // 접힘 = "안 보는 중" — 배지·알림 유지, 펼치면 읽음 (2026-08-10 버그 픽스)
@@ -61,30 +65,50 @@ export function ExcelSkin(p: ChatSkinProps & { otherId: number }) {
       }
       statusRight={<span>행 {rowBase + 2}</span>}
       titleExtra={
-        <ChatHeaderMenu
-          excel
-          items={[
-            {
-              label: () =>
-                noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
-              onClick: () => noticeRef.current?.openEditor(),
-            },
-            {
-              label: "함께 목표",
-              onClick: () => goalsRef.current?.open(),
-            },
-          ]}
-        />
+        <div className="flex items-center gap-1.5">
+          {p.sourceLang && p.targetLang && (
+            <span className="shrink-0 rounded-sm border border-white/30 px-1.5 py-0.5 text-[10px] font-bold text-white/90">
+              {p.sourceLang.toUpperCase()}→{p.targetLang.toUpperCase()}
+            </span>
+          )}
+          {p.origin === "match" && !closed && (
+            <button
+              type="button"
+              onClick={p.onLeaveRoom}
+              className="min-h-9 rounded-sm px-1.5 text-[11px] font-bold text-white/70 hover:bg-white/10 hover:text-white"
+            >
+              나가기
+            </button>
+          )}
+          <ChatHeaderMenu
+            excel
+            items={[
+              {
+                label: () =>
+                  noticeRef.current?.hasNotice ? "공지 수정" : "공지 쓰기",
+                onClick: () => noticeRef.current?.openEditor(),
+              },
+              {
+                label: "함께 목표",
+                onClick: () => goalsRef.current?.open(),
+              },
+            ]}
+          />
+        </div>
       }
       blank={<BlankSheet cols={COLS} />}
     >
-      <NoticeBar otherId={p.otherId} excel apiRef={noticeRef} />
-      <GoalBoard
-        otherId={p.otherId}
-        excel
-        peerName={p.peerName}
-        apiRef={goalsRef}
-      />
+      {p.peerId != null && (
+        <>
+          <NoticeBar otherId={p.peerId} excel apiRef={noticeRef} />
+          <GoalBoard
+            otherId={p.peerId}
+            excel
+            peerName={p.peerName}
+            apiRef={goalsRef}
+          />
+        </>
+      )}
       <div className="flex min-h-0 flex-1">
         {/* 좌측 — 실제 시트처럼 보이는 채움 영역 (위장, 모바일에서는 숨김).
             클릭 = 채팅 레일 토글 — 빈 시트만 남겨 위장 강화 (2026-07-31) */}
@@ -101,6 +125,15 @@ export function ExcelSkin(p: ChatSkinProps & { otherId: number }) {
             railHidden ? "hidden md:hidden" : "flex"
           }`}
         >
+          {p.sourceLang && p.targetLang && (
+            <div className="flex items-center gap-1.5 border-b border-[#d8dde3] bg-[#f6f8f9] px-2 py-1">
+              <LangPairBadge source={p.sourceLang} target={p.targetLang} />
+              {closed && (
+                <span className="text-[10px] text-[#999]">종료됨</span>
+              )}
+              <StudyingBadge peerId={p.peerId} variant="excel" />
+            </div>
+          )}
           <div
             ref={p.listRef}
             onScroll={p.onScroll}
@@ -209,13 +242,13 @@ export function ExcelSkin(p: ChatSkinProps & { otherId: number }) {
                       />
                     </button>
                   )}
-                  <span className="break-words whitespace-pre-wrap">
-                    <LinkifiedText text={m.body} />
-                  </span>
-                  <TranslationLine
-                    translation={m.translation}
-                    variant="excel"
-                  />
+                  {!m.deleted && (
+                    <MessageBody
+                      body={m.body}
+                      translation={m.translation}
+                      variant="excel"
+                    />
+                  )}
                 </div>
               );
             })}
@@ -326,35 +359,41 @@ export function ExcelSkin(p: ChatSkinProps & { otherId: number }) {
             </div>
           )}
           {/* 입력줄 — 리스트 하단 고정. PC Enter 전송·모바일 Enter 줄바꿈 (ChatTextarea) */}
-          {/* items-end — 입력창이 여러 줄로 자라도 버튼은 바닥에 붙는다 */}
-          <div className="flex items-end gap-1.5 border-t border-[#d8dde3] bg-white px-2 py-1.5">
-            <ChatToolsMenu
-              variant="excel"
-              onPickItem={p.onAttachItem}
-              onPickImage={p.onAttachImageFile}
-              onPickKaomoji={p.onPickKaomoji}
-            />
-            <ChatTextarea
-              value={p.input}
-              onChange={p.onInputChange}
-              onSend={p.onSend}
-              onPasteImage={p.onAttachImageFile}
-              placeholder="내용 입력"
-              ariaLabel="내용 입력"
-              className="min-h-11 flex-1 rounded-sm border border-[#c9cfd6] px-2.5 py-2.5 text-base focus:border-[#217346] focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px]"
-            />
-            <button
-              type="button"
-              onClick={p.onSend}
-              disabled={
-                (!p.input.trim() && !p.attachedItem && !p.attachedImage) ||
-                Boolean(p.attachedImage?.uploading)
-              }
-              className="min-h-9 rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] px-3 text-xs hover:bg-[#e2efda] disabled:opacity-40"
-            >
-              입력
-            </button>
-          </div>
+          {closed ? (
+            <p className="border-t border-[#d8dde3] bg-white px-3 py-3 text-center text-xs text-[#999]">
+              종료된 문서예요 — 더 이상 입력할 수 없습니다
+            </p>
+          ) : (
+            // items-end — 입력창이 여러 줄로 자라도 버튼은 바닥에 붙는다
+            <div className="flex items-end gap-1.5 border-t border-[#d8dde3] bg-white px-2 py-1.5">
+              <ChatToolsMenu
+                variant="excel"
+                onPickItem={p.onAttachItem}
+                onPickImage={p.onAttachImageFile}
+                onPickKaomoji={p.onPickKaomoji}
+              />
+              <ChatTextarea
+                value={p.input}
+                onChange={p.onInputChange}
+                onSend={p.onSend}
+                onPasteImage={p.onAttachImageFile}
+                placeholder={roomInputPlaceholder(p.sourceLang, p.targetLang)}
+                ariaLabel="내용 입력"
+                className="min-h-11 flex-1 rounded-sm border border-[#c9cfd6] px-2.5 py-2.5 text-base focus:border-[#217346] focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px]"
+              />
+              <button
+                type="button"
+                onClick={p.onSend}
+                disabled={
+                  (!p.input.trim() && !p.attachedItem && !p.attachedImage) ||
+                  Boolean(p.attachedImage?.uploading)
+                }
+                className="min-h-9 rounded-sm border border-[#c9cfd6] bg-[#f6f8f9] px-3 text-xs hover:bg-[#e2efda] disabled:opacity-40"
+              >
+                입력
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </ExcelChrome>
