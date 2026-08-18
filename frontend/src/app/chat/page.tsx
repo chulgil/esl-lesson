@@ -154,7 +154,11 @@ function NoteList({
             <span className="min-w-0 flex-1">
               <span className="flex items-baseline gap-2">
                 <b className="truncate">{r.peer.nickname}</b>
-                <LangPairBadge source={r.source_lang} target={r.target_lang} mode={r.mode} />
+                <LangPairBadge
+                  source={r.source_lang}
+                  target={r.target_lang}
+                  mode={r.mode}
+                />
                 {r.status === "closed" && (
                   <span className="shrink-0 text-[10px] font-bold opacity-50">
                     종료
@@ -270,7 +274,7 @@ function ExcelList({
               <th className="border border-[#d8dde3] px-2 py-0.5 font-normal">
                 이름
               </th>
-              <th className="w-16 border border-[#d8dde3] px-2 py-0.5 font-normal">
+              <th className="w-24 border border-[#d8dde3] px-2 py-0.5 font-normal">
                 언어
               </th>
               <th className="w-28 border border-[#d8dde3] px-2 py-0.5 font-normal">
@@ -306,7 +310,14 @@ function ExcelList({
                   </Link>
                 </td>
                 <td className="border border-[#e4e8ec] px-2 py-1.5 text-xs">
-                  {r.source_lang.toUpperCase()}→{r.target_lang.toUpperCase()}
+                  {/* 학습/일반 구분 포함 정본 배지 — 언어쌍만으로는 방 종류를
+                      알 수 없다 (2026-08-18 보고: 엑셀 표만 배지 누락) */}
+                  <LangPairBadge
+                    source={r.source_lang}
+                    target={r.target_lang}
+                    mode={r.mode}
+                    variant="excel"
+                  />
                 </td>
                 <td className="border border-[#e4e8ec] px-2 py-1.5 text-xs text-[#666]">
                   {r.last_message_at ? timeAgo(r.last_message_at) : "-"}
