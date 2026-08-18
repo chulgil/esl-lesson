@@ -156,6 +156,8 @@ export interface MyPhrasesSummary {
   recent: { en: string; ko: string }[];
   /** (일반) 덱 문장 수 — 0 이면 (일반) 칩을 숨긴다 */
   legacy_total: number;
+  /** 문서함 담김 상태 — 빼면 큐·게임에서 제외 (학습 버튼 대신 담기 안내) */
+  subscribed: boolean;
 }
 
 export interface MyPhraseItem {

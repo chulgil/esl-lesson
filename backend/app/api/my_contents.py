@@ -81,10 +81,20 @@ async def subscribe_content(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
-    """담기 — 라이브러리의 공용 콘텐츠를 내 학습에 편입 (멱등)."""
+    """담기 — 라이브러리의 공용 콘텐츠를 내 학습에 편입 (멱등).
+
+    예외: **내 chat 덱(내가 쓰는 말)** 은 private 여도 재담기 허용 —
+    문서함 빼기 후 되돌리는 경로 (docs/specs/my-phrases.md 담기/빼기)."""
     content = await db.get(Content, content_id)
+    my_chat_deck = (
+        content is not None and content.source == "chat" and content.created_by == user.id
+    )
     # 준비 안 된/개인 콘텐츠는 담을 수 없다. 존재 여부도 흘리지 않도록 동일 404
-    if content is None or content.visibility != "public" or content.status != "ready":
+    if (
+        content is None
+        or content.status != "ready"
+        or (content.visibility != "public" and not my_chat_deck)
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "content not found")
     # subscribe() 내부 rollback(동시 경합 시)이 content 를 만료시킬 수 있어
     # content_id 파라미터(이미 아는 값)를 그대로 쓴다 — 재접근 없이 안전
@@ -155,7 +165,11 @@ async def unsubscribe_my_content(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> None:
-    """구독 해지. 마지막 구독자가 떠난 개인 콘텐츠는 본체 삭제 (공용은 유지)."""
+    """구독 해지. 마지막 구독자가 떠난 개인 콘텐츠는 본체 삭제 (공용은 유지).
+
+    예외: **chat 덱(내가 쓰는 말)** 은 본체를 지우지 않는다 — 빼기는 학습
+    일시정지이지 수집분 폐기가 아니다. 수집·편집은 계속되고 재담기 시
+    카드 진행 그대로 복귀 (docs/specs/my-phrases.md 담기/빼기)."""
     content = await get_subscribed_content(db, content_id, user)
     await db.execute(
         ContentSubscription.__table__.delete().where(
@@ -171,7 +185,7 @@ async def unsubscribe_my_content(
             )
         )
     ).scalar_one()
-    if content.visibility == "private" and remaining == 0:
+    if content.visibility == "private" and remaining == 0 and content.source != "chat":
         await delete_content_row(db, content)
 
 
