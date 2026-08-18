@@ -37,7 +37,8 @@ export function ExtractionProgress({
   source,
   jobs,
 }: {
-  source: "youtube" | "manual";
+  // chat 덱은 추출 파이프라인이 없어 이 화면에 오지 않지만, 타입 정합상 수용
+  source: "youtube" | "manual" | "chat";
   jobs: Job[];
 }) {
   const steps = source === "youtube" ? YOUTUBE_STEPS : MANUAL_STEPS;

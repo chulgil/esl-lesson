@@ -134,8 +134,15 @@ function LibraryInner() {
     if (myLevel && !touched) setFilter(myLevel);
   }, [myLevel, touched]);
 
+  // 내가 쓰는 말 덱 — 영상 그리드와 분리된 전용 섹션 (2026-08-18: 그리드에
+  // 섞으면 난이도 필터에 숨고, 영상 카드 UI 와도 이질적이라 보기 어렵다)
+  const chatDecks = contents.filter(
+    (c) => c.source === "chat" && c.item_count > 0,
+  );
+
   // 내게 맞는 순 정렬 (fit 내림차순, 동점은 API 순서 유지) + 필터
   const visible = contents
+    .filter((c) => c.source !== "chat")
     .filter((c) => filter === "all" || c.difficulty === filter)
     .filter((c) => langFilter === "all" || c.lang === langFilter)
     .map((c, i) => ({ c, i, fit: fitScore(c, myLevel) }))
@@ -174,8 +181,54 @@ function LibraryInner() {
         ))}
       </div>
 
+      {/* 내가 쓰는 말 — 영상과 다른 콘텐츠라 별도 배치에서 담고 뺀다
+          (2026-08-18 요청). 필터·탭과 무관하게 항상 표시 */}
+      {chatDecks.length > 0 && (
+        <section className="mb-6 max-w-4xl rounded-xl border-2 border-brick-blue/30 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="font-hand text-xl font-bold">내가 쓰는 말</h2>
+            <span className="text-xs opacity-50">
+              채팅에서 모인 내 문장 덱 — 빼면 복습·게임에서 잠시 쉬고, 다시
+              담으면 그대로 이어져요
+            </span>
+          </div>
+          <ul className="mt-3 flex flex-col gap-2">
+            {chatDecks.map((c) => (
+              <li
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border-2 border-ink/10 px-3 py-2"
+              >
+                <span className="flex min-w-0 flex-wrap items-center gap-2">
+                  <b className="text-sm">{c.title}</b>
+                  <span className="text-xs opacity-60">{c.item_count}문장</span>
+                  <Link
+                    href={`/study/phrases?lang=${c.chat_kind === "legacy" ? "legacy" : c.lang}`}
+                    className="text-xs underline underline-offset-2 opacity-70 hover:opacity-100"
+                  >
+                    편집
+                  </Link>
+                </span>
+                <SubscribeButton
+                  contentId={c.id}
+                  subscribed={c.subscribed}
+                  onChange={(on) =>
+                    setContents((prev) =>
+                      prev.map((x) =>
+                        x.id === c.id ? { ...x, subscribed: on } : x,
+                      ),
+                    )
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {tab === "mine" ? (
-        <MineTab contents={myContents} />
+        <MineTab
+          contents={myContents?.filter((c) => c.source !== "chat") ?? null}
+        />
       ) : (
         <>
           {/* 난이도 필터 — 기본 = 내 레벨 (level-fit-library-2026-08.md MVP) */}
@@ -233,11 +286,7 @@ function LibraryInner() {
                 <Link href={`/library/${c.id}`} className="block">
                   <p className="flex items-center gap-2 text-xs">
                     <span className="opacity-50">
-                      {c.source === "youtube"
-                        ? "유튜브"
-                        : c.source === "chat"
-                          ? "내가 쓰는 말"
-                          : "수기"}
+                      {c.source === "youtube" ? "유튜브" : "수기"}
                     </span>
                     {c.mine && (
                       <span className="rounded bg-brick-yellow/40 px-1.5 py-0.5 font-bold">
@@ -296,10 +345,9 @@ function LibraryInner() {
                     })()}
                   </Link>
                 )}
-                {/* 개인 콘텐츠는 이미 내 것이라 담기 대상이 아니다 —
-                    단 chat 덱(내가 쓰는 말)은 학습 일시정지/재개용 토글 허용
-                    (2026-08-18 요청, docs/specs/my-phrases.md 담기/빼기) */}
-                {(!c.mine || c.source === "chat") && (
+                {/* 개인 콘텐츠는 이미 내 것이라 담기 대상이 아니다
+                    (chat 덱은 상단 "내가 쓰는 말" 섹션에서 담고 뺀다) */}
+                {!c.mine && (
                   <div className="mt-3">
                     <SubscribeButton
                       contentId={c.id}

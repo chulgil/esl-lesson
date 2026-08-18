@@ -571,6 +571,29 @@ async def test_chat_deck_subscribe_toggle_preserves_deck(client, db_session):
     ]
 
 
+async def test_chat_deck_stays_listed_after_unsubscribe(client, db_session):
+    """빼기 후에도 내 chat 덱은 문서함 목록에 남는다(subscribed=false) —
+    재담기 진입점 보존. 타인에게는 계속 비노출 (2026-08-18 보고)."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, a)
+    await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-list01")
+    await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-list01b")
+    await seed_translation(
+        db_session, "오늘 야근해야 할 것 같아", "I think I have to work late today"
+    )
+    deck_id = (await client.get("/api/study/my-phrases")).json()["content_id"]
+    assert (await client.delete(f"/api/my/contents/{deck_id}")).status_code == 204
+
+    listing = (await client.get("/api/contents?size=50")).json()
+    row = next((c for c in listing["items"] if c["id"] == deck_id), None)
+    assert row is not None
+    assert row["subscribed"] is False
+
+    await login(client, db_session, b)
+    listing_b = (await client.get("/api/contents?size=50")).json()
+    assert not [c for c in listing_b["items"] if c["id"] == deck_id]
+
+
 async def test_chat_deck_subscribe_rejects_other_users_deck(client, db_session):
     """타인의 chat 덱은 담기 불가 — 존재 여부도 흘리지 않는 404."""
     a, b = await learn_pair(client, db_session)
