@@ -288,6 +288,8 @@ export interface LibraryContent {
   known_ratio: number | null;
   /** 콘텐츠 언어 — 라이브러리 배지·필터 (i18n) */
   lang: "en" | "ja" | "ko";
+  /** chat 덱 전용 — 'legacy'((일반) 덱) | null(언어별 덱·일반 콘텐츠) */
+  chat_kind: string | null;
 }
 
 export interface AlignedWord {

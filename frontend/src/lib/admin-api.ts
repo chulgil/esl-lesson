@@ -2,7 +2,8 @@
 
 export interface ContentSummary {
   id: number;
-  source: "youtube" | "manual";
+  /** chat = 내가 쓰는 말 덱 (my_phrases 자동 생성 — 목록 응답에 실재) */
+  source: "youtube" | "manual" | "chat";
   title: string;
   status: "pending" | "extracting" | "ready" | "failed";
   youtube_video_id: string | null;

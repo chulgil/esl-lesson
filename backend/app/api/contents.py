@@ -33,6 +33,9 @@ def visible_content_clause(user_id: int):
             Content.visibility == "private",
             Content.id.in_(subscribed_content_ids(user_id)),
         ),
+        # 내 chat 덱(내가 쓰는 말)은 빼기(구독 해지) 뒤에도 목록에 남는다 —
+        # 문서함 재담기 진입점 보존 (docs/specs/my-phrases.md 담기/빼기)
+        and_(Content.source == "chat", Content.created_by == user_id),
     )
 
 
@@ -93,6 +96,8 @@ async def list_ready_contents(
                 "source": c.source,
                 "url": c.url,
                 "lang": c.lang,
+                # 내가 쓰는 말 전용 섹션의 편집 링크(legacy/언어별) 분기용
+                "chat_kind": c.chat_kind,
                 "mine": c.visibility == "private",
                 "subscribed": c.id in subscribed,
                 # CC 배지·저작자표시용 (consult-brief §5 — 라이선스 명칭 표시 요건)
