@@ -4,7 +4,26 @@ import { RecommendedMatch } from "@/components/game/RecommendedMatch";
 import { WeeklyLeaderboardsCard } from "@/components/game/WeeklyLeaderboardsCard";
 import { GameLangChips } from "@/app/game/GameLangChips";
 
-/** 게임 허브 — 종류별 카테고리 메뉴 + 게임 설명 (2026-07-14 개편) */
+/** 게임 허브 — 종류별 카테고리 메뉴 + 게임 설명 (2026-07-14 개편)
+ *
+ *  스킬 라벨(단어/듣기/문장): 훈련 목적별로 고를 수 있게 카드에 칩 표시 +
+ *  같은 스킬끼리 인접 정렬 (proposal/level-format-fit B안 취지 흡수 — 트랙
+ *  분리 없이 라벨만, 2026-08-18). */
+type GameSkill = "word" | "listening" | "sentence";
+
+const SKILL_LABELS: Record<GameSkill, string> = {
+  word: "단어",
+  listening: "듣기",
+  sentence: "문장",
+};
+
+const SKILL_CHIP_STYLES: Record<GameSkill, string> = {
+  // 연한 배경 위 텍스트라 brick-label(진한 배경용) 대신 잉크색 — 대비 확보
+  word: "bg-brick-yellow/25 text-ink/80",
+  listening: "bg-brick-blue/15 text-brick-blue",
+  sentence: "bg-brick-green/15 text-brick-green",
+};
+
 const GAMES: {
   href: string;
   name: string;
@@ -12,9 +31,11 @@ const GAMES: {
   players: string;
   how: string[];
   color: string;
+  skill: GameSkill;
 }[] = [
   {
     href: "/game/tetris",
+    skill: "word",
     name: "워드 테트리스",
     tagline: "떨어지는 단어를 쳐내는 실시간 액션 대전",
     players: "1인(AI 봇) · 2인(빠른 대전/방 초대)",
@@ -27,6 +48,7 @@ const GAMES: {
   },
   {
     href: "/game/quiz",
+    skill: "word",
     name: "스피드 퀴즈 로얄",
     tagline: "같은 문제, 빠를수록 높은 점수 — 최대 4인 버저 퀴즈",
     players: "1인(봇 1~3) · 2~4인(방 초대)",
@@ -38,31 +60,8 @@ const GAMES: {
     color: "border-brick-blue/40",
   },
   {
-    href: "/game/scramble",
-    name: "어순 조립 레이스",
-    tagline: "섞인 단어를 올바른 어순으로 — 문법 감각 퍼즐",
-    players: "1인(기록 도전) · 2~4인(레이스 대결)",
-    how: [
-      "한글 뜻을 보고 섞인 단어 칩을 올바른 영어 어순으로 탭",
-      "빠르고 정확할수록 높은 점수 — 실수하면 감점, 완성 최소 점수는 보장",
-      "총 8문장 — 전원이 완성하면 다음 문장, 점수 합산 1위가 승리",
-    ],
-    color: "border-brick-yellow/50",
-  },
-  {
-    href: "/game/dictation",
-    name: "받아쓰기 배틀",
-    tagline: "원어민 음성을 듣고 그대로 받아쓰는 리스닝 대결",
-    players: "1인(기록 도전) · 2~4인(방 초대)",
-    how: [
-      "유튜브 원음 구간을 듣고 (반복 가능) 문장을 영어로 받아쓰기",
-      "서버가 단어 단위로 채점 — 정확도 90% 이상이면 시간 보너스",
-      "총 6문장, 라운드마다 정답 공개 — 점수 합산 1위가 승리",
-    ],
-    color: "border-brick-blue/40",
-  },
-  {
     href: "/game/puzzle",
+    skill: "word",
     name: "데일리 단어 퍼즐",
     tagline: "하루 한 단어, 모두에게 같은 문제 — 6번 안에!",
     players: "1인 · 하루 한 판",
@@ -74,7 +73,21 @@ const GAMES: {
     color: "border-ink/25",
   },
   {
+    href: "/game/dictation",
+    skill: "listening",
+    name: "받아쓰기 배틀",
+    tagline: "원어민 음성을 듣고 그대로 받아쓰는 리스닝 대결",
+    players: "1인(기록 도전) · 2~4인(방 초대)",
+    how: [
+      "유튜브 원음 구간을 듣고 (반복 가능) 문장을 영어로 받아쓰기",
+      "서버가 단어 단위로 채점 — 정확도 90% 이상이면 시간 보너스",
+      "총 6문장, 라운드마다 정답 공개 — 점수 합산 1위가 승리",
+    ],
+    color: "border-brick-blue/40",
+  },
+  {
     href: "/game/bingo",
+    skill: "listening",
     name: "리스닝 빙고",
     tagline: "음성으로 불러주는 단어를 보드에서 찾는 듣기 빙고",
     players: "1인(듣기 기록) · 2~4인(방 초대)",
@@ -86,7 +99,21 @@ const GAMES: {
     color: "border-brick-yellow/50",
   },
   {
+    href: "/game/scramble",
+    skill: "sentence",
+    name: "어순 조립 레이스",
+    tagline: "섞인 단어를 올바른 어순으로 — 문법 감각 퍼즐",
+    players: "1인(기록 도전) · 2~4인(레이스 대결)",
+    how: [
+      "한글 뜻을 보고 섞인 단어 칩을 올바른 영어 어순으로 탭",
+      "빠르고 정확할수록 높은 점수 — 실수하면 감점, 완성 최소 점수는 보장",
+      "총 8문장 — 전원이 완성하면 다음 문장, 점수 합산 1위가 승리",
+    ],
+    color: "border-brick-yellow/50",
+  },
+  {
     href: "/game/typing",
+    skill: "sentence",
     name: "영문 타자연습",
     tagline: "같은 문장을 동시에 치는 타이핑 레이스",
     players: "1인(기록 도전) · 2~4인(레이스 대결)",
@@ -127,8 +154,16 @@ export default function GameHubPage() {
             <p className="mt-1 text-sm font-medium opacity-80">
               {game.tagline}
             </p>
-            <p className="mt-2 inline-block self-start rounded-full bg-ink/5 px-2.5 py-1 text-xs font-bold">
-              {game.players}
+            <p className="mt-2 flex flex-wrap items-center gap-1.5 self-start">
+              {/* 스킬 칩 — 훈련 목적(단어/듣기/문장)별로 고르게 (2026-08-18) */}
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-bold ${SKILL_CHIP_STYLES[game.skill]}`}
+              >
+                {SKILL_LABELS[game.skill]} 연습
+              </span>
+              <span className="rounded-full bg-ink/5 px-2.5 py-1 text-xs font-bold">
+                {game.players}
+              </span>
             </p>
             {/* 모바일: 게임 방법 접기 — 카드 6장 스크롤 부담 절반으로 / 데스크톱: 상시 노출 */}
             <details className="group relative z-10 mt-1 self-start sm:hidden">
