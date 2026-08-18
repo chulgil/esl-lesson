@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -781,6 +781,15 @@ async def get_stats(
     day_start = kst_day_start(now)
     user_settings = await get_user_settings(db, user)
 
+    # due 카운트는 큐와 같은 필터(레벨 타입 + 길이 게이트)를 쓴다 — 잠긴 카드가
+    # 카운트만 부풀리고 세션엔 안 나오던 불일치 해소 (issue #1 죽은 카드).
+    # 잠긴 due 는 아래 locked_due 로 분리 집계해 "난이도 올리면 재개" 안내 재료.
+    stat_types = enabled_types(user_settings)
+    queue_scope = and_(
+        queue_type_clause(stat_types),
+        *low_level_sentence_gate(user_settings.study_level),
+    )
+
     due_count = (
         await db.execute(
             select(func.count(ReviewCard.id))
@@ -790,9 +799,26 @@ async def get_stats(
                 ReviewCard.due_at <= now,
                 ReviewCard.suspended.is_(False),
                 visible_item_clause(user.id),
+                queue_scope,
             )
         )
     ).scalar_one()
+    locked_due_by_type = dict(
+        (
+            await db.execute(
+                select(LearningItem.item_type, func.count(ReviewCard.id))
+                .join(ReviewCard, ReviewCard.item_id == LearningItem.id)
+                .where(
+                    ReviewCard.user_id == user.id,
+                    ReviewCard.due_at <= now,
+                    ReviewCard.suspended.is_(False),
+                    visible_item_clause(user.id),
+                    ~queue_scope,
+                )
+                .group_by(LearningItem.item_type)
+            )
+        ).all()
+    )
     reviews_today = (
         await db.execute(
             select(func.count(ReviewLog.id)).where(
@@ -813,6 +839,7 @@ async def get_stats(
                 ReviewCard.due_at <= day_start + timedelta(days=2),
                 ReviewCard.suspended.is_(False),
                 visible_item_clause(user.id),
+                queue_scope,
             )
         )
     ).scalar_one()
@@ -899,6 +926,9 @@ async def get_stats(
                 # 학습 난이도로 잠긴 타입 표시 — 컬렉션이 0 인 이유를 설명
                 # (2026-08-11 보고: 문장 칸이 늘 비어 "콘텐츠 미완성"으로 오해)
                 "enabled": level in (user_settings.levels_enabled or []),
+                # 큐가 레벨 잠금·길이 게이트로 건너뛰는 만기 카드 — "난이도를
+                # 올리면 복습 N장 재개" 안내 재료 (issue #1)
+                "locked_due": locked_due_by_type.get(item_type, 0),
             }
             for item_type, level in ITEM_TYPE_LEVEL.items()
         ],
@@ -1156,7 +1186,6 @@ async def study_leaderboard(
 
     0건 친구도 표시한다 — "친구가 아직 0개"가 곧 동기부여라서.
     """
-    from sqlalchemy import and_
 
     from app.models.friend import Friendship
 

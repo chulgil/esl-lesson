@@ -516,6 +516,36 @@ async def test_sentence_page_cap_general_queue(client, db_session):
     assert len(deck_sentence_qs) == 7
 
 
+async def test_stats_due_excludes_gated_long_sentence(client, db_session):
+    """길이 게이트로 대기 중인 9단어+ 문장의 due 카드도 due_count 에서 빠지고
+    levels[].locked_due 로 잡힌다 — 레벨 3 승급 시 복귀 (level-format-fit)."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, a)
+    long_en = "Could you please send me the updated file before tomorrow morning"
+    await send(client, b.id, "내일 아침 전에 수정된 파일 보내줄 수 있어요", "cid-stat1")
+    await send(client, b.id, "내일 아침 전에 수정된 파일 보내줄 수 있어요", "cid-stat1b")
+    await seed_translation(db_session, "내일 아침 전에 수정된 파일 보내줄 수 있어요", long_en)
+    await client.get("/api/study/my-phrases")
+    item_id = (
+        await db_session.execute(select(LearningItem.id).where(LearningItem.en_text == long_en))
+    ).scalar_one()
+    db_session.add(
+        ReviewCard(user_id=a.id, item_id=item_id, state="review", due_at=datetime.now(UTC))
+    )
+    await db_session.commit()
+
+    stats = (await client.get("/api/study/stats")).json()  # 기본 study_level=2
+    assert stats["due_count"] == 0
+    sentence_row = next(lv for lv in stats["levels"] if lv["item_type"] == "sentence")
+    assert sentence_row["locked_due"] == 1
+
+    await client.patch("/api/settings", json={"study_level": 3})
+    stats3 = (await client.get("/api/study/stats")).json()
+    assert stats3["due_count"] == 1
+    sentence_row3 = next(lv for lv in stats3["levels"] if lv["item_type"] == "sentence")
+    assert sentence_row3["locked_due"] == 0
+
+
 async def test_items_flag_level_gated(client, db_session):
     """편집 목록이 길이 게이트 대기 문장에 level_gated 를 표시한다 —
     '레벨 3부터' 배지 재료 (proposal/level-format-fit)."""
