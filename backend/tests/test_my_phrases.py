@@ -372,8 +372,8 @@ async def test_active_100_cap_and_graduation_topup(client, db_session):
 
 
 async def test_low_level_queue_gets_chat_sentence_assemble(client, db_session):
-    """study_level<=3(기본) 이어도 chat 덱 문장이 출제되고, 단어 칩 조립
-    (sentence_assemble) 형식으로 나온다 (my-phrases.md 레벨별 학습카드)."""
+    """study_level=2(기본) 는 chat 덱 문장이 **청크 조립**으로 출제된다 —
+    칩 최대 4개(+방해 1), WM 4±1 정합 (proposal/level-format-fit 형식 사다리)."""
     a, b = await learn_pair(client, db_session)
     await login(client, db_session, a)
     await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-lvl001")
@@ -390,8 +390,9 @@ async def test_low_level_queue_gets_chat_sentence_assemble(client, db_session):
     assert len(sentence_qs) == 1
     question = sentence_qs[0]
     assert question["quiz_mode"] == "sentence_assemble"
-    # 정답 문장의 단어가 전부 칩에 포함된다 (오답 칩은 덱에 문장이 하나뿐이라 0개)
-    assert set(question["hint_answer"].split()) <= set(question["chips"])
+    # 청크 조립 — 덱에 다른 문장이 없어 방해칩 0, 칩(청크)을 합치면 정답과 일치
+    assert len(question["chips"]) <= 4
+    assert sorted(" ".join(question["chips"]).split()) == sorted(question["hint_answer"].split())
 
     submit = await client.post(
         "/api/study/answer",
@@ -403,6 +404,140 @@ async def test_low_level_queue_gets_chat_sentence_assemble(client, db_session):
     )
     assert submit.status_code == 200
     assert submit.json()["correct"] is True
+
+
+async def test_level1_sentence_choice_format(client, db_session):
+    """study_level=1 은 chat 문장이 뜻 매칭 선다(recognition)로 출제된다 —
+    같은 덱 문장 4개 중 번역문 선택 (proposal/level-format-fit 형식 사다리)."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, a)
+    phrases = [
+        ("오늘 야근해야 할 것 같아", "I think I have to work late today"),
+        ("확인하고 다시 연락드릴게요", "Let me check and get back to you"),
+        ("주말에 등산 갈래요?", "Wanna go hiking this weekend?"),
+        ("점심 뭐 먹을까요?", "What should we have for lunch?"),
+    ]
+    for i, (ko, en) in enumerate(phrases):
+        await send(client, b.id, ko, f"cid-l1-{i}a")
+        await send(client, b.id, ko, f"cid-l1-{i}b")
+        await seed_translation(db_session, ko, en)
+    await client.get("/api/study/my-phrases")
+    await client.patch("/api/settings", json={"study_level": 1})
+
+    queue = (await client.get("/api/study/queue")).json()
+    target = [q for q in queue["questions"] if q.get("hint_answer") == phrases[0][1]]
+    assert len(target) == 1
+    question = target[0]
+    assert question["quiz_mode"] == "choice_ko2en"
+    assert len(question["choices"]) == 4
+    assert phrases[0][1] in question["choices"]
+
+    submit = await client.post(
+        "/api/study/answer",
+        json={
+            "card_id": question["card_id"],
+            "quiz_mode": "choice_ko2en",
+            "answer": phrases[0][1],
+        },
+    )
+    assert submit.status_code == 200
+    assert submit.json()["correct"] is True
+
+
+async def test_level3_word_assembly_two_decoys(client, db_session):
+    """study_level=3 은 단어 칩 조립 — 정답 단어 전부 + 방해칩 최대 2개
+    (proposal/level-format-fit: 기존 3개에서 축소)."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, a)
+    for i, (ko, en) in enumerate(
+        [
+            ("오늘 야근해야 할 것 같아", "I think I have to work late today"),
+            ("확인하고 다시 연락드릴게요", "Let me check and get back to you"),
+        ]
+    ):
+        await send(client, b.id, ko, f"cid-l3-{i}a")
+        await send(client, b.id, ko, f"cid-l3-{i}b")
+        await seed_translation(db_session, ko, en)
+    await client.get("/api/study/my-phrases")
+    await client.patch("/api/settings", json={"study_level": 3})
+
+    queue = (await client.get("/api/study/queue")).json()
+    target = [
+        q for q in queue["questions"] if q.get("hint_answer") == "I think I have to work late today"
+    ]
+    assert len(target) == 1
+    question = target[0]
+    assert question["quiz_mode"] == "sentence_assemble"
+    words = question["hint_answer"].split()
+    assert set(words) <= set(question["chips"])
+    assert len(question["chips"]) <= len(words) + 2
+
+
+async def test_low_level_gate_excludes_long_sentences(client, db_session):
+    """레벨 1~2 큐는 9단어+ chat 문장을 제외한다(길이 게이트 8단어) —
+    일반·덱 한정 모두. 레벨 3부터 다시 출제 (proposal/level-format-fit)."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, a)
+    long_en = "Could you please send me the updated file before tomorrow morning"  # 11단어
+    await send(client, b.id, "내일 아침 전에 수정된 파일 보내줄 수 있어요", "cid-gate1")
+    await send(client, b.id, "내일 아침 전에 수정된 파일 보내줄 수 있어요", "cid-gate1b")
+    await seed_translation(db_session, "내일 아침 전에 수정된 파일 보내줄 수 있어요", long_en)
+    deck_id = (await client.get("/api/study/my-phrases")).json()["content_id"]
+
+    queue = (await client.get("/api/study/queue")).json()
+    assert not [q for q in queue["questions"] if q.get("hint_answer") == long_en]
+    deck_queue = (await client.get(f"/api/study/queue?content_id={deck_id}")).json()
+    assert not [q for q in deck_queue["questions"] if q.get("hint_answer") == long_en]
+
+    await client.patch("/api/settings", json={"study_level": 3})
+    queue3 = (await client.get("/api/study/queue")).json()
+    assert [q for q in queue3["questions"] if q.get("hint_answer") == long_en]
+
+
+async def test_sentence_page_cap_general_queue(client, db_session):
+    """레벨 ≤2 일반 큐는 페이지당 문장 카드 최대 5개(선다 리듬 유지) —
+    덱 한정 세션은 캡 없음 (proposal/level-format-fit 혼합 캡)."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, a)
+    for i in range(7):
+        ko = f"오늘 회의 {i}번째 안건 정리했어요"
+        en = f"I organized agenda item number {i} today"
+        await send(client, b.id, ko, f"cid-cap7-{i}a")
+        await send(client, b.id, ko, f"cid-cap7-{i}b")
+        await seed_translation(db_session, ko, en)
+    deck_id = (await client.get("/api/study/my-phrases")).json()["content_id"]
+
+    queue = (await client.get("/api/study/queue")).json()
+    sentence_qs = [q for q in queue["questions"] if q["quiz_mode"] == "sentence_assemble"]
+    assert len(sentence_qs) == 5
+
+    deck_queue = (await client.get(f"/api/study/queue?content_id={deck_id}")).json()
+    deck_sentence_qs = [q for q in deck_queue["questions"] if q["quiz_mode"] == "sentence_assemble"]
+    assert len(deck_sentence_qs) == 7
+
+
+async def test_items_flag_level_gated(client, db_session):
+    """편집 목록이 길이 게이트 대기 문장에 level_gated 를 표시한다 —
+    '레벨 3부터' 배지 재료 (proposal/level-format-fit)."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, a)
+    long_en = "Could you please send me the updated file before tomorrow morning"
+    await send(client, b.id, "내일 아침 전에 수정된 파일 보내줄 수 있어요", "cid-flag1")
+    await send(client, b.id, "내일 아침 전에 수정된 파일 보내줄 수 있어요", "cid-flag1b")
+    await seed_translation(db_session, "내일 아침 전에 수정된 파일 보내줄 수 있어요", long_en)
+    await send(client, b.id, "확인하고 연락드릴게요", "cid-flag2")
+    await send(client, b.id, "확인하고 연락드릴게요", "cid-flag2b")
+    await seed_translation(db_session, "확인하고 연락드릴게요", "Let me check and get back to you")
+    await client.get("/api/study/my-phrases")
+
+    items = (await client.get("/api/study/my-phrases/items")).json()
+    flags = {it["en_text"]: it["level_gated"] for it in items["items"]}
+    assert flags[long_en] is True
+    assert flags["Let me check and get back to you"] is False
+
+    await client.patch("/api/settings", json={"study_level": 3})
+    items3 = (await client.get("/api/study/my-phrases/items")).json()
+    assert all(not it["level_gated"] for it in items3["items"])
 
 
 async def test_level4_still_uses_typing_format(client, db_session):

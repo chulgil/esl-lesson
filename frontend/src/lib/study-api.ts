@@ -164,6 +164,9 @@ export interface MyPhraseItem {
   ko_text: string;
   /** 채팅 발화 빈도 — 목록·출제 우선순위 (내림차순) */
   freq: number | null;
+  /** 길이 게이트 대기 — 레벨 1~2 에선 9단어+ 문장이 큐에서 빠진다
+   *  (proposal/level-format-fit). "레벨 3부터" 배지 표시용 */
+  level_gated?: boolean;
 }
 
 /** 편집 화면용 — 활성 목록(빈도 내림차순) + 졸업 목록(접힘 섹션) */

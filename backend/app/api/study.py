@@ -98,6 +98,60 @@ def queue_type_clause(types: list[str]):
     return or_(LearningItem.item_type.in_(types), _chat_deck_item_clause())
 
 
+LOW_LEVEL_SENTENCE_MAX_WORDS = 8  # 길이 게이트 — 리얼클래스 "열 단어 내외" 방증
+SENTENCE_PAGE_CAP = 5  # 레벨 ≤2 일반 세션 페이지당 문장 카드 상한
+
+
+def low_level_sentence_gate(study_level: int) -> list:
+    """레벨 1~2 큐에서 9단어+ 문장 제외 (proposal/level-format-fit 길이 게이트).
+
+    긴 문장 카드는 사라지는 게 아니라 레벨 3 진입까지 대기 — 편집 화면이
+    level_gated 배지로 알린다. 게임(타자·받아쓰기)은 종전대로 전 문장 사용.
+    """
+    if study_level > 2:
+        return []
+    word_count = (
+        func.length(LearningItem.en_text)
+        - func.length(func.replace(LearningItem.en_text, " ", ""))
+        + 1
+    )
+    return [
+        or_(
+            LearningItem.item_type != "sentence",
+            word_count <= LOW_LEVEL_SENTENCE_MAX_WORDS,
+        )
+    ]
+
+
+async def _capped_page(db: AsyncSession, ordered: list[ReviewCard]) -> list[ReviewCard]:
+    """레벨 ≤2 일반 세션 — 페이지당 문장 카드 SENTENCE_PAGE_CAP 개 캡.
+
+    4지선다(2~5초) 사이에 문장 조립(수십 초)이 몰리면 세션 리듬이 깨진다
+    (proposal/level-format-fit 혼합 캡). FSRS due 는 그대로 — 출제 순서만
+    제어하며, 덱 한정·오답 정리 세션은 캡을 적용하지 않는다.
+    """
+    type_by_item = dict(
+        (
+            await db.execute(
+                select(LearningItem.id, LearningItem.item_type).where(
+                    LearningItem.id.in_({c.item_id for c in ordered})
+                )
+            )
+        ).all()
+    )
+    page: list[ReviewCard] = []
+    sentences = 0
+    for card in ordered:
+        if len(page) >= QUEUE_PAGE_SIZE:
+            break
+        if type_by_item.get(card.item_id) == "sentence":
+            if sentences >= SENTENCE_PAGE_CAP:
+                continue
+            sentences += 1
+        page.append(card)
+    return page
+
+
 @router.get("/queue")
 async def get_queue(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -128,11 +182,14 @@ async def get_queue(
     if not types:
         return {"questions": [], "total_due": 0, "introduced_today": 0, "deck": deck}
 
+    # 레벨 1~2 는 9단어+ 문장 제외 — 길이 게이트 (proposal/level-format-fit)
+    length_gate = low_level_sentence_gate(settings.study_level)
+
     # 오답 정리 모드 — 최근 오답 카드만, 신규 도입 없음. 덱과 조합 가능
     # (content_id 지정 시 덱 필터·구독 404 게이트가 위에서 이미 적용됨)
     if mode == "weak":
         weak = await progress.weak_cards(
-            db, user.id, types, now, limit=QUEUE_PAGE_SIZE, extra=tuple(deck_scope)
+            db, user.id, types, now, limit=QUEUE_PAGE_SIZE, extra=(*deck_scope, *length_gate)
         )
         questions = await _build_questions(db, weak, user.id, settings.study_level)
         await db.commit()
@@ -168,6 +225,7 @@ async def get_queue(
                         visible_item_clause(user.id),
                         queue_type_clause(types),
                         *deck_scope,
+                        *length_gate,
                     )
                     .order_by(ReviewCard.due_at)
                     .limit(review_budget)
@@ -205,6 +263,7 @@ async def get_queue(
                         queue_type_clause(types),
                         LearningItem.id.not_in(existing),
                         *deck_scope,
+                        *length_gate,
                     )
                     .order_by(LearningItem.id.desc())
                     .limit(new_budget)
@@ -258,7 +317,11 @@ async def get_queue(
             due_cards = await fetch_due_cards()
 
     ordered = due_cards + new_cards
-    page = ordered[:QUEUE_PAGE_SIZE]
+    # 혼합 캡 — 일반 세션만 (덱 한정은 사용자가 문장 덱을 명시 선택한 것)
+    if settings.study_level <= 2 and content_id is None and ordered:
+        page = await _capped_page(db, ordered)
+    else:
+        page = ordered[:QUEUE_PAGE_SIZE]
     questions = await _build_questions(db, page, user.id, settings.study_level)
     await db.commit()
     return {
@@ -379,14 +442,15 @@ async def get_decks(
     return {"items": items}
 
 
-CHAT_ASSEMBLE_POOL_LIMIT = 40  # 덱당 오답 칩 재료로 뽑아올 문장 수
+CHAT_ASSEMBLE_POOL_LIMIT = 40  # 덱당 선다·방해칩 재료로 뽑아올 문장 수
 
 
-async def _chat_sentence_pools(db: AsyncSession, items: list[LearningItem]) -> dict[int, list[str]]:
-    """chat 덱 문장 item_id -> 오답 칩 후보 단어 (같은 덱의 다른 문장에서 샘플링).
+async def _chat_deck_sentences(db: AsyncSession, items: list[LearningItem]) -> dict[int, list[str]]:
+    """chat 덱 문장 item_id -> 같은 덱 문장 텍스트 (형식 사다리 재료).
 
-    레벨 1~3 단어 칩 조립(my-phrases.md 레벨별 학습카드)의 재료. 언어가 섞이지
-    않게 전역 문장 풀이 아니라 **항목이 속한 덱 안**에서만 뽑는다.
+    레벨 1 뜻 매칭 선다의 오답 선지, 레벨 2~3 조립의 방해칩 재료
+    (proposal/level-format-fit). 언어가 섞이지 않게 전역 문장 풀이 아니라
+    **항목이 속한 덱 안**에서만 뽑는다.
     """
     sentence_ids = [i.id for i in items if i.item_type == "sentence"]
     if not sentence_ids:
@@ -401,9 +465,9 @@ async def _chat_sentence_pools(db: AsyncSession, items: list[LearningItem]) -> d
     if not memberships:
         return {}
     deck_by_item = dict(memberships)
-    words_by_deck: dict[int, list[str]] = {}
+    texts_by_deck: dict[int, list[str]] = {}
     for deck_id in set(deck_by_item.values()):
-        texts = (
+        texts_by_deck[deck_id] = list(
             (
                 await db.execute(
                     select(LearningItem.en_text)
@@ -415,9 +479,7 @@ async def _chat_sentence_pools(db: AsyncSession, items: list[LearningItem]) -> d
             .scalars()
             .all()
         )
-        pool = [w.strip(".,!?;:\"'") for text in texts for w in text.split()]
-        words_by_deck[deck_id] = [w for w in pool if w]
-    return {item_id: words_by_deck.get(deck_id, []) for item_id, deck_id in deck_by_item.items()}
+    return {item_id: texts_by_deck.get(deck_id, []) for item_id, deck_id in deck_by_item.items()}
 
 
 async def _build_questions(
@@ -438,7 +500,7 @@ async def _build_questions(
     )
     items_by_id = {i.id: i for i in items}
     types_needed = {i.item_type for i in items}
-    chat_pools = await _chat_sentence_pools(db, items)
+    chat_pools = await _chat_deck_sentences(db, items)
     pools: dict[str, list[LearningItem]] = {}
     for item_type in types_needed:
         pools[item_type] = list(
@@ -490,7 +552,7 @@ async def _build_questions(
             pools[item.item_type],
             similar_by_item.get(card.item_id),
             study_level=study_level,
-            assemble_pool_words=chat_pools.get(item.id),
+            deck_sentences=chat_pools.get(item.id),
         )
         questions.append(
             {
@@ -1010,10 +1072,18 @@ async def my_phrases_items(
         }
 
     not_graduated = mastered_item_clause(user.id)
+    # 길이 게이트 대기 표시 — "레벨 3부터" 배지 재료 (proposal/level-format-fit)
+    low_level = settings.study_level <= 2
 
     def _rows_to_items(rows) -> list[dict]:
         return [
-            {"id": item_id, "en_text": en, "ko_text": ko or "", "freq": freq or 0}
+            {
+                "id": item_id,
+                "en_text": en,
+                "ko_text": ko or "",
+                "freq": freq or 0,
+                "level_gated": low_level and len(en.split()) > LOW_LEVEL_SENTENCE_MAX_WORDS,
+            }
             for item_id, en, ko, freq in rows
         ]
 
