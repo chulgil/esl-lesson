@@ -134,6 +134,40 @@ async def test_reminder_skips_before_hour_and_zero_due(client, db_session, vapid
     assert await push.send_review_reminders(db_session, now=evening.astimezone(UTC)) == 1
 
 
+async def test_reminder_skips_when_due_only_locked(client, db_session, vapid_keys, monkeypatch):
+    """레벨로 잠긴 타입의 due 카드만 있으면 리마인더를 보내지 않는다 — 알림을
+    눌러도 세션이 비는 불일치 방지 (issue #1 정합, 2026-08-18 전수 점검)."""
+    user = await login(client, db_session)
+    await client.post("/api/push/subscriptions", json=SUB_BODY)
+    sent: list[dict] = []
+
+    async def fake_send(sub, payload, settings):
+        sent.append(payload)
+        return "ok"
+
+    monkeypatch.setattr(push, "send_to", fake_send)
+
+    # 기본 study_level=2 — pattern(레벨 3)은 큐에서 잠김
+    items = await seed_items(db_session, count=1, item_type="pattern")
+    db_session.add(
+        ReviewCard(
+            user_id=user.id,
+            item_id=items[0].id,
+            state="review",
+            due_at=datetime.now(UTC) - timedelta(hours=1),
+        )
+    )
+    await db_session.flush()
+
+    evening = datetime.now(UTC).astimezone(push.KST).replace(hour=21, minute=0)
+    assert await push.send_review_reminders(db_session, now=evening.astimezone(UTC)) == 0
+    assert sent == []
+
+    # 활성 타입(word) due 가 생기면 발송
+    await _add_due_card(db_session, user.id)
+    assert await push.send_review_reminders(db_session, now=evening.astimezone(UTC)) == 1
+
+
 async def test_reminder_removes_gone_subscription(client, db_session, vapid_keys, monkeypatch):
     """푸시 서비스가 404/410 반환 = 만료 구독 — 행 삭제."""
     user = await login(client, db_session)

@@ -40,7 +40,10 @@ from app.services import (
 from app.services.langs import SUPPORTED_LANGS
 from app.services.theme_rewards import sync_theme_rewards
 from app.services.visibility import (
+    LOW_LEVEL_SENTENCE_MAX_WORDS,
     lang_item_clause,
+    low_level_sentence_gate,
+    queue_type_clause,
     subscribed_content_ids,
     visible_item_clause,
 )
@@ -82,45 +85,10 @@ def content_item_clause(content_id: int):
     )
 
 
-def _chat_deck_item_clause():
-    """내가 쓰는 말 덱(chat 콘텐츠)에 속한 항목 — 문장 게임 3종과 별개로,
-    학습 큐에서는 levels_enabled 와 무관하게 항상 대상 (my-phrases.md
-    레벨별 학습카드: 일반 sentence 는 레벨4 전용, chat 덱만 예외)."""
-    return LearningItem.id.in_(
-        select(ItemOccurrence.item_id)
-        .join(Content, Content.id == ItemOccurrence.content_id)
-        .where(Content.source == "chat")
-    )
+# queue_type_clause·low_level_sentence_gate 는 services/visibility.py 로 이동
+# (2026-08-18) — 오답 정리·푸시 리마인더가 큐와 같은 필터를 공유한다.
 
-
-def queue_type_clause(types: list[str]):
-    """레벨 필터 + chat 덱 문장은 레벨 무관 출제 예외를 합친 절."""
-    return or_(LearningItem.item_type.in_(types), _chat_deck_item_clause())
-
-
-LOW_LEVEL_SENTENCE_MAX_WORDS = 8  # 길이 게이트 — 리얼클래스 "열 단어 내외" 방증
 SENTENCE_PAGE_CAP = 5  # 레벨 ≤2 일반 세션 페이지당 문장 카드 상한
-
-
-def low_level_sentence_gate(study_level: int) -> list:
-    """레벨 1~2 큐에서 9단어+ 문장 제외 (proposal/level-format-fit 길이 게이트).
-
-    긴 문장 카드는 사라지는 게 아니라 레벨 3 진입까지 대기 — 편집 화면이
-    level_gated 배지로 알린다. 게임(타자·받아쓰기)은 종전대로 전 문장 사용.
-    """
-    if study_level > 2:
-        return []
-    word_count = (
-        func.length(LearningItem.en_text)
-        - func.length(func.replace(LearningItem.en_text, " ", ""))
-        + 1
-    )
-    return [
-        or_(
-            LearningItem.item_type != "sentence",
-            word_count <= LOW_LEVEL_SENTENCE_MAX_WORDS,
-        )
-    ]
 
 
 async def _capped_page(db: AsyncSession, ordered: list[ReviewCard]) -> list[ReviewCard]:
@@ -189,7 +157,13 @@ async def get_queue(
     # (content_id 지정 시 덱 필터·구독 404 게이트가 위에서 이미 적용됨)
     if mode == "weak":
         weak = await progress.weak_cards(
-            db, user.id, types, now, limit=QUEUE_PAGE_SIZE, extra=(*deck_scope, *length_gate)
+            db,
+            user.id,
+            types,
+            now,
+            limit=QUEUE_PAGE_SIZE,
+            extra=tuple(deck_scope),
+            study_level=settings.study_level,
         )
         questions = await _build_questions(db, weak, user.id, settings.study_level)
         await db.commit()
@@ -445,12 +419,16 @@ async def get_decks(
 CHAT_ASSEMBLE_POOL_LIMIT = 40  # 덱당 선다·방해칩 재료로 뽑아올 문장 수
 
 
-async def _chat_deck_sentences(db: AsyncSession, items: list[LearningItem]) -> dict[int, list[str]]:
+async def _chat_deck_sentences(
+    db: AsyncSession, items: list[LearningItem], user_id: int
+) -> dict[int, list[str]]:
     """chat 덱 문장 item_id -> 같은 덱 문장 텍스트 (형식 사다리 재료).
 
     레벨 1 뜻 매칭 선다의 오답 선지, 레벨 2~3 조립의 방해칩 재료
     (proposal/level-format-fit). 언어가 섞이지 않게 전역 문장 풀이 아니라
-    **항목이 속한 덱 안**에서만 뽑는다.
+    **항목이 속한 내 덱 안**에서만 뽑는다 — 전역 dedup 으로 같은 항목이
+    타인 덱에도 걸리므로 created_by 필터 필수 (타인 채팅 번역 노출 방지,
+    2026-08-18 전수 점검).
     """
     sentence_ids = [i.id for i in items if i.item_type == "sentence"]
     if not sentence_ids:
@@ -459,7 +437,11 @@ async def _chat_deck_sentences(db: AsyncSession, items: list[LearningItem]) -> d
         await db.execute(
             select(ItemOccurrence.item_id, ItemOccurrence.content_id)
             .join(Content, Content.id == ItemOccurrence.content_id)
-            .where(ItemOccurrence.item_id.in_(sentence_ids), Content.source == "chat")
+            .where(
+                ItemOccurrence.item_id.in_(sentence_ids),
+                Content.source == "chat",
+                Content.created_by == user_id,
+            )
         )
     ).all()
     if not memberships:
@@ -500,7 +482,7 @@ async def _build_questions(
     )
     items_by_id = {i.id: i for i in items}
     types_needed = {i.item_type for i in items}
-    chat_pools = await _chat_deck_sentences(db, items)
+    chat_pools = await _chat_deck_sentences(db, items, user_id)
     pools: dict[str, list[LearningItem]] = {}
     for item_type in types_needed:
         pools[item_type] = list(
@@ -901,7 +883,9 @@ async def get_stats(
 
     # 오답 정리 수 + 장기 기억 — 개인화 학습과학 팩 (services/progress.py)
     types = enabled_types(user_settings)
-    weak_count = await progress.weak_count(db, user.id, types, now)
+    weak_count = await progress.weak_count(
+        db, user.id, types, now, study_level=user_settings.study_level
+    )
     long_term = await progress.long_term_stats(db, user.id, now)
 
     return {

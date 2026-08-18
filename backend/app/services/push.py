@@ -16,7 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.models import LearningItem, PushSubscription, ReviewCard, ReviewLog, UserSettings
 from app.services import retention, weekly_report
-from app.services.visibility import visible_item_clause
+from app.services.visibility import (
+    low_level_sentence_gate,
+    queue_type_clause,
+    visible_item_clause,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +87,21 @@ async def send_to_user(db: AsyncSession, user_id: int, payload: dict) -> bool:
 
 
 async def due_count(db: AsyncSession, user_id: int, now: datetime) -> int:
+    """큐와 같은 출제 범위로 센다 (레벨 타입 + 길이 게이트) — 잠긴 카드만 있는
+    사용자에게 알림을 보내면 세션이 비어 불일치 (2026-08-18 전수 점검)."""
+    from app.models.item import ITEM_TYPE_LEVEL
+
+    row = (
+        await db.execute(
+            select(UserSettings.levels_enabled, UserSettings.study_level).where(
+                UserSettings.user_id == user_id
+            )
+        )
+    ).one_or_none()
+    # 설정 행 없는 유저 폴백 — 모델 기본(study_level=2, levels 1·2)과 일치
+    levels = row.levels_enabled if row else [1, 2]
+    study_level = row.study_level if row else 2
+    types = [t for t, lv in ITEM_TYPE_LEVEL.items() if lv in (levels or [])]
     return (
         await db.execute(
             select(func.count(ReviewCard.id))
@@ -92,6 +111,8 @@ async def due_count(db: AsyncSession, user_id: int, now: datetime) -> int:
                 ReviewCard.due_at <= now,
                 ReviewCard.suspended.is_(False),
                 visible_item_clause(user_id),
+                queue_type_clause(types),
+                *low_level_sentence_gate(study_level),
             )
         )
     ).scalar_one()
