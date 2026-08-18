@@ -8,7 +8,7 @@
 를 경유하므로 이 함수 하나가 규칙의 단일 지점이다.
 """
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from app.models import Content, ContentSubscription, ItemOccurrence, LearningItem
 
@@ -70,3 +70,47 @@ def lang_item_clause(lang: str):
         .join(Content, Content.id == ItemOccurrence.content_id)
         .where(Content.lang == lang)
     )
+
+
+# ---------- 큐 출제 범위 절 (docs/specs/learning.md · my-phrases.md) ----------
+# api/study.py 에서 이동 (2026-08-18) — 오답 정리(progress)·푸시 리마인더(push)가
+# 큐와 같은 필터를 쓰도록 단일 지점으로 공유한다.
+
+LOW_LEVEL_SENTENCE_MAX_WORDS = 8  # 길이 게이트 — 리얼클래스 "열 단어 내외" 방증
+
+
+def chat_deck_item_clause():
+    """내가 쓰는 말 덱(chat 콘텐츠)에 속한 항목 — 문장 게임 3종과 별개로,
+    학습 큐에서는 levels_enabled 와 무관하게 항상 대상 (my-phrases.md
+    레벨별 학습카드: 일반 sentence 는 레벨4 전용, chat 덱만 예외)."""
+    return LearningItem.id.in_(
+        select(ItemOccurrence.item_id)
+        .join(Content, Content.id == ItemOccurrence.content_id)
+        .where(Content.source == "chat")
+    )
+
+
+def queue_type_clause(types: list[str]):
+    """레벨 필터 + chat 덱 문장은 레벨 무관 출제 예외를 합친 절."""
+    return or_(LearningItem.item_type.in_(types), chat_deck_item_clause())
+
+
+def low_level_sentence_gate(study_level: int) -> list:
+    """레벨 1~2 큐에서 9단어+ 문장 제외 (proposal/level-format-fit 길이 게이트).
+
+    긴 문장 카드는 사라지는 게 아니라 레벨 3 진입까지 대기 — 편집 화면이
+    level_gated 배지로 알린다. 게임(타자·받아쓰기)은 종전대로 전 문장 사용.
+    """
+    if study_level > 2:
+        return []
+    word_count = (
+        func.length(LearningItem.en_text)
+        - func.length(func.replace(LearningItem.en_text, " ", ""))
+        + 1
+    )
+    return [
+        or_(
+            LearningItem.item_type != "sentence",
+            word_count <= LOW_LEVEL_SENTENCE_MAX_WORDS,
+        )
+    ]

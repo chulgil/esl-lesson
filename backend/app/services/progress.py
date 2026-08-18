@@ -12,16 +12,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import LearningItem, ReviewCard, ReviewLog, XpSpend
 from app.services.fsrs_service import LONG_TERM_STABILITY_DAYS
-from app.services.visibility import visible_item_clause
+from app.services.visibility import (
+    low_level_sentence_gate,
+    queue_type_clause,
+    visible_item_clause,
+)
 
 KST = timezone(timedelta(hours=9))
 WEAK_WINDOW_DAYS = 7  # 오답 정리 — 최근 오답 창(일)
 LONG_TERM_WEEKS = 8  # 장기 기억 추이 창(주)
 
 
-def weak_filter(user_id: int, types: list[str], now: datetime, extra: tuple = ()):
-    """오답 정리 대상 — 최근 창 내 오답 이력 + 가시성 + 활성 타입 (suspended 제외).
+def weak_filter(
+    user_id: int, types: list[str], now: datetime, extra: tuple = (), study_level: int = 4
+):
+    """오답 정리 대상 — 최근 창 내 오답 이력 + 가시성 + 큐 출제 범위 (suspended 제외).
 
+    타입 절은 큐와 같은 queue_type_clause(chat 문장 예외 포함) + 길이 게이트 —
+    큐에서 푼 카드는 틀렸을 때 오답 정리에도 나와야 한다 (2026-08-18 전수 점검:
+    레벨 ≤2 chat 문장 오답이 배지·세션에서 빠지던 비일관 해소).
     extra 로 덱 한정 등 추가 조건을 합성한다 (learning.md 오답 정리 모드).
     """
     wrong_recent = select(ReviewLog.card_id).where(
@@ -34,7 +43,8 @@ def weak_filter(user_id: int, types: list[str], now: datetime, extra: tuple = ()
         ReviewCard.suspended.is_(False),
         ReviewCard.id.in_(wrong_recent),
         visible_item_clause(user_id),
-        LearningItem.item_type.in_(types),
+        queue_type_clause(types),
+        *low_level_sentence_gate(study_level),
         *extra,
     )
 
@@ -46,6 +56,7 @@ async def weak_cards(
     now: datetime,
     limit: int,
     extra: tuple = (),
+    study_level: int = 4,
 ) -> list[ReviewCard]:
     if not types:
         return []
@@ -54,7 +65,7 @@ async def weak_cards(
             await db.execute(
                 select(ReviewCard)
                 .join(LearningItem, LearningItem.id == ReviewCard.item_id)
-                .where(*weak_filter(user_id, types, now, extra))
+                .where(*weak_filter(user_id, types, now, extra, study_level))
                 # stability 낮은 순, NULL(추정 전 = 가장 흔들림) 최우선
                 .order_by(ReviewCard.stability.asc().nulls_first(), ReviewCard.id)
                 .limit(limit)
@@ -63,14 +74,16 @@ async def weak_cards(
     )
 
 
-async def weak_count(db: AsyncSession, user_id: int, types: list[str], now: datetime) -> int:
+async def weak_count(
+    db: AsyncSession, user_id: int, types: list[str], now: datetime, study_level: int = 4
+) -> int:
     if not types:
         return 0
     return (
         await db.execute(
             select(func.count(func.distinct(ReviewCard.id)))
             .join(LearningItem, LearningItem.id == ReviewCard.item_id)
-            .where(*weak_filter(user_id, types, now))
+            .where(*weak_filter(user_id, types, now, study_level=study_level))
         )
     ).scalar_one()
 

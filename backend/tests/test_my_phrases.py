@@ -516,6 +516,85 @@ async def test_sentence_page_cap_general_queue(client, db_session):
     assert len(deck_sentence_qs) == 7
 
 
+async def test_assemble_pool_stays_within_my_deck(client, db_session):
+    """전역 dedup 으로 같은 문장 항목이 타인 덱에도 걸릴 때, 선다·방해칩 재료는
+    **내 덱에서만** 뽑는다 — 타인 채팅 번역 노출 방지 (2026-08-18 전수 점검)."""
+    from app.api.study import _chat_deck_sentences
+    from app.models import User
+
+    me = User(google_sub="g-pool-a", email="pool-a@example.com", name="A", nickname="A")
+    other = User(google_sub="g-pool-b", email="pool-b@example.com", name="B", nickname="B")
+    db_session.add_all([me, other])
+    await db_session.flush()
+
+    shared = LearningItem(
+        item_type="sentence",
+        en_text="That sounds good to me",
+        ko_text="저는 좋아요",
+        normalized_key="that sounds good to me",
+    )
+    db_session.add(shared)
+    my_deck = Content(
+        source="chat", visibility="private", title="내 덱", status="ready", created_by=me.id
+    )
+    other_deck = Content(
+        source="chat", visibility="private", title="남 덱", status="ready", created_by=other.id
+    )
+    db_session.add_all([my_deck, other_deck])
+    await db_session.flush()
+    db_session.add(ItemOccurrence(item_id=shared.id, content_id=my_deck.id))
+    db_session.add(ItemOccurrence(item_id=shared.id, content_id=other_deck.id))
+    secret = LearningItem(
+        item_type="sentence",
+        en_text="My secret salary is huge",
+        ko_text="비밀 연봉 이야기",
+        normalized_key="my secret salary is huge",
+    )
+    db_session.add(secret)
+    await db_session.flush()
+    db_session.add(ItemOccurrence(item_id=secret.id, content_id=other_deck.id))
+    await db_session.commit()
+
+    pools = await _chat_deck_sentences(db_session, [shared], me.id)
+    assert pools[shared.id] == ["That sounds good to me"]
+
+
+async def test_weak_mode_includes_chat_sentence_at_low_level(client, db_session):
+    """레벨 ≤2 에서 틀린 chat 문장이 오답 정리(배지·세션)에 들어온다 — 큐의
+    chat 예외를 오답 정리에도 일관 적용 (2026-08-18 전수 점검)."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, a)
+    await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-wk01")
+    await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-wk01b")
+    await seed_translation(
+        db_session, "오늘 야근해야 할 것 같아", "I think I have to work late today"
+    )
+    await client.get("/api/study/my-phrases")
+
+    queue = (await client.get("/api/study/queue")).json()
+    question = next(
+        q for q in queue["questions"] if q.get("hint_answer") == "I think I have to work late today"
+    )
+    submit = await client.post(
+        "/api/study/answer",
+        json={
+            "card_id": question["card_id"],
+            "quiz_mode": question["quiz_mode"],
+            "answer": "totally wrong",
+        },
+    )
+    assert submit.json()["correct"] is False
+
+    stats = (await client.get("/api/study/stats")).json()
+    assert stats["weak_count"] == 1
+    weak_queue = (await client.get("/api/study/queue?mode=weak")).json()
+    assert [
+        q
+        for q in weak_queue["questions"]
+        if q.get("hint_answer") == "I think I have to work late today"
+    ]
+
+
 async def test_stats_due_excludes_gated_long_sentence(client, db_session):
     """길이 게이트로 대기 중인 9단어+ 문장의 due 카드도 due_count 에서 빠지고
     levels[].locked_due 로 잡힌다 — 레벨 3 승급 시 복귀 (level-format-fit)."""
