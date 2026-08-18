@@ -205,6 +205,9 @@ export interface Stats {
     available_items: number;
     /** 학습 난이도(levels_enabled)로 활성화된 타입인가 — 컬렉션 잠김 표시용 */
     enabled?: boolean;
+    /** 레벨 잠금·길이 게이트로 큐가 건너뛰는 만기 카드 수 —
+     *  "난이도 올리면 복습 N장 재개" 안내 (issue #1) */
+    locked_due?: number;
   }[];
   daily: Record<string, number>;
 }

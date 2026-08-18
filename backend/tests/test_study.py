@@ -340,6 +340,29 @@ async def test_default_new_user_is_beginner(client, db_session):
     assert settings["levels_enabled"] == [1, 2]
 
 
+async def test_stats_due_excludes_level_locked_cards(client, db_session):
+    """레벨로 잠긴 타입의 due 카드는 due_count 에서 빠지고 levels[].locked_due 로
+    분리된다 — 큐와 카운트 정합 (issue #1 죽은 카드, level-format-fit 후속)."""
+    me = await login(client, db_session)
+    items = await seed_items(db_session, count=1, item_type="pattern")
+    db_session.add(
+        ReviewCard(user_id=me.id, item_id=items[0].id, state="review", due_at=datetime.now(UTC))
+    )
+    await db_session.commit()
+
+    # 기본 study_level=2 (levels {1,2}) — pattern(레벨 3)은 큐에서 잠김
+    stats = (await client.get("/api/study/stats")).json()
+    assert stats["due_count"] == 0
+    pattern_row = next(lv for lv in stats["levels"] if lv["item_type"] == "pattern")
+    assert pattern_row["locked_due"] == 1
+
+    await client.patch("/api/settings", json={"study_level": 3})
+    stats3 = (await client.get("/api/study/stats")).json()
+    assert stats3["due_count"] == 1
+    pattern_row3 = next(lv for lv in stats3["levels"] if lv["item_type"] == "pattern")
+    assert pattern_row3["locked_due"] == 0
+
+
 async def test_stats_levels_use_my_visibility_not_global_approved(client, db_session):
     """레벨 분모=내 가시성(공용 승인 ∪ 내 개인 비거부), 분자=suspended 제외 (2026-07-15 검증)."""
     from datetime import UTC, datetime

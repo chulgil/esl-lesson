@@ -68,7 +68,11 @@ export function CardCollection({ stats }: { stats: Stats }) {
               {TYPE_LABELS[lv.item_type] ?? `레벨 ${lv.level}`} · {lv.cards}/
               {lv.available_items}
               {locked ? (
-                <span className="ml-1">(난이도 올리면 열려요)</span>
+                <span className="ml-1">
+                  {(lv.locked_due ?? 0) > 0
+                    ? `(난이도 올리면 복습 ${lv.locked_due}장 재개)`
+                    : "(난이도 올리면 열려요)"}
+                </span>
               ) : (
                 lv.cards > 0 && (
                   <span className="ml-1">

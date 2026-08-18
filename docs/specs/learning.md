@@ -217,7 +217,7 @@ chat 덱 문장의 답 형식은 레벨별 사다리(선다→청크→단어칩
 | GET `/api/study/queue` | 오늘의 큐 + 문항 (`?content_id=` 덱 한정 — study-decks.md, `?mode=weak` 오답 정리) |
 | POST `/api/study/answer` | `{card_id, quiz_mode, answer, duration_ms}` → 채점 결과 + FSRS 갱신 + 다음 due |
 | POST `/api/study/rate` | 자기평가 보정 `{card_id, rating}` |
-| GET `/api/study/stats` | 대시보드: due/신규 수, 레벨별 현황(타입별 `enabled` — 학습 난이도로 잠긴 타입 표시, 2026-08-11: 컬렉션 빈 칸이 "콘텐츠 미완성"으로 오해되던 문제), 일별 히트맵, 연속 학습일, 오답 정리 수(`weak_count`), 장기 기억(`long_term`) |
+| GET `/api/study/stats` | 대시보드: due/신규 수(`due_count`·`due_tomorrow` 는 **큐와 같은 필터** — 레벨 타입 + 길이 게이트. 잠긴 카드가 카운트만 부풀리던 불일치 해소, 2026-08-18 issue #1), 레벨별 현황(타입별 `enabled` — 학습 난이도로 잠긴 타입 표시, 2026-08-11: 컬렉션 빈 칸이 "콘텐츠 미완성"으로 오해되던 문제 · `locked_due` — 잠금·게이트로 큐가 건너뛰는 만기 카드 수, "난이도 올리면 복습 N장 재개" 안내), 일별 히트맵, 연속 학습일, 오답 정리 수(`weak_count`), 장기 기억(`long_term`) |
 | GET `/api/study/decks` | 덱(담은 콘텐츠)별 due/new 카운트 — study-decks.md |
 | GET `/api/study/network` | 어휘망 그래프 (임베딩 유사도) — word-insight.md |
 | GET `/api/study/items/{id}/insight` | 단어 인사이트 카드 (가시성 게이트) — word-insight.md |
