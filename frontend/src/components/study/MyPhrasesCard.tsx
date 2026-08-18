@@ -20,6 +20,8 @@ export function MyPhrasesCard() {
   const [learningLangs, setLearningLangs] = useState<string[] | null>(null);
   const [lang, setLang] = useState<string | null>(null);
   const [data, setData] = useState<MyPhrasesSummary | null>(null);
+  // 사용자가 탭을 직접 고르기 전까지만 자동 폴백 허용 (아래 useEffect)
+  const [userPicked, setUserPicked] = useState(false);
 
   useEffect(() => {
     studyApi
@@ -49,6 +51,15 @@ export function MyPhrasesCard() {
     };
   }, [lang]);
 
+  // 기본 탭 폴백 — 첫 학습언어 덱이 비어 있고 (일반) 수집분이 있으면 (일반)으로.
+  // 언어 방 도입(2026-08-14) 이전 사용자는 수집분 전체가 (일반) 덱에 있어,
+  // 빈 언어 탭이 기본이면 학습 버튼이 첫 화면에 안 보인다 (2026-08-18 보고
+  // "덱 학습을 넣을 수 없다" — 실제로는 (일반) 탭 뒤에 숨어 있었다)
+  useEffect(() => {
+    if (userPicked || data === null || lang === "legacy") return;
+    if (data.total === 0 && data.legacy_total > 0) setLang("legacy");
+  }, [data, lang, userPicked]);
+
   if (data === null || lang === null) return null;
 
   // (일반) 칩 — 개편 전 수집분이 있을 때만 노출 (docs/specs/my-phrases.md 덱 그룹화)
@@ -68,7 +79,10 @@ export function MyPhrasesCard() {
                 key={l}
                 type="button"
                 aria-pressed={lang === l}
-                onClick={() => setLang(l)}
+                onClick={() => {
+                  setUserPicked(true);
+                  setLang(l);
+                }}
                 className={`min-h-9 rounded-full border-2 px-3 text-xs font-bold transition ${
                   lang === l
                     ? "border-brick-blue bg-brick-blue/10 text-brick-blue"
