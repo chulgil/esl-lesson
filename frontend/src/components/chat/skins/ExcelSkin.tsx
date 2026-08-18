@@ -68,6 +68,8 @@ export function ExcelSkin(p: ChatSkinProps & { roomId: number }) {
         <div className="flex items-center gap-1.5">
           {p.sourceLang && p.targetLang && (
             <span className="shrink-0 rounded-sm border border-white/30 px-1.5 py-0.5 text-[10px] font-bold text-white/90">
+              {/* 학습/일반 구분 — 언어쌍만으로는 방 종류를 알 수 없다 (2026-08-18) */}
+              {(p.room?.mode ?? "learn") === "plain" ? "일반 " : "학습 "}
               {p.sourceLang.toUpperCase()}→{p.targetLang.toUpperCase()}
             </span>
           )}
@@ -127,7 +129,11 @@ export function ExcelSkin(p: ChatSkinProps & { roomId: number }) {
         >
           {p.sourceLang && p.targetLang && (
             <div className="flex items-center gap-1.5 border-b border-[#d8dde3] bg-[#f6f8f9] px-2 py-1">
-              <LangPairBadge source={p.sourceLang} target={p.targetLang} mode={p.room?.mode} />
+              <LangPairBadge
+                source={p.sourceLang}
+                target={p.targetLang}
+                mode={p.room?.mode}
+              />
               {closed && (
                 <span className="text-[10px] text-[#999]">종료됨</span>
               )}
@@ -377,7 +383,11 @@ export function ExcelSkin(p: ChatSkinProps & { roomId: number }) {
                 onChange={p.onInputChange}
                 onSend={p.onSend}
                 onPasteImage={p.onAttachImageFile}
-                placeholder={roomInputPlaceholder(p.sourceLang, p.targetLang, p.room?.mode ?? "learn")}
+                placeholder={roomInputPlaceholder(
+                  p.sourceLang,
+                  p.targetLang,
+                  p.room?.mode ?? "learn",
+                )}
                 ariaLabel="내용 입력"
                 className="min-h-11 flex-1 rounded-sm border border-[#c9cfd6] px-2.5 py-2.5 text-base focus:border-[#217346] focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px]"
               />
