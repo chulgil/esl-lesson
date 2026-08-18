@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SubscribeButton } from "@/components/content/SubscribeButton";
 import { studyApi, type MyPhrasesSummary } from "@/lib/study-api";
 
 const LANG_LABELS: Record<string, string> = {
@@ -136,14 +137,33 @@ export function MyPhrasesCard() {
             </p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Link
-              href={`/study/session?content=${data.content_id}`}
-              className="inline-flex min-h-10 items-center rounded-md border-2 border-brick-blue/60 bg-white px-3 text-sm font-bold text-brick-blue transition hover:-translate-y-0.5 hover:border-brick-blue"
-            >
-              {isLegacy
-                ? `이 덱으로 학습 (${data.active}문장)`
-                : `내 말투로 학습 (${data.active}문장)`}
-            </Link>
+            {/* 문서함에서 뺀 덱 — 학습 버튼(404) 대신 담기 안내 (2026-08-18) */}
+            {!data.subscribed && data.content_id !== null ? (
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <SubscribeButton
+                  contentId={data.content_id}
+                  subscribed={false}
+                  onChange={() =>
+                    studyApi
+                      .myPhrases(lang)
+                      .then(setData)
+                      .catch(() => undefined)
+                  }
+                />
+                <span className="text-xs opacity-60">
+                  지금은 학습에서 빠져 있어요 — 담으면 복습·게임에 다시 나와요
+                </span>
+              </span>
+            ) : (
+              <Link
+                href={`/study/session?content=${data.content_id}`}
+                className="inline-flex min-h-10 items-center rounded-md border-2 border-brick-blue/60 bg-white px-3 text-sm font-bold text-brick-blue transition hover:-translate-y-0.5 hover:border-brick-blue"
+              >
+                {isLegacy
+                  ? `이 덱으로 학습 (${data.active}문장)`
+                  : `내 말투로 학습 (${data.active}문장)`}
+              </Link>
+            )}
             {/* 편집 — 빼고 싶은 문장 관리 (2026-08-12 요청) */}
             <Link
               href={`/study/phrases?lang=${lang}`}

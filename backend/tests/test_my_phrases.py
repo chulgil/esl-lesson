@@ -247,6 +247,7 @@ async def test_legacy_lang_missing_deck_returns_empty(client, db_session):
         "added_now": 0,
         "recent": [],
         "legacy_total": 0,
+        "subscribed": True,
     }
 
 
@@ -514,6 +515,74 @@ async def test_sentence_page_cap_general_queue(client, db_session):
     deck_queue = (await client.get(f"/api/study/queue?content_id={deck_id}")).json()
     deck_sentence_qs = [q for q in deck_queue["questions"] if q["quiz_mode"] == "sentence_assemble"]
     assert len(deck_sentence_qs) == 7
+
+
+async def test_chat_deck_subscribe_toggle_preserves_deck(client, db_session):
+    """문서함 담기/빼기 — 빼기는 구독만 해지(큐·게임 제외), 덱 본체·수집분은
+    보존되고 재담기 시 그대로 복귀한다 (2026-08-18 요청)."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, a)
+    await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-sub01")
+    await send(client, b.id, "오늘 야근해야 할 것 같아", "cid-sub01b")
+    await seed_translation(
+        db_session, "오늘 야근해야 할 것 같아", "I think I have to work late today"
+    )
+    summary = (await client.get("/api/study/my-phrases")).json()
+    deck_id = summary["content_id"]
+    assert summary["subscribed"] is True
+
+    # 빼기 — 본체 삭제 없이 구독만 해지
+    res = await client.delete(f"/api/my/contents/{deck_id}")
+    assert res.status_code == 204
+    deck_row = await db_session.get(Content, deck_id)
+    assert deck_row is not None  # 개인 콘텐츠 삭제 경로에서 chat 덱은 보호
+    occ = (
+        (
+            await db_session.execute(
+                select(ItemOccurrence).where(ItemOccurrence.content_id == deck_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(occ) == 1  # 수집분 보존
+
+    # 큐에서 제외 + 덱 한정 학습은 404
+    queue = (await client.get("/api/study/queue")).json()
+    assert not [
+        q for q in queue["questions"] if q.get("hint_answer") == "I think I have to work late today"
+    ]
+    assert (await client.get(f"/api/study/queue?content_id={deck_id}")).status_code == 404
+
+    # lazy sync(카드 재조회)가 몰래 재구독하지 않는다 — 빼기 의사 존중
+    summary2 = (await client.get("/api/study/my-phrases")).json()
+    assert summary2["subscribed"] is False
+    assert summary2["content_id"] == deck_id
+
+    # 재담기 — 내 chat 덱은 private 여도 담기 허용, 카드 진행 그대로 복귀
+    res = await client.post(f"/api/my/contents/{deck_id}/subscribe")
+    assert res.status_code == 202
+    assert (await client.get("/api/study/my-phrases")).json()["subscribed"] is True
+    queue2 = (await client.get("/api/study/queue")).json()
+    assert [
+        q
+        for q in queue2["questions"]
+        if q.get("hint_answer") == "I think I have to work late today"
+    ]
+
+
+async def test_chat_deck_subscribe_rejects_other_users_deck(client, db_session):
+    """타인의 chat 덱은 담기 불가 — 존재 여부도 흘리지 않는 404."""
+    a, b = await learn_pair(client, db_session)
+    await login(client, db_session, b)
+    await send(client, a.id, "제가 먼저 확인해볼게요", "cid-sub02")
+    await send(client, a.id, "제가 먼저 확인해볼게요", "cid-sub02b")
+    await seed_translation(db_session, "제가 먼저 확인해볼게요", "Let me check it first")
+    other_deck_id = (await client.get("/api/study/my-phrases")).json()["content_id"]
+
+    await login(client, db_session, a)
+    res = await client.post(f"/api/my/contents/{other_deck_id}/subscribe")
+    assert res.status_code == 404
 
 
 async def test_assemble_pool_stays_within_my_deck(client, db_session):

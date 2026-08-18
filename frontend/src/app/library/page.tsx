@@ -233,7 +233,11 @@ function LibraryInner() {
                 <Link href={`/library/${c.id}`} className="block">
                   <p className="flex items-center gap-2 text-xs">
                     <span className="opacity-50">
-                      {c.source === "youtube" ? "유튜브" : "수기"}
+                      {c.source === "youtube"
+                        ? "유튜브"
+                        : c.source === "chat"
+                          ? "내가 쓰는 말"
+                          : "수기"}
                     </span>
                     {c.mine && (
                       <span className="rounded bg-brick-yellow/40 px-1.5 py-0.5 font-bold">
@@ -292,8 +296,10 @@ function LibraryInner() {
                     })()}
                   </Link>
                 )}
-                {/* 개인 콘텐츠는 이미 내 것이라 담기 대상이 아니다 */}
-                {!c.mine && (
+                {/* 개인 콘텐츠는 이미 내 것이라 담기 대상이 아니다 —
+                    단 chat 덱(내가 쓰는 말)은 학습 일시정지/재개용 토글 허용
+                    (2026-08-18 요청, docs/specs/my-phrases.md 담기/빼기) */}
+                {(!c.mine || c.source === "chat") && (
                   <div className="mt-3">
                     <SubscribeButton
                       contentId={c.id}

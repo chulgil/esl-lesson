@@ -64,23 +64,28 @@ async def _get_or_create_deck(db: AsyncSession, user: User, lang: str) -> Conten
         )
         db.add(deck)
         await db.flush()
+        # 구독은 **생성 시 1회만** — sync 마다 재구독하면 문서함에서 뺀
+        # 사용자의 의사를 다음 조회가 뒤집는다 (2026-08-18 담기/빼기)
+        db.add(ContentSubscription(content_id=deck.id, user_id=user.id))
+        await db.flush()
     else:
         # 기존 단일 덱(언어 표기 없던 시절) 제목을 lazy 갱신 — lang 은 유지
         wanted_title = deck_title(lang)
         if deck.title != wanted_title:
             deck.title = wanted_title
-    sub = (
+    return deck
+
+
+async def is_subscribed(db: AsyncSession, deck_id: int, user_id: int) -> bool:
+    """문서함 담김 상태 — 빼면 큐·게임에서 제외되고 수집·편집은 계속된다."""
+    return (
         await db.execute(
             select(ContentSubscription.id).where(
-                ContentSubscription.content_id == deck.id,
-                ContentSubscription.user_id == user.id,
+                ContentSubscription.content_id == deck_id,
+                ContentSubscription.user_id == user_id,
             )
         )
-    ).scalar_one_or_none()
-    if sub is None:
-        db.add(ContentSubscription(content_id=deck.id, user_id=user.id))
-        await db.flush()
-    return deck
+    ).scalar_one_or_none() is not None
 
 
 async def deck_counts(db: AsyncSession, user_id: int, deck_id: int) -> tuple[int, int]:

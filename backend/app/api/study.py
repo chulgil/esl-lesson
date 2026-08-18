@@ -1023,6 +1023,7 @@ async def my_phrases(
                 "added_now": 0,
                 "recent": [],
                 "legacy_total": 0,
+                "subscribed": True,
             }
         active, total = await my_phrases_service.deck_counts(db, user.id, deck.id)
         return {
@@ -1034,6 +1035,8 @@ async def my_phrases(
             "added_now": 0,
             "recent": await _recent_phrases(db, deck.id),
             "legacy_total": total,
+            # 문서함 담김 상태 — 빼면 학습 버튼 대신 담기 안내 (2026-08-18)
+            "subscribed": await my_phrases_service.is_subscribed(db, deck.id, user.id),
         }
 
     deck, added = await my_phrases_service.sync_my_phrases(db, user, settings, resolved_lang)
@@ -1050,6 +1053,8 @@ async def my_phrases(
         "added_now": added,
         "recent": await _recent_phrases(db, deck.id),
         "legacy_total": legacy_count,
+        # 문서함 담김 상태 — 빼면 학습 버튼 대신 담기 안내 (2026-08-18)
+        "subscribed": await my_phrases_service.is_subscribed(db, deck.id, user.id),
     }
 
 
