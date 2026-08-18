@@ -231,6 +231,12 @@ function PhraseRow({
               {item.freq}회
             </span>
           )}
+          {/* 길이 게이트 — 긴 문장은 사라진 게 아니라 레벨 3부터 출제 */}
+          {item.level_gated && (
+            <span className="shrink-0 rounded-full border border-brick-blue/40 bg-brick-blue/5 px-2 py-0.5 text-[10px] font-bold text-brick-blue">
+              레벨 3부터
+            </span>
+          )}
         </span>
         <span className="block truncate text-xs opacity-60">
           {item.ko_text}

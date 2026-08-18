@@ -185,14 +185,15 @@ def build_question(
     similar: list[dict] | None = None,
     *,
     study_level: int = 4,
-    assemble_pool_words: list[str] | None = None,
+    deck_sentences: list[str] | None = None,
 ) -> dict:
     """카드 1장 -> 퀴즈 문항. pool 은 같은 타입 approved 항목 (오답 보기 샘플링용).
 
     similar: 임베딩 최근접 이웃 (P2 — 있으면 오답 선지에 우선 배치해 변별 학습).
-    study_level·assemble_pool_words: chat 덱 문장 전용 — study_level<=3 이고
-    assemble_pool_words 가 주어지면(=chat 덱 문장) 단어 칩 조립 형식으로 출제
-    (docs/specs/my-phrases.md 레벨별 학습카드). 일반 문장은 그대로 타이핑.
+    study_level·deck_sentences: chat 덱 문장 전용 — deck_sentences(같은 덱 문장
+    텍스트)가 주어지면 형식 사다리로 출제: 레벨 1 뜻 매칭 선다 → 2 청크 조립 →
+    3 단어 칩 조립 → 4 타이핑 (proposal/level-format-fit-2026-08.md,
+    docs/specs/my-phrases.md 레벨별 학습카드). 일반 문장은 그대로 타이핑.
     """
     context = next((o.context_en for o in item.occurrences if o.context_en), None)
     context_ko = next((o.context_ko for o in item.occurrences if o.context_ko), None)
@@ -203,8 +204,16 @@ def build_question(
         return _idiom_question(item, pool, context, similar)
     if item.item_type == "pattern":
         return _pattern_question(item, context, context_ko)
-    if assemble_pool_words is not None and study_level <= 3:
-        return _sentence_assemble_question(item, assemble_pool_words)
+    if deck_sentences is not None and study_level <= 3:
+        if study_level <= 1:
+            choice = _sentence_choice_question(item, deck_sentences)
+            if choice is not None:
+                return choice
+            # 덱 문장이 4개 미만이라 선다 불가 — 한 단계 위 형식으로 폴백
+            return _sentence_chunk_question(item, deck_sentences)
+        if study_level == 2:
+            return _sentence_chunk_question(item, deck_sentences)
+        return _sentence_assemble_question(item, deck_sentences)
     return _sentence_question(item)
 
 
@@ -378,20 +387,88 @@ def _sentence_question(item: LearningItem) -> dict:
     }
 
 
-def _sentence_assemble_question(item: LearningItem, distractor_words: list[str]) -> dict:
-    """레벨 1~3 chat 덱 문장 카드 — 단어 칩 조립 (my-phrases.md 레벨별 학습카드).
+def _deck_pool_words(item: LearningItem, deck_sentences: list[str]) -> list[str]:
+    """같은 덱의 다른 문장에서 방해칩 후보 단어 추출 (원문 단어 제외)."""
+    own = {_norm_word(w) for w in item.en_text.split()}
+    pool = [w.strip(".,!?;:\"'") for text in deck_sentences for w in text.split()]
+    return list({w for w in pool if _norm_word(w) and _norm_word(w) not in own})
 
-    답 = en_text(번역문) 단어를 순서대로 조립. 오답 칩은 같은 덱의 다른 문장
-    단어에서 샘플링(없으면 칩 없이 순서 조립만). 채점은 compose 와 동일 경로
-    (정규화 후 일치, Levenshtein 허용)로 합류한다.
+
+def _sentence_choice_question(item: LearningItem, deck_sentences: list[str]) -> dict | None:
+    """레벨 1 chat 덱 문장 — 뜻 매칭 선다 (recognition, level-format-fit).
+
+    내 원문(ko_text)을 제시하고 같은 덱 문장 4개 중 번역문을 고른다. 오답
+    선지가 3개 미만이면 None (호출부가 청크 조립으로 폴백). 채점은 기존
+    choice_ko2en 경로(정규화 일치) 재사용.
+    """
+    answer_norm = normalize_answer(item.en_text)
+    candidates = list({s for s in deck_sentences if normalize_answer(s) != answer_norm})
+    if len(candidates) < 3:
+        return None
+    choices = [item.en_text, *random.sample(candidates, 3)]
+    random.shuffle(choices)
+    return {
+        "quiz_mode": "choice_ko2en",
+        "level": 4,
+        "hint_answer": item.en_text,
+        "prompt": item.ko_text,
+        "choices": choices,
+        "context": None,
+    }
+
+
+def _sentence_chunk_question(item: LearningItem, deck_sentences: list[str]) -> dict:
+    """레벨 2 chat 덱 문장 — 청크 조립 (cued recall 저부하, level-format-fit).
+
+    문장을 2~4덩이(칩 최대 4개 — WM 4±1 정합)로 균등 분절해 배열한다.
+    방해칩은 0~1개: 같은 덱 다른 문장의 연속 단어 조각, 원문에 없는 단어를
+    반드시 포함할 때만. 채점은 sentence_assemble 경로(청크를 공백으로 이어
+    붙이면 en_text — 정규화가 공백을 접는다) 그대로 합류한다.
     """
     words = item.en_text.split()
+    n = len(words)
+    k = min(4, n, max(2, (n + 1) // 2))
+    size = (n + k - 1) // k if k else 1
+    chunks = [" ".join(words[i : i + size]) for i in range(0, n, size)]
+
     own = {_norm_word(w) for w in words}
-    decoy_candidates = list(
-        {w for w in distractor_words if _norm_word(w) and _norm_word(w) not in own}
-    )
+    chunk_norms = {normalize_answer(c) for c in chunks}
+    decoy = None
+    answer_norm = normalize_answer(item.en_text)
+    others = [s for s in deck_sentences if normalize_answer(s) != answer_norm]
+    random.shuffle(others)
+    for text in others:
+        other_words = [w.strip(".,!?;:\"'") for w in text.split() if w.strip(".,!?;:\"'")]
+        candidate_words = other_words[: max(1, min(size, len(other_words)))]
+        candidate = " ".join(candidate_words)
+        has_foreign = any(_norm_word(w) not in own for w in candidate_words)
+        if candidate and has_foreign and normalize_answer(candidate) not in chunk_norms:
+            decoy = candidate
+            break
+    chips = [*chunks, *([decoy] if decoy else [])]
+    random.shuffle(chips)
+    return {
+        "quiz_mode": "sentence_assemble",
+        "level": 4,
+        "hint_answer": item.en_text,
+        "prompt_ko": item.ko_text,
+        "chips": chips,
+        "context": None,
+    }
+
+
+def _sentence_assemble_question(item: LearningItem, deck_sentences: list[str]) -> dict:
+    """레벨 3 chat 덱 문장 카드 — 단어 칩 조립 (my-phrases.md 레벨별 학습카드).
+
+    답 = en_text(번역문) 단어를 순서대로 조립. 오답 칩은 같은 덱의 다른 문장
+    단어에서 최대 2개 샘플링(level-format-fit: 기존 3개에서 축소. 없으면 칩
+    없이 순서 조립만). 채점은 compose 와 동일 경로(정규화 후 일치, Levenshtein
+    허용)로 합류한다.
+    """
+    words = item.en_text.split()
+    decoy_candidates = _deck_pool_words(item, deck_sentences)
     random.shuffle(decoy_candidates)
-    decoys = decoy_candidates[:3]
+    decoys = decoy_candidates[:2]
     chips = [*words, *decoys]
     random.shuffle(chips)
     return {
