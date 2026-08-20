@@ -13,6 +13,68 @@ import { useSurfaceSkin } from "@/lib/theme-surfaces";
 
 type Phase = "loading" | "empty" | "question" | "feedback" | "done";
 
+// --- 세션 이어가기 스냅샷 (localStorage) ---
+// 답은 제출 즉시 서버에 저장되지만, "몇 번째까지 풀었는지"의 세션 순서·진행
+// 카운터는 클라이언트만 안다 — 나가기 후 재진입 시 남은 문항을 원래 순서로
+// 복원해 초기화처럼 보이던 문제 해소 (2026-08-20 보고). 서버 큐가 정본이라
+// 스냅샷의 문항 중 이미 답한 것(큐에 없음)은 자동 제외된다.
+
+const SESSION_SNAPSHOT_KEY = "els-study-session";
+
+interface SessionSnapshot {
+  day: string;
+  content: number | null;
+  weak: boolean;
+  order: number[];
+  idx: number;
+  answered: number;
+  correct: number;
+  longTerm: number;
+}
+
+function kstDay(): string {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+}
+
+function loadSessionSnapshot(
+  content: number | undefined,
+  weak: boolean,
+): SessionSnapshot | null {
+  try {
+    const raw = window.localStorage.getItem(SESSION_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as SessionSnapshot;
+    if (
+      saved.day !== kstDay() ||
+      saved.content !== (content ?? null) ||
+      saved.weak !== weak ||
+      !Array.isArray(saved.order) ||
+      saved.answered === 0 // 아무것도 안 풀었으면 새 세션과 동일
+    ) {
+      return null;
+    }
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+function saveSessionSnapshot(snapshot: SessionSnapshot): void {
+  try {
+    window.localStorage.setItem(SESSION_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {
+    // 저장 불가(시크릿 모드 등) — 이어가기 없이 종전 동작
+  }
+}
+
+function clearSessionSnapshot(): void {
+  try {
+    window.localStorage.removeItem(SESSION_SNAPSHOT_KEY);
+  } catch {
+    // noop
+  }
+}
+
 const STUDY_LEVELS = [
   { level: 1, name: "입문", desc: "단어" },
   { level: 2, name: "초급", desc: "단어+숙어" },
@@ -45,6 +107,9 @@ function StudySessionInner() {
   const [showFeedback, setShowFeedback] = useState(true);
   // 오늘 이미 답한 수 — 재진입 시 "이어가기" 안내 (2026-08-20 저장 오해 해소)
   const [doneToday, setDoneToday] = useState(0);
+  // 이 세션에서 재진입 전에 이미 답한 수 — 진행바·카운터를 이어붙인다
+  // (2026-08-20 보고: 나가기 후 재진입이 1/N 부터 다시 시작돼 초기화로 보임)
+  const [prevDone, setPrevDone] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   // 이번 세션에서 장기 기억으로 굳은 카드 수 — 완료 화면 요약 (피크엔드)
@@ -60,7 +125,6 @@ function StudySessionInner() {
     studyApi
       .queue(contentId, weakMode ? "weak" : undefined)
       .then((res) => {
-        setQueue(res.questions);
         setHintDelay(res.hint_delay_seconds ?? 0);
         setDeckTitle(res.deck?.title ?? null);
         setDoneToday(res.done_today ?? 0);
@@ -68,10 +132,34 @@ function StudySessionInner() {
         // 수치가 남지 않도록 (done -> ?mode=weak 전환이 정식 흐름이 됨)
         setIdx(0);
         setResult(null);
-        setCorrectCount(0);
-        setAnsweredCount(0);
-        setLongTermCount(0);
-        setPhase(res.questions.length ? "question" : "empty");
+        // 세션 이어가기 — 같은 날 저장된 스냅샷이 있으면 남은 문항을 원래
+        // 순서로 복원하고 진행바를 이어붙인다 (2026-08-20 초기화 보고)
+        const saved = loadSessionSnapshot(contentId, weakMode);
+        if (saved && res.questions.length) {
+          const byId = new Map(res.questions.map((q) => [q.card_id, q]));
+          const resumed: Question[] = [];
+          for (const cardId of saved.order.slice(saved.idx)) {
+            const q = byId.get(cardId);
+            if (q) {
+              resumed.push(q);
+              byId.delete(cardId);
+            }
+          }
+          const fresh = res.questions.filter((q) => byId.has(q.card_id));
+          setQueue([...resumed, ...fresh]);
+          setPrevDone(saved.answered);
+          setCorrectCount(saved.correct);
+          setAnsweredCount(saved.answered);
+          setLongTermCount(saved.longTerm);
+          setPhase(resumed.length + fresh.length ? "question" : "empty");
+        } else {
+          setQueue(res.questions);
+          setPrevDone(0);
+          setCorrectCount(0);
+          setAnsweredCount(0);
+          setLongTermCount(0);
+          setPhase(res.questions.length ? "question" : "empty");
+        }
         startedAt.current = Date.now();
       })
       .catch((e) => setError(e.message));
@@ -147,9 +235,36 @@ function StudySessionInner() {
     }
   }
 
+  // 진행 스냅샷 저장 — 제출·이동마다 갱신 (이어가기 재료)
+  useEffect(() => {
+    if ((phase !== "question" && phase !== "feedback") || queue.length === 0) {
+      return;
+    }
+    saveSessionSnapshot({
+      day: kstDay(),
+      content: contentId ?? null,
+      weak: weakMode,
+      order: queue.map((q) => q.card_id),
+      idx,
+      answered: answeredCount,
+      correct: correctCount,
+      longTerm: longTermCount,
+    });
+  }, [
+    phase,
+    queue,
+    idx,
+    answeredCount,
+    correctCount,
+    longTermCount,
+    contentId,
+    weakMode,
+  ]);
+
   function next() {
     const nextIdx = idx + 1;
     if (nextIdx >= queue.length) {
+      clearSessionSnapshot(); // 세션 완주 — 다음 진입은 새 세션
       setPhase("done");
     } else {
       setIdx(nextIdx);
@@ -195,7 +310,9 @@ function StudySessionInner() {
         </h1>
         {(phase === "question" || phase === "feedback") && (
           <span className="ml-auto rounded-full bg-white px-3 py-1 text-sm font-bold whitespace-nowrap shadow-sm">
-            {Math.min(idx + 1, queue.length)}/{queue.length}
+            {/* 재진입 시 이전 진행(prevDone)을 이어붙인 연속 카운터 */}
+            {Math.min(prevDone + idx + 1, prevDone + queue.length)}/
+            {prevDone + queue.length}
           </span>
         )}
         <SpectateHost snapshot={spectateSnapshot} />
@@ -324,53 +441,60 @@ function StudySessionInner() {
 
       {(phase === "question" || phase === "feedback") && question && (
         <>
-          <ProgressBricks total={queue.length} done={idx} />
+          <ProgressBricks
+            total={prevDone + queue.length}
+            done={prevDone + idx}
+          />
           {/* 이어가기 안내 — 답은 제출 즉시 저장되므로 나가도 진행이 사라지지
               않는다. 재진입 카운터 리셋이 "처음부터"로 보이던 오해 해소
               (2026-08-20 보고) */}
-          {doneToday > 0 && idx === 0 && phase === "question" && (
-            <p className="mb-3 max-w-2xl rounded-md bg-brick-green/10 px-3 py-1.5 text-xs font-bold text-brick-green">
-              오늘 이미 {doneToday}개를 끝냈어요 — 이어서 진행해요 (답은 제출
-              즉시 저장돼요)
-            </p>
-          )}
-          {/* 카드 스택 — 정답 카드가 문제 위로 올라와 한 화면에서 전환된다
-              (스크롤 없이 문제↔정답 왕복, 2026-08-20 세션 UX). grid 1칸에
-              두 카드를 겹치고 transform/opacity 로 앞뒤를 바꾼다 */}
-          <div className="grid max-w-2xl">
+          {(prevDone > 0 || doneToday > 0) &&
+            idx === 0 &&
+            phase === "question" && (
+              <p className="mb-3 max-w-2xl rounded-md bg-brick-green/10 px-3 py-1.5 text-xs font-bold text-brick-green">
+                {prevDone > 0
+                  ? `${prevDone}번째까지 푼 세션을 이어서 진행해요 (답은 제출 즉시 저장돼요)`
+                  : `오늘 이미 ${doneToday}개를 끝냈어요 — 이어서 진행해요 (답은 제출 즉시 저장돼요)`}
+              </p>
+            )}
+          {/* 카드 플립 — 채점하면 카드가 뒤집히며 정답 면이 나온다 (플래시카드
+              은유, 2026-08-20 요청). 앞면=문제, 뒷면=정답(180도 선회전 +
+              backface 숨김). 문제↔정답 왕복은 뒤집기 방향만 바뀐다.
+              reduced-motion 은 전환 없이 즉시 교체 */}
+          <div className="grid max-w-2xl [perspective:1400px]">
             <div
-              className={`col-start-1 row-start-1 transition-all duration-300 motion-reduce:transition-none ${
+              className={`col-start-1 row-start-1 grid transition-transform duration-500 [transform-style:preserve-3d] motion-reduce:transition-none ${
                 phase === "feedback" && showFeedback
-                  ? "pointer-events-none scale-[0.98] opacity-0"
-                  : "opacity-100"
+                  ? "[transform:rotateY(180deg)]"
+                  : ""
               }`}
-              // inert — 숨은 카드가 Tab 순서·스크린리더에 남지 않게 (2026-08-20 점검)
-              inert={phase === "feedback" && showFeedback}
             >
-              <QuestionCard
-                key={`${question.card_id}-${idx}`}
-                question={question}
-                disabled={phase === "feedback"}
-                hintDelay={hintDelay}
-                onSubmit={submit}
-              />
-            </div>
-            {phase === "feedback" && result && (
               <div
-                className={`card-rise col-start-1 row-start-1 transition-all duration-300 motion-reduce:transition-none ${
-                  showFeedback
-                    ? "opacity-100"
-                    : "pointer-events-none translate-y-6 opacity-0"
-                }`}
-                inert={!showFeedback}
+                className="col-start-1 row-start-1 [-webkit-backface-visibility:hidden] [backface-visibility:hidden]"
+                // inert — 숨은 면이 Tab 순서·스크린리더에 남지 않게 (2026-08-20 점검)
+                inert={phase === "feedback" && showFeedback}
               >
-                <SessionFeedback
+                <QuestionCard
+                  key={`${question.card_id}-${idx}`}
                   question={question}
-                  result={result}
-                  onNext={next}
+                  disabled={phase === "feedback"}
+                  hintDelay={hintDelay}
+                  onSubmit={submit}
                 />
               </div>
-            )}
+              {phase === "feedback" && result && (
+                <div
+                  className="col-start-1 row-start-1 [-webkit-backface-visibility:hidden] [backface-visibility:hidden] [transform:rotateY(180deg)]"
+                  inert={!showFeedback}
+                >
+                  <SessionFeedback
+                    question={question}
+                    result={result}
+                    onNext={next}
+                  />
+                </div>
+              )}
+            </div>
           </div>
           {/* 문제↔정답 왕복 — 뒤로 가면 제출된 문제를 다시 보고, 화살표로 복귀 */}
           {phase === "feedback" && (
