@@ -1,6 +1,7 @@
 """영문 타자연습 — 문장 동기 레이스(전원 완성 시 다음 문장), 1~4인."""
 
 import asyncio
+import time
 
 import pytest
 
@@ -441,3 +442,60 @@ async def test_room_lang_stored_and_broadcast_through_start(wired_db, fast_race)
     assert all(s["en"].startswith("ja sentence") for s in start["sentences"])
 
     session.task.cancel()
+
+
+# --- 명시적 퇴장·잔여시간 (2026-08-20 교차 리뷰) ---
+
+
+async def test_leave_on_result_screen_drops_player_and_blocks_ghost(wired_db, monkeypatch):  # noqa: F811
+    """결과 화면을 떠난 사람은 방에서 빠지고, 다른 페이지에서 WS 를 열어도
+    재대결에 유령 참가자로 편입되지 않는다 (버그 A)."""
+    monkeypatch.setattr(tr, "COUNTDOWN_SECONDS", 0.0)
+    host = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db)
+    stay = User(google_sub="g-tgh1", email="tgh1@example.com", name="ST")
+    gone = User(google_sub="g-tgh2", email="tgh2@example.com", name="GO")
+    wired_db.add_all([stay, gone])
+    await wired_db.commit()
+
+    manager = tr.TypingRaceManager()
+    s1, s2, s3 = Collector(), Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(stay.id, stay.name, s2, code)
+    await manager.join(gone.id, gone.name, s3, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    session.task.cancel()
+    await manager._finish(session, aborted=False)
+    assert session.completed
+
+    await manager.leave(gone.id)  # 결과 화면 이탈 (tp.leave)
+    assert gone.id not in manager.by_user
+    assert all(p.user_id != gone.id for p in session.players)
+    assert await manager.attach(gone.id, Collector()) is None
+
+    await manager.begin(host.id)  # 방장 다시하기
+    assert session.started
+    assert all(p.user_id != gone.id for p in session.players)
+    session.task.cancel()
+    manager._cleanup(session)
+
+
+async def test_attach_sentence_includes_server_remaining(wired_db, monkeypatch):  # noqa: F811
+    """진행 중 재접속의 문장 재전송에 서버 기준 잔여시간이 실린다 — 없으면
+    클라가 전체 시간으로 타이머를 되감는다 (버그 B)."""
+    monkeypatch.setattr(tr, "COUNTDOWN_SECONDS", 0.0)
+    user = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db)
+    manager = tr.TypingRaceManager()
+    session = await manager.solo(user.id, user.name, Collector())
+    session.task.cancel()
+    session.round_no = 0
+    session.round_started = time.monotonic() - 3.0
+
+    resumed = Collector()
+    assert await manager.attach(user.id, resumed) is session
+    msgs = [m for m in resumed.messages if m["t"] == "tp.sentence"]
+    assert msgs
+    assert 0 < msgs[-1]["remaining"] < tr.SENTENCE_SECONDS
+    manager._cleanup(session)

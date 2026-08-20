@@ -731,7 +731,7 @@ async def game_ws(websocket: WebSocket) -> None:
             elif t == "qr.answer":
                 await royale.answer(user_id, str(msg.get("answer", "")))
             elif t == "qr.leave":
-                await royale.detach(user_id)
+                await royale.leave(user_id)
             # --- 받아쓰기 배틀 (docs/specs/dictation-battle.md) ---
             elif t == "dt.solo":
                 try:
@@ -760,7 +760,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     user_id, idx=int(msg.get("idx", -1)), text=str(msg.get("text", ""))
                 )
             elif t == "dt.leave":
-                await dictator.detach(user_id)
+                await dictator.leave(user_id)
             # --- 어순 조립 레이스 (docs/specs/scramble-race.md) ---
             elif t == "sc.solo":
                 try:
@@ -793,7 +793,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     user_id, idx=int(msg.get("idx", -1)), mistakes=int(msg.get("mistakes", 0))
                 )
             elif t == "sc.leave":
-                await scrambler.detach(user_id)
+                await scrambler.leave(user_id)
             # --- 영문 타자연습 (docs/specs/typing-race.md) ---
             elif t == "tp.solo":
                 try:
@@ -829,7 +829,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     errors=int(msg.get("errors", 0)),
                 )
             elif t == "tp.leave":
-                await racer.detach(user_id)
+                await racer.leave(user_id)
             # --- 리스닝 빙고 (docs/specs/listening-bingo.md) ---
             elif t == "bg.solo":
                 try:
@@ -858,7 +858,7 @@ async def game_ws(websocket: WebSocket) -> None:
                     user_id, no=int(msg.get("no", -1)), item_id=int(msg.get("item_id", 0))
                 )
             elif t == "bg.leave":
-                await caller.detach(user_id)
+                await caller.leave(user_id)
             # --- 학습 관전 (승인제 릴레이 — docs/specs/study-spectate.md) ---
             elif t == "st.host":
                 code = await spectate_hub.host(user_id, user.nickname, send)

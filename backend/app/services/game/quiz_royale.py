@@ -348,9 +348,7 @@ class QuizRoyaleManager:
             await self._reset_for_rematch(session)
             if len(session.players) < 2:
                 # 전원 이탈 — 혼자 재대결은 시작하지 않고 안내 (교차 리뷰 2026-08-20)
-                await self._broadcast(
-                    session, {"t": "error", "code": "room_not_enough_players"}
-                )
+                await self._broadcast(session, {"t": "error", "code": "room_not_enough_players"})
                 return
         if session.code:
             self.rooms.pop(session.code, None)
@@ -427,6 +425,29 @@ class QuizRoyaleManager:
             except Exception:
                 player.send = None
         return session
+
+    async def leave(self, user_id: int) -> None:
+        """명시적 퇴장 — 결과 화면(completed)에서 나가면 방에서 빠진다.
+
+        detach 는 재접속 여지를 남기려 매핑을 유지하는데, 결과 화면을 떠난
+        사람이 다른 페이지에서 WS 를 열면 attach 가 send 를 되살려 방장의
+        다시하기에 유령 참가자로 편입된다 (2026-08-20 교차 리뷰).
+        """
+        session = self._session_of(user_id)
+        if session is None:
+            return
+        if not session.completed:
+            # 대기실·진행 중은 종전 계약 그대로 (진행 중 이탈 = 재접속 여지 유지)
+            await self.detach(user_id)
+            return
+        self.by_user.pop(user_id, None)
+        session.players = [p for p in session.players if p.user_id != user_id]
+        humans = [p for p in session.players if p.user_id is not None]
+        if not humans:
+            self._cleanup(session)
+            return
+        if session.host_id == user_id:
+            session.host_id = humans[0].user_id  # 방장 퇴장 — 첫 플레이어 승계
 
     async def detach(self, user_id: int) -> None:
         """접속 종료 — 대기실이면 제거, 진행 중이면 미제출로 계속(재접속 대비 매핑 유지)."""

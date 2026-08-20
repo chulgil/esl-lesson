@@ -189,9 +189,7 @@ class ScrambleManager:
             await self._reset_for_rematch(session)
             if len(session.players) < 2:
                 # 전원 이탈 — 혼자 재대결은 시작하지 않고 안내 (교차 리뷰 2026-08-20)
-                await self._broadcast(
-                    session, {"t": "error", "code": "room_not_enough_players"}
-                )
+                await self._broadcast(session, {"t": "error", "code": "room_not_enough_players"})
                 return
         if session.code:
             self.rooms.pop(session.code, None)
@@ -297,8 +295,41 @@ class ScrambleManager:
             },
         )
         if 0 <= session.round_no < len(session.rounds):
-            await self._safe_send(player, {"t": "sc.sentence", "idx": session.round_no})
+            await self._safe_send(
+                player,
+                {
+                    "t": "sc.sentence",
+                    "idx": session.round_no,
+                    # 서버 기준 잔여 — 없으면 클라가 전체 시간으로 타이머를 되감아
+                    # 이미 마감된 문장의 입력이 조용히 무시된다 (2026-08-20 교차 리뷰)
+                    "remaining": max(
+                        0.0, SENTENCE_SECONDS - (time.monotonic() - session.round_started)
+                    ),
+                },
+            )
         return session
+
+    async def leave(self, user_id: int) -> None:
+        """명시적 퇴장 — 결과 화면(completed)에서 나가면 방에서 빠진다.
+
+        detach 는 재접속 여지를 남기려 매핑을 유지하는데, 결과 화면을 떠난
+        사람이 다른 페이지에서 WS 를 열면 attach 가 send 를 되살려 방장의
+        다시하기에 유령 참가자로 편입된다 (2026-08-20 교차 리뷰).
+        """
+        session = self._session_of(user_id)
+        if session is None:
+            return
+        if not session.completed:
+            # 대기방·진행 중은 종전 계약 그대로 (진행 중 이탈 = 재접속 여지 유지)
+            await self.detach(user_id)
+            return
+        self.by_user.pop(user_id, None)
+        session.players = [p for p in session.players if p.user_id != user_id]
+        if not session.players:
+            self._cleanup(session)
+            return
+        if session.host_id == user_id:
+            session.host_id = session.players[0].user_id  # 방장 퇴장 — 첫 플레이어 승계
 
     async def detach(self, user_id: int) -> None:
         session = self._session_of(user_id)

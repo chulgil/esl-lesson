@@ -184,7 +184,8 @@ export type TpMsg =
       players: string[];
       profiles?: Record<string, PlayerProfile>;
     }
-  | { t: "tp.sentence"; idx: number }
+  /** remaining: 재접속 재전송에만 동봉되는 서버 기준 잔여(초) */
+  | { t: "tp.sentence"; idx: number; remaining?: number }
   | { t: "tp.typing"; name: string; chars: number; wpm: number }
   | { t: "tp.done_mark"; name: string; idx: number; wpm: number }
   | { t: "tp.review"; items: GameReviewItem[] }
@@ -229,7 +230,8 @@ export type ScMsg =
       players: string[];
       profiles?: Record<string, PlayerProfile>;
     }
-  | { t: "sc.sentence"; idx: number }
+  /** remaining: 재접속 재전송에만 동봉되는 서버 기준 잔여(초) */
+  | { t: "sc.sentence"; idx: number; remaining?: number }
   | { t: "sc.progress"; name: string; placed: number; total: number }
   | {
       t: "sc.done_mark";
@@ -276,7 +278,8 @@ export type DtMsg =
       players: string[];
       profiles?: Record<string, PlayerProfile>;
     }
-  | { t: "dt.sentence"; idx: number }
+  /** remaining: 재접속 재전송에만 동봉되는 서버 기준 잔여(초) */
+  | { t: "dt.sentence"; idx: number; remaining?: number }
   | {
       t: "dt.done_mark";
       name: string;
@@ -321,6 +324,8 @@ export interface BgRoundMsg {
   /** 원어민 발화 구간 — 있으면 재생 버튼 노출, 자동 재생은 tts */
   media: { video_id: string; start_ms: number; end_ms: number } | null;
   tts: string;
+  /** 재접속 재전송에만 동봉되는 서버 기준 잔여(초) — 없으면 라운드 전체 시간 */
+  remaining?: number;
 }
 
 export interface BgResult {
@@ -506,7 +511,14 @@ export class GameSocket {
   ) {}
 
   connect(): void {
-    if (this.closed || this.isOpen()) return;
+    // CONNECTING 중 재호출(visibilitychange 등)로 소켓이 이중 생성되지 않게
+    if (
+      this.closed ||
+      this.isOpen() ||
+      this.ws?.readyState === WebSocket.CONNECTING
+    ) {
+      return;
+    }
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     this.ws = new WebSocket(`${proto}://${window.location.host}/ws/game`);
     this.ws.onopen = () => {
@@ -762,6 +774,18 @@ export class GameSocket {
       theme: getAppTheme(),
     });
   }
+  /** 죽은 소켓 강제 재연결 — close() 와 달리 인스턴스를 살려 두고 내부
+   *  onclose → 백오프 재시도 경로를 태운다 (좀비 하트비트 회수용, 2026-08-20
+   *  리뷰: close() 는 closed 플래그가 onclose 콜백을 삼켜 영구 무연결 회귀) */
+  reconnect(): void {
+    if (this.closed) return;
+    if (this.ws) {
+      this.ws.close();
+    } else {
+      this.connect();
+    }
+  }
+
   close(): void {
     this.closed = true;
     if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);

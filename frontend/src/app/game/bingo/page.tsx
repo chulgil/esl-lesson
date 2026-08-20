@@ -74,6 +74,13 @@ function BingoInner() {
   const socketRef = useRef<GameSocket | null>(null);
   const deadlineRef = useRef(0);
   const secondsRef = useRef(10);
+  // 결과 화면(ended)에서 방을 떠날 때만 퇴장 통지 — 안 보내면 서버 players 에
+  // 남아 방장의 다시하기에 유령 참가자로 편입된다. 진행 중 이탈은 보내지
+  // 않는다 (재접속 계약 유지, 2026-08-20 교차 리뷰)
+  const leaveRoomOnUnmountRef = useRef(false);
+  useEffect(() => {
+    leaveRoomOnUnmountRef.current = phase === "ended" && room !== null;
+  }, [phase, room]);
 
   useEffect(() => {
     fetchMe().then((me) => {
@@ -103,15 +110,19 @@ function BingoInner() {
         setPhase("countdown");
         setTimeout(() => setPhase("playing"), msg.countdown * 1000);
         break;
-      case "bg.round":
+      case "bg.round": {
         setRound(msg);
         setReveal(null);
         setLocked(false);
-        deadlineRef.current = Date.now() + secondsRef.current * 1000;
-        setTimeLeft(secondsRef.current);
+        // 재접속 재전송이면 서버 기준 잔여로 — 전체 시간으로 되감으면 이미
+        // 마감된 라운드를 탭하게 된다 (2026-08-20 교차 리뷰)
+        const left = msg.remaining ?? secondsRef.current;
+        deadlineRef.current = Date.now() + left * 1000;
+        setTimeLeft(Math.ceil(left));
         // 문제 음성 자동 재생 (신경망 TTS, 실패 시 브라우저 TTS) — 텍스트는 비노출
         speakWord(msg.tts);
         break;
+      }
       case "bg.tap_result":
         if (msg.ok) {
           setFilled((prev) => new Set(prev).add(msg.item_id));
@@ -147,7 +158,8 @@ function BingoInner() {
             room_not_found: "방을 찾을 수 없어요.",
             room_full: "방이 가득 찼어요 (최대 4명).",
             room_closed: "방장이 나가서 방이 닫혔어요.",
-            room_not_enough_players: "함께할 사람이 없어요 — 친구를 초대하거나 혼자 한 번 더로 이어가세요.",
+            room_not_enough_players:
+              "함께할 사람이 없어요 — 친구를 초대하거나 혼자 한 번 더로 이어가세요.",
           }[msg.code] ?? msg.code,
         );
         break;
@@ -175,6 +187,7 @@ function BingoInner() {
     return () => {
       if (timer) clearTimeout(timer);
       window.removeEventListener("pointerdown", unlockAudio);
+      if (leaveRoomOnUnmountRef.current) socket.bgLeave();
       socket.close();
     };
   }, [handleMessage, joinCode]);

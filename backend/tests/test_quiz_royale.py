@@ -2,6 +2,7 @@
 
 import asyncio
 import random
+import time
 
 import pytest
 
@@ -443,3 +444,56 @@ async def test_min_study_level_defaults_and_min(wired_db):  # noqa: F811
 
     assert await qr.min_study_level([a.id, b.id]) == 1  # 최저 기준
     assert await qr.min_study_level([]) == 2  # 폴백
+
+
+# --- 명시적 퇴장·잔여시간 (2026-08-20 교차 리뷰) ---
+
+
+async def test_leave_on_result_screen_drops_player_and_blocks_ghost(wired_db, fast_rounds):  # noqa: F811
+    """결과 화면을 떠난 사람은 방에서 빠지고, 다른 페이지에서 WS 를 열어도
+    재대결에 유령 참가자로 편입되지 않는다 (버그 A)."""
+    host = await seed_user_and_words(wired_db)
+    stay = User(google_sub="g-qgh1", email="qgh1@example.com", name="ST")
+    gone = User(google_sub="g-qgh2", email="qgh2@example.com", name="GO")
+    wired_db.add_all([stay, gone])
+    await wired_db.commit()
+
+    manager = qr.QuizRoyaleManager()
+    s1, s2, s3 = Collector(), Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(stay.id, stay.name, s2, code)
+    await manager.join(gone.id, gone.name, s3, code)
+    await manager.start(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    session.task.cancel()
+    await manager._finish(session, aborted=False)
+    assert session.completed
+
+    await manager.leave(gone.id)  # 결과 화면 이탈 (qr.leave)
+    assert gone.id not in manager.by_user
+    assert all(p.user_id != gone.id for p in session.players)
+    assert await manager.attach(gone.id, Collector()) is None
+
+    await manager.start(host.id)  # 방장 다시하기
+    assert session.started
+    assert all(p.user_id != gone.id for p in session.players)
+    session.task.cancel()
+    manager._cleanup(session)
+
+
+async def test_attach_round_carries_server_remaining(wired_db):  # noqa: F811
+    """재접속 라운드 재전송의 seconds 는 서버 기준 잔여 — 다른 게임의
+    remaining 계약이 본뜬 원형이라 회귀 가드를 둔다 (버그 B)."""
+    user = await seed_user_and_words(wired_db)
+    manager = qr.QuizRoyaleManager()
+    session = await manager.solo(user.id, user.name, Collector(), bot_level=1, bots=1)
+    session.task.cancel()
+    session.round_no = 0
+    session.round_started = time.monotonic() - 3.0
+
+    resumed = Collector()
+    assert await manager.attach(user.id, resumed) is session
+    rounds = [m for m in resumed.messages if m["t"] == "qr.round"]
+    assert rounds
+    assert 0 < rounds[-1]["seconds"] < qr.ROUND_SECONDS
+    manager._cleanup(session)

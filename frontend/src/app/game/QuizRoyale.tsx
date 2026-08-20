@@ -28,6 +28,7 @@ export function QuizRoyale({
   onExit,
   onInvite,
   onPlayAgain,
+  onRoomExit,
 }: {
   registerHandler: (handler: (msg: QrMsg) => void) => void;
   onAnswer: (answer: string) => void;
@@ -35,6 +36,8 @@ export function QuizRoyale({
   onExit: () => void;
   onInvite?: (userId: number, code: string) => void;
   onPlayAgain: () => void;
+  /** 결과 화면을 그대로 벗어날 때(페이지 이탈) 방 퇴장을 통지 — 나가기 버튼은 onExit */
+  onRoomExit?: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>("waiting");
   // 초대 입장(?theme=)이면 게임 동안 초대자 테마 — 종료/이탈 시 자동 복원
@@ -111,6 +114,29 @@ export function QuizRoyale({
     });
   }, [registerHandler]);
 
+  // 결과 화면(ended)에서 방을 그대로 벗어날 때만 퇴장 통지 — 안 보내면 서버
+  // players 에 남아 방장의 다시하기에 유령 참가자로 편입된다. 진행 중 이탈은
+  // 보내지 않는다 (재접속 계약 유지, 2026-08-20 교차 리뷰)
+  const leaveRoomOnUnmountRef = useRef(false);
+  useEffect(() => {
+    leaveRoomOnUnmountRef.current = phase === "ended" && room?.mode === "room";
+  }, [phase, room]);
+  const onRoomExitRef = useRef(onRoomExit);
+  useEffect(() => {
+    onRoomExitRef.current = onRoomExit;
+  }, [onRoomExit]);
+  useEffect(() => {
+    return () => {
+      if (leaveRoomOnUnmountRef.current) onRoomExitRef.current?.();
+    };
+  }, []);
+
+  /** 나가기 버튼 — 이미 퇴장을 보내므로 언마운트 통지는 끈다 */
+  function exit() {
+    leaveRoomOnUnmountRef.current = false;
+    onExit();
+  }
+
   // 남은 시간 타이머 바
   useEffect(() => {
     if (phase !== "round") return;
@@ -182,7 +208,7 @@ export function QuizRoyale({
                 시작하기 ({room.players.length}/4)
               </Brick>
             )}
-            <Brick color="yellow" onClick={onExit}>
+            <Brick color="yellow" onClick={exit}>
               나가기
             </Brick>
           </div>
@@ -338,7 +364,7 @@ export function QuizRoyale({
             >
               {room?.mode === "solo" ? "한 번 더" : "혼자 한 번 더"}
             </Brick>
-            <Brick color="blue" onClick={onExit}>
+            <Brick color="blue" onClick={exit}>
               게임 메뉴로
             </Brick>
             {end.ranking[0] && (

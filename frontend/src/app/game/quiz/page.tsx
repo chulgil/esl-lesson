@@ -50,7 +50,8 @@ function QuizRoyaleInner() {
           room_not_found: "방을 찾을 수 없어요.",
           room_full: "방이 가득 찼어요 (최대 4명).",
           room_closed: "방장이 나가서 방이 닫혔어요.",
-          room_not_enough_players: "함께할 사람이 없어요 — 친구를 초대하거나 혼자 한 번 더로 이어가세요.",
+          room_not_enough_players:
+            "함께할 사람이 없어요 — 친구를 초대하거나 혼자 한 번 더로 이어가세요.",
         }[msg.code] ?? msg.code,
       );
     }
@@ -102,6 +103,7 @@ function QuizRoyaleInner() {
             setPlaying(false);
           }}
           onInvite={(uid, code) => socketRef.current?.invite(uid, "quiz", code)}
+          onRoomExit={() => socketRef.current?.qrLeave()}
           onPlayAgain={() => {
             setError(null);
             socketRef.current?.qrSolo(botLevel, bots, contentIds, variant);

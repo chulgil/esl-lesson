@@ -169,20 +169,22 @@ export function InviteToaster() {
     }
 
     function connect() {
-      if (stopped) return;
+      if (stopped || socket) return;
       lastAlive.t = Date.now();
+      // 재연결은 GameSocket 내부 백오프가 전담 — 여기서 새 인스턴스를 만들면
+      // 옛 소켓의 자체 재시도와 이중화되어 소켓·핸들러가 누적된다
+      // (2026-08-20 리뷰: 순단마다 알림·재동기화 2중 발화)
       const s = new GameSocket(
         (msg) => {
           lastAlive.t = Date.now();
           handleMessage(msg);
         },
-        () => {
-          if (socket !== s) return; // 교체된 옛 소켓의 잔여 close — 무시
-          setChatSocket(null);
-          scheduleRetry(5000);
-        },
+        () => undefined, // 끊김 — 내부 백오프가 재연결
         // 재접속 성공 = 끊김 동안 메시지를 놓쳤을 수 있음 — 열린 대화방 재동기화
-        () => dispatchChatEvent({ t: "chat.resync" }),
+        () => {
+          lastAlive.t = Date.now();
+          dispatchChatEvent({ t: "chat.resync" });
+        },
       );
       socket = s;
       s.connect();
@@ -195,10 +197,11 @@ export function InviteToaster() {
     });
 
     // 하트비트 — 30초 ping(서버 좀비 판정용 last_seen 갱신), 70초 무소식이면
-    // 죽은 소켓으로 보고 close → onclose 재접속 경로 (절전·네트워크 전환 회수)
+    // 죽은 소켓으로 보고 reconnect (절전·네트워크 전환 회수). close() 는
+    // 인스턴스를 영구 종료해 재접속이 막힌다 (2026-08-20 리뷰 회귀 수정)
     const hb = setInterval(() => {
       if (!socket?.isOpen()) return;
-      if (Date.now() - lastAlive.t > 70000) socket.close();
+      if (Date.now() - lastAlive.t > 70000) socket.reconnect();
       else socket.ping();
     }, 30000);
 
@@ -209,7 +212,11 @@ export function InviteToaster() {
         socket.ping();
         return;
       }
-      socket?.close();
+      if (socket) {
+        socket.reconnect(); // 내부 백오프를 즉시 재가동
+        return;
+      }
+      // 아직 소켓이 없던 경우(비로그인 등) — 로그인 확인 후 최초 연결
       if (retry) {
         clearTimeout(retry);
         retry = null;

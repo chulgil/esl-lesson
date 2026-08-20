@@ -74,6 +74,8 @@ class InviteHub:
         if not sends:
             self.sockets.pop(user_id, None)
             self.names.pop(user_id, None)
+            # last_seen 누수 방지 — 접속이 모두 끊긴 사용자의 항목 정리 (2026-08-20 리뷰)
+            self.last_seen.pop(user_id, None)
 
     def online(self, user_id: int) -> bool:
         return bool(self.sockets.get(user_id))
