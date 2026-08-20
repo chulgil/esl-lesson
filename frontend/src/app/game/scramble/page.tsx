@@ -132,7 +132,8 @@ function ScrambleInner() {
         case "sc.room":
           setRoom({ code: msg.code, host: msg.host, players: msg.players });
           if (msg.profiles) setProfiles(msg.profiles);
-          setPhase("waiting");
+          // 결과 화면에서는 유지 — 재대결 대기 중 새 입장자가 와도 결과를 덮지 않는다
+          setPhase((prev) => (prev === "ended" ? prev : "waiting"));
           break;
         case "sc.start":
           roundsRef.current = msg.rounds;
@@ -150,6 +151,11 @@ function ScrambleInner() {
           );
           setCountLeft(Math.ceil(msg.countdown));
           setReview([]);
+          // 재대결로 새 판이 시작되면 이전 결과·점수를 지운다
+          setEnd(null);
+          setMyScore(0);
+          setLastGain(null);
+          setError(null);
           setPhase("countdown");
           break;
         case "sc.sentence":
@@ -242,7 +248,14 @@ function ScrambleInner() {
       action(socketRef.current);
       return;
     }
-    const socket = new GameSocket(handleMessage, () => setPhase("lobby"));
+    // 끊겨도 화면을 로비로 되돌리지 않는다 — 소켓이 자동 재접속하고 서버 attach 가
+    // 진행 중 매치를 복원한다 (2026-08-20 재대결·튕김 대응)
+    const socket = new GameSocket(
+      handleMessage,
+      () =>
+        setError((prev) => prev ?? "연결이 흔들려요 — 자동으로 다시 잇는 중…"),
+      () => setError(null),
+    );
     socket.connect();
     socketRef.current = socket;
     setTimeout(() => action(socket), 300);
@@ -548,8 +561,25 @@ function ScrambleInner() {
             hint="추가한 문장은 학습 큐에 들어가요 — 문장 카드는 학습 레벨 '고급'에서 출제돼요"
           />
           <div className="flex flex-wrap items-center gap-3">
+            {/* 방 게임 재대결 — 서버가 방을 유지해 재입장 없이 다음 판 (2026-08-20) */}
+            {room && !end.aborted && room.host === myName && (
+              <Brick
+                color="green"
+                onClick={() => {
+                  setError(null);
+                  socketRef.current?.scBegin();
+                }}
+              >
+                같은 방에서 다시하기
+              </Brick>
+            )}
+            {room && !end.aborted && room.host !== myName && (
+              <span className="text-sm font-bold opacity-70">
+                방장이 다시 시작하면 자동으로 이어져요
+              </span>
+            )}
             <Brick
-              color="green"
+              color={room && !end.aborted ? "yellow" : "green"}
               onClick={() => {
                 setEnd(null);
                 setMyScore(0);

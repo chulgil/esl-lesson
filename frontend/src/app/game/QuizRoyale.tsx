@@ -6,6 +6,7 @@ import { InviteFriends } from "@/components/game/InviteFriends";
 import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { ReviewPanel } from "@/components/game/ReviewPanel";
 import { ShareResultButton } from "@/components/game/ShareResultButton";
+import { fetchMe } from "@/lib/api";
 import { useInviteTheme } from "@/lib/use-invite-theme";
 import { useSurfaceSkin } from "@/lib/theme-surfaces";
 import type {
@@ -60,20 +61,33 @@ export function QuizRoyale({
   const [review, setReview] = useState<GameReviewItem[]>([]);
   const [timeLeft, setTimeLeft] = useState(0);
   const deadlineRef = useRef(0);
+  // 재대결 버튼은 방장에게만 — 내 닉네임과 room.host 를 비교한다
+  const [myName, setMyName] = useState("나");
+
+  useEffect(() => {
+    fetchMe().then((me) => {
+      if (me) setMyName(me.nickname);
+    });
+  }, []);
 
   useEffect(() => {
     registerHandler((msg) => {
       switch (msg.t) {
         case "qr.room":
           setRoom(msg);
-          setPhase("waiting");
+          // 결과 화면에서는 유지 — 재대결 대기 중 새 입장자가 와도 결과를 덮지 않는다
+          setPhase((prev) => (prev === "ended" ? prev : "waiting"));
           break;
         case "qr.round":
           setRound(msg);
           setPicked(null);
           setAnswered([]);
           setReveal(null);
-          if (msg.no === 1) setReview([]);
+          // 재대결로 새 판이 시작되면 이전 결과를 지운다
+          if (msg.no === 1) {
+            setReview([]);
+            setEnd(null);
+          }
           deadlineRef.current = Date.now() + msg.seconds * 1000;
           setPhase("round");
           break;
@@ -305,7 +319,21 @@ export function QuizRoyale({
           </ol>
           <ReviewPanel items={review} source="quiz" />
           <div className="flex flex-wrap items-center gap-3">
-            <Brick color="green" onClick={onPlayAgain}>
+            {/* 방 게임 재대결 — 서버가 방을 유지해 재입장 없이 다음 판 (2026-08-20) */}
+            {room?.code && !end.aborted && room.host === myName && (
+              <Brick color="green" onClick={onStart}>
+                같은 방에서 다시하기
+              </Brick>
+            )}
+            {room?.code && !end.aborted && room.host !== myName && (
+              <span className="text-sm font-bold opacity-70">
+                방장이 다시 시작하면 자동으로 이어져요
+              </span>
+            )}
+            <Brick
+              color={room?.code && !end.aborted ? "yellow" : "green"}
+              onClick={onPlayAgain}
+            >
               {room?.mode === "solo" ? "한 번 더" : "혼자 한 번 더"}
             </Brick>
             <Brick color="blue" onClick={onExit}>

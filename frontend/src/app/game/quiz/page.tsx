@@ -56,9 +56,14 @@ function QuizRoyaleInner() {
   }, []);
 
   useEffect(() => {
-    const socket = new GameSocket(handleMessage, () => {
-      setError((prev) => prev ?? "연결이 끊어졌어요. 새로고침해주세요.");
-    });
+    const socket = new GameSocket(
+      handleMessage,
+      () => {
+        // 자동 재접속 중 — 서버 attach 가 진행 상태를 복원한다 (새로고침 불필요)
+        setError((prev) => prev ?? "연결이 흔들려요 — 자동으로 다시 잇는 중…");
+      },
+      () => setError(null),
+    );
     socket.connect();
     socketRef.current = socket;
     let timer: ReturnType<typeof setTimeout> | null = null;
