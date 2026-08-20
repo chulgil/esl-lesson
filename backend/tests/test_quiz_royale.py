@@ -271,6 +271,80 @@ async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  
     assert not manager.sessions
 
 
+# --- 재대결·출제 히스토리 (2026-08-20 다시하기 목표) ---
+
+
+async def test_room_rematch_keeps_players_and_new_match(wired_db, fast_rounds):  # noqa: F811
+    """방 게임 종료 후 방이 유지되고, 방장 start 로 새 매치가 시작된다 —
+    다시하기 = 재입장 없이 같은 멤버로 다음 판."""
+    p1 = await seed_user_and_words(wired_db)
+    p2 = User(google_sub="g-qrm", email="qrm@example.com", name="QRM")
+    wired_db.add(p2)
+    await wired_db.commit()
+
+    manager = qr.QuizRoyaleManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(p1.id, p1.name, s1)
+    await manager.join(p2.id, p2.name, s2, code)
+    await manager.start(p1.id)
+    session = manager.sessions[manager.by_user[p1.id]]
+    session.task.cancel()
+    first_match_id = session.match_id
+    first_questions = list(session.questions)
+    session.players[0].score = 150
+    session.players[0].wrong = [0]
+    await manager._finish(session, aborted=False)
+
+    # 방 유지 — 세션·매핑·방 코드가 남고 대기 상태로 복귀
+    assert manager.by_user.get(p1.id) is not None
+    assert manager.by_user.get(p2.id) is not None
+    assert not session.started
+    assert manager.rooms.get(code) is not None
+
+    await manager.start(p1.id)
+    assert session.started
+    assert session.match_id != first_match_id  # 새 매치 행
+    assert session.questions and session.questions is not first_questions
+    assert session.round_no == -1 and session.answers == {}
+    for p in session.players:
+        assert p.score == 0 and p.wrong == []
+    session.task.cancel()
+    manager._cleanup(session)
+
+
+async def test_solo_finish_still_cleans_up(wired_db, fast_rounds):  # noqa: F811
+    """솔로는 종전대로 종료 시 정리 — 재대결은 방 게임만."""
+    user = await seed_user_and_words(wired_db)
+    manager = qr.QuizRoyaleManager()
+    session = await manager.solo(user.id, user.name, Collector(), bot_level=1, bots=1)
+    session.task.cancel()
+
+    await manager._finish(session, aborted=False)
+    assert user.id not in manager.by_user
+    assert session.match_id not in manager.sessions
+
+
+async def test_questions_exclude_recently_served(wired_db, fast_rounds, monkeypatch):  # noqa: F811
+    """연달아 하면 직전 판 출제 단어가 반복되지 않는다 (풀이 충분할 때).
+
+    16단어 풀에서 8문항씩 — 히스토리가 없으면 겹침이 사실상 확정이다."""
+    monkeypatch.setattr(qr, "ROUNDS", 8)
+    user = await seed_user_and_words(wired_db, count=16)
+    manager = qr.QuizRoyaleManager()
+
+    first = await manager.solo(user.id, user.name, Collector(), bot_level=1, bots=1)
+    first.task.cancel()
+    first_ids = {q.item_id for q in first.questions}
+    await manager._finish(first, aborted=False)
+
+    second = await manager.solo(user.id, user.name, Collector(), bot_level=1, bots=1)
+    second.task.cancel()
+    second_ids = {q.item_id for q in second.questions}
+    await manager._finish(second, aborted=False)
+
+    assert first_ids and first_ids.isdisjoint(second_ids)  # 16단어 풀 — 8+8 겹침 없음
+
+
 # --- 게임 언어 분리 (docs/specs/chat-language-rooms.md §게임 언어 분리) ---
 
 
@@ -341,3 +415,31 @@ async def test_room_lang_stored_and_broadcast(wired_db, fast_rounds):  # noqa: F
     session = manager.sessions[manager.by_user[p1.id]]
     assert all(q.item_id in ja_ids for q in session.questions)
     session.task.cancel()
+
+
+def test_build_questions_direction_ratio():
+    """en2ko_ratio — 초급(1.0)은 전부 영→한, 고급(0.25)은 한→영 위주
+    (docs/proposal/game-level-format-2026-08.md A안)."""
+    import random as _random
+
+    pool = [(i, f"word{i:02d}", f"뜻{i:02d}") for i in range(1, 31)]
+    all_en2ko = qr.build_questions(pool, 10, _random.Random(7), en2ko_ratio=1.0)
+    assert all(q.prompt == q.en for q in all_en2ko)  # 전부 영어 문제(영→한)
+    all_ko2en = qr.build_questions(pool, 10, _random.Random(7), en2ko_ratio=0.0)
+    assert all(q.prompt == q.ko for q in all_ko2en)  # 전부 한글 문제(한→영)
+
+
+async def test_min_study_level_defaults_and_min(wired_db):  # noqa: F811
+    """참가자 최저 study_level — 설정 행 없으면 기본 2, 여럿이면 최저."""
+    from app.models import User, UserSettings
+
+    a = User(google_sub="g-lv-a", email="lv-a@example.com", name="A")
+    b = User(google_sub="g-lv-b", email="lv-b@example.com", name="B")
+    wired_db.add_all([a, b])
+    await wired_db.flush()
+    wired_db.add(UserSettings(user_id=a.id, study_level=4))
+    wired_db.add(UserSettings(user_id=b.id, study_level=1))
+    await wired_db.commit()
+
+    assert await qr.min_study_level([a.id, b.id]) == 1  # 최저 기준
+    assert await qr.min_study_level([]) == 2  # 폴백

@@ -147,7 +147,8 @@ async def test_race_four_players_sync_and_winner(wired_db, fast_race):  # noqa: 
     row = await wired_db.get(TypingRace, session.match_id)
     await wired_db.refresh(row)
     assert row.winner_id == host.id and row.status == "finished"
-    assert host.id not in manager.by_user
+    # 방 게임은 종료 후에도 방·매핑이 유지된다 — 재대결 대기 (2026-08-20 다시하기)
+    assert host.id in manager.by_user and not session.started
 
 
 async def test_typo_and_timeout_sentences_sent_as_review(wired_db, fast_race):  # noqa: F811
@@ -275,6 +276,83 @@ async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  
     assert any(m.get("code") == "room_closed" for m in s2.messages)
     assert guest.id not in manager.by_user  # 세션 정리됨
     assert not manager.sessions
+
+
+# --- 재대결·출제 히스토리 (2026-08-20 다시하기 목표) ---
+
+
+async def test_room_rematch_keeps_players_and_new_match(wired_db, monkeypatch):  # noqa: F811
+    """레이스 종료 후 방이 유지되고, 방장 begin 으로 새 매치가 시작된다 —
+    다시하기 = 재입장 없이 같은 멤버로 다음 판."""
+    monkeypatch.setattr(tr, "COUNTDOWN_SECONDS", 0.0)
+    host = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db)
+    guest = User(google_sub="g-rm", email="rm@example.com", name="RM")
+    wired_db.add(guest)
+    await wired_db.commit()
+
+    manager = tr.TypingRaceManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    session.task.cancel()
+    first_match_id = session.match_id
+    session.players[0].chars = 42
+    session.players[0].sentences = 1
+    session.players[0].wrong = [0]
+    await manager._finish(session, aborted=False)
+
+    # 방 유지 — 세션·매핑·방 코드가 남고 대기 상태로 복귀
+    assert manager.by_user.get(host.id) is not None
+    assert manager.by_user.get(guest.id) is not None
+    assert not session.started
+    assert manager.rooms.get(code) is not None
+
+    await manager.begin(host.id)
+    assert session.started
+    assert session.match_id != first_match_id  # 새 매치 행
+    for p in session.players:
+        assert p.chars == 0 and p.sentences == 0 and p.wrong == []
+    assert len([m for m in s2.messages if m["t"] == "tp.start"]) >= 2  # 첫 판 + 재대결
+    session.task.cancel()
+    manager._cleanup(session)
+
+
+async def test_solo_finish_still_cleans_up(wired_db, monkeypatch):  # noqa: F811
+    """솔로는 종전대로 종료 시 정리 — 한 번 더는 새 솔로 생성."""
+    monkeypatch.setattr(tr, "COUNTDOWN_SECONDS", 0.0)
+    user = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db)
+    manager = tr.TypingRaceManager()
+    session = await manager.solo(user.id, user.name, Collector())
+    session.task.cancel()
+
+    await manager._finish(session, aborted=False)
+    assert user.id not in manager.by_user
+    assert session.match_id not in manager.sessions
+
+
+async def test_sentences_exclude_recently_served(wired_db, monkeypatch):  # noqa: F811
+    """연달아 하면 직전 판 문장이 반복되지 않는다 (풀이 충분할 때)."""
+    monkeypatch.setattr(tr, "SENTENCE_COUNT", 4)
+    monkeypatch.setattr(tr, "COUNTDOWN_SECONDS", 0.0)
+    user = await seed_user_and_words(wired_db)
+    await seed_sentences(wired_db, count=8)
+    manager = tr.TypingRaceManager()
+
+    first = await manager.solo(user.id, user.name, Collector())
+    first.task.cancel()
+    first_ids = {s["item_id"] for s in first.sentences}
+    await manager._finish(first, aborted=False)
+
+    second = await manager.solo(user.id, user.name, Collector())
+    second.task.cancel()
+    second_ids = {s["item_id"] for s in second.sentences}
+    await manager._finish(second, aborted=False)
+
+    assert first_ids and first_ids.isdisjoint(second_ids)  # 8문장 풀 — 4+4 겹침 없음
 
 
 # --- 게임 언어 분리 (docs/specs/chat-language-rooms.md §게임 언어 분리) ---

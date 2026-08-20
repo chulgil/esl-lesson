@@ -137,7 +137,8 @@ function TypingRaceInner() {
       case "tp.room":
         setRoom({ code: msg.code, host: msg.host, players: msg.players });
         if (msg.profiles) setProfiles(msg.profiles);
-        setPhase("waiting");
+        // 결과 화면에서는 유지 — 재대결 대기 중 새 입장자가 와도 결과를 덮지 않는다
+        setPhase((prev) => (prev === "ended" ? prev : "waiting"));
         break;
       case "tp.start": {
         setStart(msg);
@@ -145,6 +146,7 @@ function TypingRaceInner() {
         secondsRef.current = msg.sentence_seconds;
         setEnd(null);
         setReview([]);
+        setError(null);
         setRows(
           Object.fromEntries(
             msg.players.map((name) => [
@@ -224,9 +226,14 @@ function TypingRaceInner() {
   }, []);
 
   useEffect(() => {
-    const socket = new GameSocket(handleMessage, () => {
-      setError((prev) => prev ?? "연결이 끊어졌어요. 새로고침해주세요.");
-    });
+    const socket = new GameSocket(
+      handleMessage,
+      () => {
+        // 자동 재접속 중 — 서버 attach 가 진행 상태를 복원한다 (새로고침 불필요)
+        setError((prev) => prev ?? "연결이 흔들려요 — 자동으로 다시 잇는 중…");
+      },
+      () => setError(null),
+    );
     socket.connect();
     socketRef.current = socket;
     // 초대 링크(?join=)로 진입 시 자동 입장
@@ -682,9 +689,26 @@ function TypingRaceInner() {
             noun="문장"
             hint="추가한 문장은 학습 큐에 들어가요 — 문장 카드는 학습 레벨 '고급'에서 출제돼요"
           />
-          <div className="flex gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* 방 게임 재대결 — 서버가 방을 유지해 재입장 없이 다음 판 (2026-08-20) */}
+            {room && !end.aborted && room.host === myName && (
+              <Brick
+                color="green"
+                onClick={() => {
+                  setError(null);
+                  socketRef.current?.tpBegin();
+                }}
+              >
+                같은 방에서 다시하기
+              </Brick>
+            )}
+            {room && !end.aborted && room.host !== myName && (
+              <span className="text-sm font-bold opacity-70">
+                방장이 다시 시작하면 자동으로 이어져요
+              </span>
+            )}
             <Brick
-              color="green"
+              color={room && !end.aborted ? "yellow" : "green"}
               onClick={() => {
                 setError(null);
                 setRoom(null);

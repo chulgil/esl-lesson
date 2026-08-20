@@ -17,8 +17,9 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from app.core.db import get_session_factory
-from app.models import LearningItem, QuizRoyaleMatch, QuizRoyalePlayer
+from app.models import LearningItem, QuizRoyaleMatch, QuizRoyalePlayer, UserSettings
 from app.services import embeddings
+from app.services.game.history import ServedHistory
 from app.services.game.manager import (
     DEFAULT_GAME_LANG,
     WordPoolError,
@@ -40,6 +41,7 @@ TICK = 0.05
 MAX_PLAYERS = 4
 MIN_POOL = 15  # 정답 10 + 오답 선지 겹침 여유
 BOT_NAMES = ("봇 알파", "봇 브라보", "봇 찰리")
+RECENT_ITEMS_PER_USER = ROUNDS * 3  # 최근 3판 출제 단어는 제외 (중복 방지)
 
 
 @dataclass
@@ -81,6 +83,36 @@ class QuizSession:
     answers: dict[int, tuple[bool, float]] = field(default_factory=dict)
     task: asyncio.Task | None = None
     rng: random.Random = field(default_factory=random.Random)
+    # 방 게임 종료 후 재대결 대기 상태 — start 가 새 매치로 리셋한다 (다시하기)
+    completed: bool = False
+
+
+EN2KO_RATIO_BY_LEVEL = {1: 1.0, 2: 0.75, 3: 0.5, 4: 0.25}
+
+
+async def min_study_level(user_ids: list[int]) -> int:
+    """참가자 최저 study_level — 멀티는 전원이 같은 문제라 최저 기준으로
+    이길 수 있어야 한다 (docs/proposal/game-level-format-2026-08.md A안).
+    설정 행이 없거나 조회 실패면 기본 2(초급)."""
+    ids = [u for u in user_ids if u]
+    if not ids:
+        return 2
+    try:
+        async with get_session_factory()() as db:
+            rows = (
+                (
+                    await db.execute(
+                        select(UserSettings.study_level).where(UserSettings.user_id.in_(ids))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+    except Exception:
+        logger.exception("min_study_level failed — 기본 초급 비율로 폴백")
+        return 2
+    levels = [*rows, *([2] * (len(ids) - len(rows)))]
+    return min(levels)
 
 
 def build_questions(
@@ -88,8 +120,10 @@ def build_questions(
     rounds: int,
     rng: random.Random,
     priority: set[int] | frozenset[int] = frozenset(),
+    en2ko_ratio: float = 0.5,
 ) -> list[Question]:
-    """(id, en, ko) 풀에서 4지선다 생성 — 방향 랜덤, 오답은 같은 풀의 같은 언어.
+    """(id, en, ko) 풀에서 4지선다 생성 — 방향은 en2ko_ratio 확률(레벨 연동,
+    초급=영→한 위주·고급=한→영 위주), 오답은 같은 풀의 같은 언어.
 
     priority(복습 due·최근 오답 item_id)가 있으면 그 항목을 먼저 뽑는다 —
     게임 한 판이 곧 복습 (P0-A, effectiveness-audit 4차). 출제 순서는 다시 섞어
@@ -105,7 +139,7 @@ def build_questions(
     rng.shuffle(picks)
     questions = []
     for item_id, en, ko in picks:
-        en2ko = rng.random() < 0.5
+        en2ko = rng.random() < en2ko_ratio
         answer = ko if en2ko else en
         others = [p for p in pool if p[0] != item_id]
         rng.shuffle(others)
@@ -229,6 +263,8 @@ class QuizRoyaleManager:
         self.sessions: dict[int, QuizSession] = {}
         self.rooms: dict[str, int] = {}  # code -> match_id
         self.by_user: dict[int, int] = {}
+        # 최근 출제 단어 기록 — 연속 판 중복 방지 (services/game/history.py)
+        self.history = ServedHistory(RECENT_ITEMS_PER_USER)
 
     # --- 진입 ---
 
@@ -291,7 +327,10 @@ class QuizRoyaleManager:
         await self._broadcast_room(session)
 
     async def start(self, user_id: int) -> None:
-        """호스트만 시작 가능. 2인 미만이면 무시."""
+        """호스트만 시작 가능. 2인 미만이면 무시.
+
+        종료된 방(completed)이면 재대결 — 새 매치 행으로 리셋 후 시작
+        (다시하기 = 재입장 없이 같은 멤버로 다음 판, 2026-08-20 목표)."""
         session = self._session_of(user_id)
         if (
             session is None
@@ -305,9 +344,36 @@ class QuizRoyaleManager:
             if session.variant == "nuance"
             else await self._load_pool(session.host_id, session.content_ids, session.lang)
         )
+        if session.completed:
+            await self._reset_for_rematch(session)
         if session.code:
             self.rooms.pop(session.code, None)
         await self._begin(session, pool)
+
+    async def _reset_for_rematch(self, session: QuizSession) -> None:
+        """재대결 리셋 — 새 매치 행 발급 + 매핑 재키 + 플레이어 점수 초기화."""
+        old_id = session.match_id
+        async with get_session_factory()() as db:
+            row = QuizRoyaleMatch(host_id=session.host_id, mode=session.mode, status="waiting")
+            db.add(row)
+            await db.commit()
+            session.match_id = row.id
+        self.sessions.pop(old_id, None)
+        self.sessions[session.match_id] = session
+        if session.code:
+            self.rooms[session.code] = session.match_id
+        # 결과 화면에서 이탈한 사람은 제외 — 남은 매핑을 되돌리면 그가 새로 시작한
+        # 판을 가로챈다 (혼자 한 번 더 → 솔로 세션)
+        session.players = [p for p in session.players if p.send is not None]
+        for p in session.players:
+            if p.user_id is not None:
+                self.by_user[p.user_id] = session.match_id
+            p.score = 0
+            p.wrong = []
+        session.questions = []
+        session.answers = {}
+        session.round_no = -1
+        session.completed = False
 
     # --- 플레이 ---
 
@@ -328,13 +394,16 @@ class QuizRoyaleManager:
     async def attach(self, user_id: int, send: Sender) -> QuizSession | None:
         """재접속: 진행 중인 라운드가 있으면 sender 재바인딩 + 현재 라운드 재전송."""
         session = self._session_of(user_id)
-        if session is None or not session.started:
+        if session is None or not (session.started or session.completed):
             return None
         idx = self._index_of(session, user_id)
         if idx is None:
             return None
         player = session.players[idx]
         player.send = send
+        if session.completed:
+            # 결과 화면 중 재접속 — 클라이언트가 이미 결과를 가지고 있어 재바인딩만
+            return session
         if 0 <= session.round_no < len(session.questions):
             question = session.questions[session.round_no]
             remaining = max(0.0, ROUND_SECONDS - (time.monotonic() - session.round_started))
@@ -358,7 +427,9 @@ class QuizRoyaleManager:
         session = self._session_of(user_id)
         if session is None:
             return
-        if not session.started:
+        # completed(재대결 대기)는 진행 중과 같은 경로 — 결과 화면의 순간 끊김이
+        # 방을 없애지 않게 매핑 유지, 전원 이탈 시에만 정리 (2026-08-20)
+        if not session.started and not session.completed:
             self.by_user.pop(user_id, None)
             session.players = [p for p in session.players if p.user_id != user_id]
             humans = [p for p in session.players if p.user_id is not None]
@@ -379,16 +450,29 @@ class QuizRoyaleManager:
     # --- 루프 ---
 
     async def _begin(self, session: QuizSession, pool: list[tuple[int, str, str]]) -> None:
+        user_ids = [p.user_id for p in session.players if p.user_id is not None]
         if session.variant == "nuance":
             async with get_session_factory()() as db:
                 session.questions = await build_nuance_questions(
                     db, session.host_id, ROUNDS, session.rng, session.lang
                 )
         else:
+            # 최근 판 단어 제외 — 연달아 해도 같은 문제가 반복되지 않게. 풀이
+            # 부족하면 전체 풀로 폴백 (작은 풀은 반복 불가피 — 게임 히스토리)
+            pool = self.history.filter_fresh(user_ids, pool, key=lambda w: w[0], minimum=ROUNDS)
             # 참가 인원(사람)의 due·최근 오답 합집합 우선 출제 (P0-A 게임-복습 편입)
-            user_ids = [p.user_id for p in session.players if p.user_id is not None]
             priority = await safe_priority_items(user_ids) if user_ids else set()
-            session.questions = build_questions(pool, ROUNDS, session.rng, priority=priority)
+            # 방향 비율 = 참가자 최저 학습 난이도 — 초급은 영→한(인지) 위주
+            # (docs/proposal/game-level-format-2026-08.md A안 P1)
+            level = await min_study_level(user_ids)
+            session.questions = build_questions(
+                pool,
+                ROUNDS,
+                session.rng,
+                priority=priority,
+                en2ko_ratio=EN2KO_RATIO_BY_LEVEL.get(level, 0.5),
+            )
+        self.history.note(user_ids, [q.item_id for q in session.questions if q.item_id])
         session.started = True
         await self._save(session, status="playing")
         session.task = asyncio.create_task(self._run(session))
@@ -461,7 +545,32 @@ class QuizRoyaleManager:
         if not aborted:
             await self._send_reviews(session)
         await self._broadcast(session, {"t": "qr.end", "ranking": final, "aborted": aborted})
+        if session.mode == "room" and not aborted:
+            self._await_rematch(session)
+            return
         self._cleanup(session)
+
+    def _await_rematch(self, session: QuizSession) -> None:
+        """방 게임은 방을 유지한 채 재대결 대기 — 다시하기 = 재입장 없이 다음 판
+        (2026-08-20 목표). 솔로(봇 동반)·크래시 종료는 종전대로 정리."""
+        session.players = [p for p in session.players if p.send is not None]
+        stale = {uid for uid, mid in self.by_user.items() if mid == session.match_id} - {
+            p.user_id for p in session.players
+        }
+        for gone in stale:
+            self.by_user.pop(gone, None)
+        if not session.players:
+            self._cleanup(session)
+            return
+        if all(p.user_id != session.host_id for p in session.players):
+            session.host_id = session.players[0].user_id  # 방장 이탈 — 첫 플레이어 승계
+        session.started = False
+        session.completed = True
+        session.round_no = -1
+        session.answers = {}
+        session.task = None
+        if session.code:
+            self.rooms[session.code] = session.match_id
 
     async def _send_reviews(self, session: QuizSession) -> None:
         """오답·미제출 문항을 본인에게만 전달 — 결과 화면 원탭 학습 추가용 (P2)."""

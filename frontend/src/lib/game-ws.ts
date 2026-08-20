@@ -307,6 +307,10 @@ export interface BgStartMsg {
   round_seconds: number;
   countdown: number;
   players: string[];
+  /** 재접속 복원 — 내가 채운 칸 (첫 시작에는 빈 배열/생략) */
+  filled?: number[];
+  /** 재접속 복원 — 플레이어별 채운 칸 수 */
+  marks?: Record<string, number>;
 }
 
 export interface BgRoundMsg {
@@ -476,18 +480,36 @@ export type ServerMsg =
 export class GameSocket {
   private ws: WebSocket | null = null;
   private seq = 0;
+  private closed = false;
+  private retries = 0;
+  private retryTimer: number | null = null;
+  // 백그라운드 복귀 시 즉시 재접속 — 모바일 화면 잠금이 WS 를 끊는다
+  private onVisible = () => {
+    if (
+      document.visibilityState === "visible" &&
+      !this.isOpen() &&
+      !this.closed
+    ) {
+      this.connect();
+    }
+  };
 
   constructor(
     private onMessage: (msg: ServerMsg) => void,
     private onClose: () => void,
-    // 재접속 캐치업용 — 끊김 동안 놓친 메시지를 열린 대화방이 재동기화한다
+    // 재접속 캐치업용 — 끊김 동안 놓친 메시지를 열린 대화방이 재동기화한다.
+    // 게임은 서버 attach 가 진행 중 매치 상태를 재전송한다
     private onOpen?: () => void,
   ) {}
 
   connect(): void {
+    if (this.closed || this.isOpen()) return;
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     this.ws = new WebSocket(`${proto}://${window.location.host}/ws/game`);
-    this.ws.onopen = () => this.onOpen?.();
+    this.ws.onopen = () => {
+      this.retries = 0;
+      this.onOpen?.();
+    };
     this.ws.onmessage = (event) => {
       try {
         this.onMessage(JSON.parse(event.data) as ServerMsg);
@@ -495,7 +517,17 @@ export class GameSocket {
         // 파싱 불가 메시지 무시
       }
     };
-    this.ws.onclose = () => this.onClose();
+    // 자동 재접속 (지수 백오프, 최대 10초 간격) — 진행 중 매치는 서버
+    // attach 가 재바인딩하므로 끊김이 곧 탈락이 아니다 (2026-08-20 튕김 보고)
+    this.ws.onclose = () => {
+      if (this.closed) return;
+      this.onClose();
+      const delay = Math.min(10_000, 500 * 2 ** Math.min(this.retries, 5));
+      this.retries += 1;
+      this.retryTimer = window.setTimeout(() => this.connect(), delay);
+    };
+    document.removeEventListener("visibilitychange", this.onVisible);
+    document.addEventListener("visibilitychange", this.onVisible);
   }
 
   private send(msg: object): void {
@@ -540,7 +572,12 @@ export class GameSocket {
     this.send({ t: "chat.typing", to: toUserId });
   }
   createRoom(quiz: string, contentIds?: number[]): void {
-    this.send({ t: "room.create", quiz, content_ids: contentIds, lang: this.gameLang() });
+    this.send({
+      t: "room.create",
+      quiz,
+      content_ids: contentIds,
+      lang: this.gameLang(),
+    });
   }
   joinRoom(code: string): void {
     this.send({ t: "room.join", code });
@@ -569,7 +606,12 @@ export class GameSocket {
     });
   }
   qrCreate(contentIds?: number[], variant: string = "meaning"): void {
-    this.send({ t: "qr.create", content_ids: contentIds, variant, lang: this.gameLang() });
+    this.send({
+      t: "qr.create",
+      content_ids: contentIds,
+      variant,
+      lang: this.gameLang(),
+    });
   }
   qrJoin(code: string): void {
     this.send({ t: "qr.join", code });
@@ -694,6 +736,9 @@ export class GameSocket {
     });
   }
   close(): void {
+    this.closed = true;
+    if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
+    document.removeEventListener("visibilitychange", this.onVisible);
     this.ws?.close();
     this.ws = null;
   }

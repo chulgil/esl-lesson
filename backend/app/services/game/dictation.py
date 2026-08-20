@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from app.core.db import get_session_factory
 from app.models import Content, DictationRace, ItemOccurrence, LearningItem, TranscriptSegment
+from app.services.game.history import ServedHistory
 from app.services.game.manager import DEFAULT_GAME_LANG, WordPoolError, review_items
 from app.services.game.profiles import safe_player_badges
 from app.services.game.typing_race import mastered_item_clause, pick_sentences
@@ -40,6 +41,7 @@ MAX_SENTENCE_CHARS = 120
 BASE_MAX = 100  # 정확도 100% = 100
 TIME_BONUS_MAX = 50  # 정확도 90%+ 만 시간 보너스
 BONUS_MIN_ACCURACY = 0.9
+RECENT_SENTENCES_PER_USER = SENTENCE_COUNT * 3  # 최근 3판 문장은 제외 (중복 방지)
 
 
 def normalize_words(text: str) -> list[str]:
@@ -150,6 +152,8 @@ class DictationSession:
     round_no: int = -1
     round_started: float = 0.0
     task: asyncio.Task | None = None
+    # 방 게임 종료 후 재대결 대기 상태 — begin 이 새 매치로 리셋한다 (다시하기)
+    completed: bool = False
 
 
 class DictationManager:
@@ -157,6 +161,8 @@ class DictationManager:
         self.sessions: dict[int, DictationSession] = {}
         self.rooms: dict[str, int] = {}
         self.by_user: dict[int, int] = {}
+        # 최근 출제 문장 기록 — 연속 판 중복 방지 (services/game/history.py)
+        self.history = ServedHistory(RECENT_SENTENCES_PER_USER)
 
     # --- 진입 (어순 레이스와 동일 패턴) ---
 
@@ -194,6 +200,8 @@ class DictationManager:
         await self._broadcast_room(session)
 
     async def begin(self, user_id: int) -> None:
+        """호스트만 시작 (2인 이상). 종료된 방(completed)이면 재대결 —
+        새 매치 행으로 리셋 후 시작 (2026-08-20 다시하기)."""
         session = self._session_of(user_id)
         if (
             session is None
@@ -203,9 +211,38 @@ class DictationManager:
         ):
             return
         pool = await self._pool(session.host_id, session.lang)
+        if session.completed:
+            await self._reset_for_rematch(session)
         if session.code:
             self.rooms.pop(session.code, None)
         await self._start(session, pool)
+
+    async def _reset_for_rematch(self, session: DictationSession) -> None:
+        """재대결 리셋 — 새 매치 행 발급 + 매핑 재키 + 플레이어 기록 초기화."""
+        old_id = session.match_id
+        async with get_session_factory()() as db:
+            row = DictationRace(mode=session.mode, status="waiting", player1_id=session.host_id)
+            db.add(row)
+            await db.commit()
+            session.match_id = row.id
+        self.sessions.pop(old_id, None)
+        self.sessions[session.match_id] = session
+        if session.code:
+            self.rooms[session.code] = session.match_id
+        # 결과 화면에서 이탈한 사람은 제외 — 남은 매핑을 되돌리면 그가 새로 시작한
+        # 판을 가로챈다 (혼자 한 번 더 → 솔로 세션)
+        session.players = [p for p in session.players if p.send is not None]
+        for p in session.players:
+            self.by_user[p.user_id] = session.match_id
+            p.sentences = 0
+            p.accuracy_sum = 0.0
+            p.score = 0
+            p.total_ms = 0
+            p.done_current = False
+            p.wrong = []
+        session.rounds = []
+        session.round_no = -1
+        session.completed = False
 
     # --- 플레이 ---
 
@@ -243,12 +280,15 @@ class DictationManager:
     async def attach(self, user_id: int, send: Sender) -> DictationSession | None:
         """재접속: 진행 중인 배틀이 있으면 sender 재바인딩 + 현재 상태 재전송."""
         session = self._session_of(user_id)
-        if session is None or not session.started:
+        if session is None or not (session.started or session.completed):
             return None
         player = next((p for p in session.players if p.user_id == user_id), None)
         if player is None:
             return None
         player.send = send
+        if session.completed:
+            # 결과 화면 중 재접속 — 클라이언트가 이미 결과를 가지고 있어 재바인딩만
+            return session
         await self._safe_send(
             player,
             {
@@ -273,7 +313,9 @@ class DictationManager:
         session = self._session_of(user_id)
         if session is None:
             return
-        if not session.started:
+        # completed(재대결 대기)는 진행 중과 같은 경로 — 결과 화면의 순간 끊김이
+        # 방을 없애지 않게 매핑 유지, 전원 이탈 시에만 정리 (2026-08-20)
+        if not session.started and not session.completed:
             self.by_user.pop(user_id, None)
             session.players = [p for p in session.players if p.user_id != user_id]
             if session.host_id == user_id or not session.players:
@@ -294,7 +336,14 @@ class DictationManager:
     # --- 루프 ---
 
     async def _start(self, session: DictationSession, pool: list[dict]) -> None:
+        # 최근 판 문장 제외 — 연달아 해도 같은 클립이 반복되지 않게. 풀이 부족하면
+        # 전체 풀로 폴백 (작은 풀은 반복 불가피 — 게임 히스토리)
+        user_ids = [p.user_id for p in session.players]
+        pool = self.history.filter_fresh(
+            user_ids, pool, key=lambda s: s["item_id"], minimum=SENTENCE_COUNT
+        )
         session.rounds = pick_sentences(pool, SENTENCE_COUNT, secrets.randbits(32))
+        self.history.note(user_ids, [r["item_id"] for r in session.rounds])
         session.started = True
         await self._save(session, status="playing")
         await self._broadcast(
@@ -372,7 +421,31 @@ class DictationManager:
             session,
             {"t": "dt.end", "results": results, "winner": winner, "aborted": aborted},
         )
+        if session.mode == "race" and not aborted:
+            self._await_rematch(session)
+            return
         self._cleanup(session)
+
+    def _await_rematch(self, session: DictationSession) -> None:
+        """방 게임은 방을 유지한 채 재대결 대기 — 다시하기 = 재입장 없이 다음 판
+        (2026-08-20 목표). 솔로·크래시 종료는 종전대로 정리."""
+        session.players = [p for p in session.players if p.send is not None]
+        stale = {uid for uid, mid in self.by_user.items() if mid == session.match_id} - {
+            p.user_id for p in session.players
+        }
+        for gone in stale:
+            self.by_user.pop(gone, None)
+        if not session.players:
+            self._cleanup(session)
+            return
+        if all(p.user_id != session.host_id for p in session.players):
+            session.host_id = session.players[0].user_id  # 방장 이탈 — 첫 플레이어 승계
+        session.started = False
+        session.completed = True
+        session.round_no = -1
+        session.task = None
+        if session.code:
+            self.rooms[session.code] = session.match_id
 
     # --- 헬퍼 ---
 

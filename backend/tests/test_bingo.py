@@ -337,3 +337,105 @@ async def test_bingo_participation_grants_xp_without_win_bonus(client, db_sessio
     res = await client.get("/api/study/stats")
     assert res.status_code == 200
     assert res.json()["xp"] == 20
+
+
+async def test_attach_resends_filled_and_marks(wired_db, monkeypatch):  # noqa: F811
+    """재접속 시 내가 채운 칸(filled)·상대 진행(marks)이 복원돼야 한다 —
+    없으면 재접속 후 보드가 빈 판으로 보인다 (2026-08-20 튕김 보고)."""
+    from app.models import User
+
+    monkeypatch.setattr(bg, "COUNTDOWN_SECONDS", 0.0)
+    monkeypatch.setattr(bg, "ROUND_SECONDS", 5.0)
+    host = await seed_user_and_words(wired_db)
+    guest = User(google_sub="g-fill", email="fill@example.com", name="FILL")
+    wired_db.add(guest)
+    await wired_db.commit()
+
+    manager = bg.BingoManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    for _ in range(100):
+        if session.round_no >= 0:
+            break
+        await asyncio.sleep(0.02)
+    current = session.call_order[session.round_no]
+    await manager.tap(host.id, session.round_no, current)
+
+    await manager.detach(host.id)
+    s1b = Collector()
+    await manager.attach(host.id, s1b)
+    start = next(m for m in s1b.messages if m["t"] == "bg.start")
+    assert start["filled"] == [current]
+    assert start["marks"][host.name] == 1
+
+    session.task.cancel()
+    manager._cleanup(session)
+
+
+async def test_room_rematch_keeps_players_and_new_match(wired_db, monkeypatch):  # noqa: F811
+    """방 게임 종료 후 방이 유지되고(연결 그대로), 방장 begin 으로 새 매치가
+    시작된다 — 다시하기 = 재입장 없이 다음 판 (2026-08-20 목표)."""
+    from app.models import User
+
+    monkeypatch.setattr(bg, "COUNTDOWN_SECONDS", 0.0)
+    host = await seed_user_and_words(wired_db)
+    guest = User(google_sub="g-rm", email="rm@example.com", name="RM")
+    wired_db.add(guest)
+    await wired_db.commit()
+
+    manager = bg.BingoManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    session.task.cancel()
+    first_match_id = session.match_id
+    session.players[0].filled = set(list(session.words)[:3])
+    await manager._finish(session, aborted=False)
+
+    # 방 유지 — 세션·매핑·방 코드가 남고, 대기 상태로 복귀
+    assert manager.by_user.get(host.id) is not None
+    assert manager.by_user.get(guest.id) is not None
+    assert not session.started
+    assert manager.rooms.get(code) is not None
+
+    await manager.begin(host.id)
+    assert session.started
+    assert session.match_id != first_match_id  # 새 매치 행
+    for p in session.players:
+        assert p.filled == set() and p.wrong == 0 and p.bingo_round is None
+    starts = [m for m in s2.messages if m["t"] == "bg.start"]
+    assert len(starts) >= 2  # 첫 판 + 재대결
+    session.task.cancel()
+    manager._cleanup(session)
+
+
+async def test_solo_finish_still_cleans_up(wired_db):  # noqa: F811
+    """솔로는 종전대로 종료 시 정리 — 한 번 더는 새 솔로 생성."""
+    user, manager, sender, session = await _start_solo(wired_db)
+    await manager._finish(session, aborted=False)
+    assert user.id not in manager.by_user
+    assert session.match_id not in manager.sessions
+
+
+async def test_board_excludes_recently_served_words(wired_db):  # noqa: F811
+    """같은 매니저에서 연달아 하면 직전 판 단어가 반복되지 않는다 (풀이
+    충분할 때) — 게임 히스토리 중복 방지 (2026-08-20 목표)."""
+    user = await seed_user_and_words(wired_db, count=40)
+    manager = bg.BingoManager()
+    s1 = Collector()
+    first = await manager.solo(user.id, user.name, s1)
+    first.task.cancel()
+    first_words = set(first.words)
+    await manager._finish(first, aborted=False)
+
+    s2 = Collector()
+    second = await manager.solo(user.id, user.name, s2)
+    second.task.cancel()
+    second_words = set(second.words)
+    await manager._finish(second, aborted=False)
+    assert first_words.isdisjoint(second_words)  # 40단어 풀 — 16+16 겹침 없음

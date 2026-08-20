@@ -208,6 +208,82 @@ async def test_host_leaving_waiting_room_notifies_remaining_players(wired_db):  
     assert not manager.sessions
 
 
+# --- 재대결·출제 히스토리 (2026-08-20 다시하기 목표) ---
+
+
+async def test_room_rematch_keeps_players_and_new_match(wired_db, monkeypatch):  # noqa: F811
+    """배틀 종료 후 방이 유지되고, 방장 begin 으로 새 매치가 시작된다."""
+    monkeypatch.setattr(dt, "COUNTDOWN_SECONDS", 0.0)
+    host = await seed_user_and_words(wired_db)
+    await seed_dictation_sentences(wired_db)
+    guest = User(google_sub="g-rm", email="rm@example.com", name="RM")
+    wired_db.add(guest)
+    await wired_db.commit()
+
+    manager = dt.DictationManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    session.task.cancel()
+    first_match_id = session.match_id
+    session.players[0].score = 130
+    session.players[0].sentences = 1
+    session.players[0].accuracy_sum = 0.9
+    session.players[0].wrong = [0]
+    await manager._finish(session, aborted=False)
+
+    assert manager.by_user.get(host.id) is not None
+    assert manager.by_user.get(guest.id) is not None
+    assert not session.started
+    assert manager.rooms.get(code) is not None
+
+    await manager.begin(host.id)
+    assert session.started
+    assert session.match_id != first_match_id
+    for p in session.players:
+        assert p.score == 0 and p.sentences == 0 and p.accuracy_sum == 0.0 and p.wrong == []
+    assert len([m for m in s2.messages if m["t"] == "dt.start"]) >= 2
+    session.task.cancel()
+    manager._cleanup(session)
+
+
+async def test_solo_finish_still_cleans_up(wired_db, monkeypatch):  # noqa: F811
+    """솔로는 종전대로 종료 시 정리."""
+    monkeypatch.setattr(dt, "COUNTDOWN_SECONDS", 0.0)
+    user = await seed_user_and_words(wired_db)
+    await seed_dictation_sentences(wired_db)
+    manager = dt.DictationManager()
+    session = await manager.solo(user.id, user.name, Collector())
+    session.task.cancel()
+
+    await manager._finish(session, aborted=False)
+    assert user.id not in manager.by_user
+    assert session.match_id not in manager.sessions
+
+
+async def test_rounds_exclude_recently_served(wired_db, monkeypatch):  # noqa: F811
+    """연달아 하면 직전 판 문장이 반복되지 않는다 (풀이 충분할 때)."""
+    monkeypatch.setattr(dt, "SENTENCE_COUNT", 4)
+    monkeypatch.setattr(dt, "COUNTDOWN_SECONDS", 0.0)
+    user = await seed_user_and_words(wired_db)
+    await seed_dictation_sentences(wired_db, count=8)
+    manager = dt.DictationManager()
+
+    first = await manager.solo(user.id, user.name, Collector())
+    first.task.cancel()
+    first_ids = {r["item_id"] for r in first.rounds}
+    await manager._finish(first, aborted=False)
+
+    second = await manager.solo(user.id, user.name, Collector())
+    second.task.cancel()
+    second_ids = {r["item_id"] for r in second.rounds}
+    await manager._finish(second, aborted=False)
+
+    assert first_ids and first_ids.isdisjoint(second_ids)
+
+
 # --- 게임 언어 분리 (docs/specs/chat-language-rooms.md §게임 언어 분리) ---
 
 

@@ -122,16 +122,45 @@ function speakWithBrowserTts(word: string) {
   utter.pitch = 1;
   utter.volume = 1;
   window.speechSynthesis.cancel();
+  // Chrome 은 탭이 백그라운드를 다녀오면 큐가 paused 로 굳는다 — 재개 후 발화
+  window.speechSynthesis.resume();
   window.speechSynthesis.speak(utter);
 }
 
 let currentAudio: HTMLAudioElement | null = null;
+let unlockedAudio: HTMLAudioElement | null = null;
+
+// 무음 WAV — 제스처 컨텍스트에서 한 번 재생해 오디오 채널을 해금한다
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+
+/** 오디오 자동 재생 해금 — 사용자 제스처(탭/클릭) 안에서 1회 호출.
+ *
+ *  모바일 브라우저는 제스처 없이 생성된 Audio.play() 를 거부한다 — 빙고처럼
+ *  서버 메시지(bg.round)가 재생을 트리거하는 화면에서 "재생됐다 안 됐다"의
+ *  원인 (2026-08-20 보고). 제스처 안에서 해금한 요소를 재사용하면 이후
+ *  src 교체 재생이 허용된다 (iOS 포함). TTS 큐도 같이 깨운다. */
+export function unlockAudio() {
+  if (typeof window === "undefined" || unlockedAudio) return;
+  try {
+    const audio = new Audio(SILENT_WAV);
+    audio.play().catch(() => undefined);
+    unlockedAudio = audio;
+  } catch {
+    // Audio 미지원 — TTS 폴백만 사용
+  }
+  if (supported()) {
+    window.speechSynthesis.resume();
+  }
+  primeVoices();
+}
 
 /** 단어 발음 재생 — 서버 신경망 TTS(캐시) 우선, 실패 시 브라우저 TTS 폴백.
  *
  *  브라우저 내장 음성은 기기 의존이라 기계음이 흔했다 (2026-08-05 보고).
- *  Audio 요소를 제스처 안에서 동기 생성해 iOS 재생 제약을 지키고,
- *  src 가 곧 인증 요청이라(same-origin 쿠키) 별도 fetch 가 필요 없다. */
+ *  제스처에서 해금한 요소(unlockAudio)가 있으면 src 교체로 재사용 — 서버
+ *  메시지 트리거 재생도 자동 재생 정책을 통과한다. src 가 곧 인증 요청이라
+ *  (same-origin 쿠키) 별도 fetch 가 필요 없다. */
 export function speakWord(word: string) {
   if (typeof window === "undefined") return;
   currentAudio?.pause();
@@ -143,8 +172,10 @@ export function speakWord(word: string) {
     speakWithBrowserTts(word);
   };
 
-  const audio = new Audio(`/api/tts?text=${encodeURIComponent(word)}`);
+  const src = `/api/tts?text=${encodeURIComponent(word)}`;
+  const audio = unlockedAudio ?? new Audio();
+  audio.onerror = fallback;
+  audio.src = src;
   currentAudio = audio;
-  audio.addEventListener("error", fallback, { once: true });
   audio.play().catch(fallback);
 }
