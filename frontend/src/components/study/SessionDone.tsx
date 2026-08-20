@@ -14,12 +14,15 @@ export function SessionDone({
   correctCount,
   longTermCount,
   onRestart,
+  contentId,
 }: {
   weakMode: boolean;
   answeredCount: number;
   correctCount: number;
   longTermCount: number;
   onRestart: () => void;
+  /** 덱 세션이면 오답 정리도 같은 덱 스코프로 (2026-08-20 리뷰) */
+  contentId?: number;
 }) {
   const skin = useSurfaceSkin();
   // 완료 순간의 최신 목표 진행·오답 잔여 — 피크엔드 요약 재료
@@ -89,7 +92,10 @@ export function SessionDone({
       <div className="flex flex-wrap gap-3">
         {/* 오답이 남았으면 정리로 마무리 — 미완성 잔여를 다음 행동으로 (자이가르닉) */}
         {!weakMode && stats && stats.weak_count > 0 && (
-          <Brick color="red" href="/study/session?mode=weak">
+          <Brick
+            color="red"
+            href={`/study/session?mode=weak${contentId ? `&content=${contentId}` : ""}`}
+          >
             오답 {stats.weak_count}개 정리하고 마무리
           </Brick>
         )}
