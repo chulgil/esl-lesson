@@ -222,6 +222,12 @@ class TypingRaceManager:
         pool = await self._pool(session.host_id, session.lang)
         if session.completed:
             await self._reset_for_rematch(session)
+            if len(session.players) < 2:
+                # 전원 이탈 — 혼자 재대결은 시작하지 않고 안내 (교차 리뷰 2026-08-20)
+                await self._broadcast(
+                    session, {"t": "error", "code": "room_not_enough_players"}
+                )
+                return
         if session.code:
             self.rooms.pop(session.code, None)
         await self._start(session, pool)

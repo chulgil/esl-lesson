@@ -151,6 +151,8 @@ function DictationInner() {
               ? "방을 찾을 수 없어요 — 코드를 확인해주세요"
               : msg.code === "room_closed"
                 ? "방장이 나가서 방이 닫혔어요."
+                  : msg.code === "room_not_enough_players"
+                    ? "함께할 사람이 없어요 — 친구를 초대하거나 혼자 한 번 더로 이어가세요."
                 : msg.code,
         );
         setPhase("lobby");

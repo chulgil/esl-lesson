@@ -439,3 +439,66 @@ async def test_board_excludes_recently_served_words(wired_db):  # noqa: F811
     second_words = set(second.words)
     await manager._finish(second, aborted=False)
     assert first_words.isdisjoint(second_words)  # 40단어 풀 — 16+16 겹침 없음
+
+
+async def test_rematch_does_not_steal_departed_players_session(wired_db, monkeypatch):  # noqa: F811
+    """결과 화면에서 '혼자 한 번 더'로 나간 게스트의 새 솔로 세션을 방
+    재대결이 가로채지 않는다 (2026-08-20 교차 리뷰 지적)."""
+    monkeypatch.setattr(bg, "COUNTDOWN_SECONDS", 0.0)
+    from app.models import User
+
+    host = await seed_user_and_words(wired_db)
+    guest = User(google_sub="g-steal", email="steal@example.com", name="ST")
+    wired_db.add(guest)
+    await wired_db.flush()
+    await seed_words_for(wired_db, guest, "en")  # 게스트 솔로용 단어 풀
+
+    manager = bg.BingoManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    session.task.cancel()
+    await manager._finish(session, aborted=False)
+
+    # 게스트가 혼자 한 번 더 — 새 솔로 세션 시작
+    s2solo = Collector()
+    solo = await manager.solo(guest.id, guest.name, s2solo)
+    solo.task.cancel()
+    assert manager.by_user[guest.id] == solo.match_id
+
+    # 방장 재대결 — 게스트 매핑을 되가져오면 안 된다
+    await manager.begin(host.id)
+    assert manager.by_user[guest.id] == solo.match_id
+    room = manager._session_of(host.id)
+    if room is not None and room.started:
+        assert all(p.user_id != guest.id for p in room.players)
+        room.task.cancel()
+        manager._cleanup(room)
+    manager._cleanup(solo)
+
+
+async def test_rematch_alone_after_everyone_left_does_not_start(wired_db, monkeypatch):  # noqa: F811
+    """전원 이탈 후 혼자 남은 방장의 재대결은 시작되지 않고 안내를 받는다."""
+    monkeypatch.setattr(bg, "COUNTDOWN_SECONDS", 0.0)
+    from app.models import User
+
+    host = await seed_user_and_words(wired_db)
+    guest = User(google_sub="g-alone", email="alone@example.com", name="AL")
+    wired_db.add(guest)
+    await wired_db.commit()
+
+    manager = bg.BingoManager()
+    s1, s2 = Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(guest.id, guest.name, s2, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    session.task.cancel()
+    await manager._finish(session, aborted=False)
+
+    await manager.detach(guest.id)  # 게스트가 결과 화면에서 떠남
+    await manager.begin(host.id)
+    assert not session.started
+    assert any(m["t"] == "error" and m["code"] == "room_not_enough_players" for m in s1.messages)

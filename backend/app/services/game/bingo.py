@@ -195,6 +195,10 @@ class BingoManager:
             return
         if session.completed:
             await self._reset_for_rematch(session)
+            if len(session.players) < 2:
+                # 전원 이탈 — 혼자 재대결은 시작하지 않고 안내 (교차 리뷰 2026-08-20)
+                await self._broadcast(session, {"t": "error", "code": "room_not_enough_players"})
+                return
         if session.code:
             self.rooms.pop(session.code, None)
         await self._start(session)
@@ -211,6 +215,9 @@ class BingoManager:
         self.sessions[session.match_id] = session
         if session.code:
             self.rooms[session.code] = session.match_id
+        # 결과 화면에서 이탈한 사람은 제외 — 남은 매핑을 되돌리면 그가 새로
+        # 시작한 판(혼자 한 번 더 → 솔로)을 가로챈다 (교차 리뷰 2026-08-20)
+        session.players = [p for p in session.players if p.send is not None]
         for p in session.players:
             self.by_user[p.user_id] = session.match_id
             p.arrangement = []
