@@ -1,5 +1,6 @@
 /** 워드 테트리스 WS 클라이언트 (docs/specs/word-tetris.md 프로토콜) */
 
+import { isPublicPath, loginRedirectPath } from "@/lib/auth-gate";
 import type { ChatRoom, Translation } from "@/lib/chat-api";
 import { readGameLang } from "@/lib/game-lang";
 import { getAppTheme } from "@/lib/theme";
@@ -483,6 +484,8 @@ export class GameSocket {
   private closed = false;
   private retries = 0;
   private retryTimer: number | null = null;
+  private everOpened = false;
+  private pending: object[] = [];
   // 백그라운드 복귀 시 즉시 재접속 — 모바일 화면 잠금이 WS 를 끊는다
   private onVisible = () => {
     if (
@@ -508,6 +511,12 @@ export class GameSocket {
     this.ws = new WebSocket(`${proto}://${window.location.host}/ws/game`);
     this.ws.onopen = () => {
       this.retries = 0;
+      this.everOpened = true;
+      // 초기 연결 전에 보낸 메시지(초대 링크 자동 입장 등) 플러시 —
+      // 소켓이 늦게 열리면 send 가 조용히 버려져 입장이 유실됐다 (2026-08-20)
+      for (const msg of this.pending.splice(0)) {
+        this.ws?.send(JSON.stringify(msg));
+      }
       this.onOpen?.();
     };
     this.ws.onmessage = (event) => {
@@ -519,8 +528,22 @@ export class GameSocket {
     };
     // 자동 재접속 (지수 백오프, 최대 10초 간격) — 진행 중 매치는 서버
     // attach 가 재바인딩하므로 끊김이 곧 탈락이 아니다 (2026-08-20 튕김 보고)
-    this.ws.onclose = () => {
+    this.ws.onclose = (event) => {
       if (this.closed) return;
+      // 4401 = 세션 만료/미인증 — 재시도해도 영원히 실패한다. 재시도 루프를
+      // 멈추고 세션 게이트 규칙대로 로그인 라우팅 (auth.md §세션 만료 라우팅)
+      if (event.code === 4401) {
+        this.closed = true;
+        if (!isPublicPath(window.location.pathname)) {
+          window.location.assign(
+            loginRedirectPath(
+              window.location.pathname + window.location.search,
+              true,
+            ),
+          );
+        }
+        return;
+      }
       this.onClose();
       const delay = Math.min(10_000, 500 * 2 ** Math.min(this.retries, 5));
       this.retries += 1;
@@ -533,6 +556,10 @@ export class GameSocket {
   private send(msg: object): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
+    } else if (!this.everOpened && this.pending.length < 10) {
+      // 첫 open 전 한정 버퍼 — 재접속 이후의 유실은 버퍼하지 않는다
+      // (끊김 중 쌓인 스테일 액션이 복구 후 재생되는 사고 방지)
+      this.pending.push(msg);
     }
   }
 

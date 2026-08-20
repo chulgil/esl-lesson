@@ -19,7 +19,11 @@ type Phase = "loading" | "empty" | "question" | "feedback" | "done";
 // 복원해 초기화처럼 보이던 문제 해소 (2026-08-20 보고). 서버 큐가 정본이라
 // 스냅샷의 문항 중 이미 답한 것(큐에 없음)은 자동 제외된다.
 
-const SESSION_SNAPSHOT_KEY = "els-study-session";
+// 세션 종류(전체/덱/오답 정리)별 별도 키 — 하나의 키를 공유하면 덱 세션이
+// 일반 세션의 이어가기를 덮어쓴다 (2026-08-20 전수 점검)
+function snapshotKey(content: number | undefined, weak: boolean): string {
+  return `els-study-session:${content ?? "all"}:${weak ? "weak" : "std"}`;
+}
 
 interface SessionSnapshot {
   day: string;
@@ -41,7 +45,7 @@ function loadSessionSnapshot(
   weak: boolean,
 ): SessionSnapshot | null {
   try {
-    const raw = window.localStorage.getItem(SESSION_SNAPSHOT_KEY);
+    const raw = window.localStorage.getItem(snapshotKey(content, weak));
     if (!raw) return null;
     const saved = JSON.parse(raw) as SessionSnapshot;
     if (
@@ -61,15 +65,21 @@ function loadSessionSnapshot(
 
 function saveSessionSnapshot(snapshot: SessionSnapshot): void {
   try {
-    window.localStorage.setItem(SESSION_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    window.localStorage.setItem(
+      snapshotKey(snapshot.content ?? undefined, snapshot.weak),
+      JSON.stringify(snapshot),
+    );
   } catch {
     // 저장 불가(시크릿 모드 등) — 이어가기 없이 종전 동작
   }
 }
 
-function clearSessionSnapshot(): void {
+function clearSessionSnapshot(
+  content: number | undefined,
+  weak: boolean,
+): void {
   try {
-    window.localStorage.removeItem(SESSION_SNAPSHOT_KEY);
+    window.localStorage.removeItem(snapshotKey(content, weak));
   } catch {
     // noop
   }
@@ -264,7 +274,7 @@ function StudySessionInner() {
   function next() {
     const nextIdx = idx + 1;
     if (nextIdx >= queue.length) {
-      clearSessionSnapshot(); // 세션 완주 — 다음 진입은 새 세션
+      clearSessionSnapshot(contentId, weakMode); // 세션 완주 — 다음 진입은 새 세션
       setPhase("done");
     } else {
       setIdx(nextIdx);
