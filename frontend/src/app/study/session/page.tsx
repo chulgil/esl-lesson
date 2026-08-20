@@ -43,6 +43,8 @@ function StudySessionInner() {
   const [result, setResult] = useState<AnswerResult | null>(null);
   // 정답 카드 표시 여부 — false 면 제출된 문제를 다시 본다 (문제↔정답 왕복)
   const [showFeedback, setShowFeedback] = useState(true);
+  // 오늘 이미 답한 수 — 재진입 시 "이어가기" 안내 (2026-08-20 저장 오해 해소)
+  const [doneToday, setDoneToday] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   // 이번 세션에서 장기 기억으로 굳은 카드 수 — 완료 화면 요약 (피크엔드)
@@ -61,6 +63,7 @@ function StudySessionInner() {
         setQueue(res.questions);
         setHintDelay(res.hint_delay_seconds ?? 0);
         setDeckTitle(res.deck?.title ?? null);
+        setDoneToday(res.done_today ?? 0);
         // 세션 카운터 리셋 — 완료 화면에서 오답 정리로 넘어올 때 이전 세션
         // 수치가 남지 않도록 (done -> ?mode=weak 전환이 정식 흐름이 됨)
         setIdx(0);
@@ -322,6 +325,15 @@ function StudySessionInner() {
       {(phase === "question" || phase === "feedback") && question && (
         <>
           <ProgressBricks total={queue.length} done={idx} />
+          {/* 이어가기 안내 — 답은 제출 즉시 저장되므로 나가도 진행이 사라지지
+              않는다. 재진입 카운터 리셋이 "처음부터"로 보이던 오해 해소
+              (2026-08-20 보고) */}
+          {doneToday > 0 && idx === 0 && phase === "question" && (
+            <p className="mb-3 max-w-2xl rounded-md bg-brick-green/10 px-3 py-1.5 text-xs font-bold text-brick-green">
+              오늘 이미 {doneToday}개를 끝냈어요 — 이어서 진행해요 (답은 제출
+              즉시 저장돼요)
+            </p>
+          )}
           {/* 카드 스택 — 정답 카드가 문제 위로 올라와 한 화면에서 전환된다
               (스크롤 없이 문제↔정답 왕복, 2026-08-20 세션 UX). grid 1칸에
               두 카드를 겹치고 transform/opacity 로 앞뒤를 바꾼다 */}
@@ -332,7 +344,8 @@ function StudySessionInner() {
                   ? "pointer-events-none scale-[0.98] opacity-0"
                   : "opacity-100"
               }`}
-              aria-hidden={phase === "feedback" && showFeedback}
+              // inert — 숨은 카드가 Tab 순서·스크린리더에 남지 않게 (2026-08-20 점검)
+              inert={phase === "feedback" && showFeedback}
             >
               <QuestionCard
                 key={`${question.card_id}-${idx}`}
@@ -349,7 +362,7 @@ function StudySessionInner() {
                     ? "opacity-100"
                     : "pointer-events-none translate-y-6 opacity-0"
                 }`}
-                aria-hidden={!showFeedback}
+                inert={!showFeedback}
               >
                 <SessionFeedback
                   question={question}

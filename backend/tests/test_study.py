@@ -465,3 +465,26 @@ async def test_reviews_today_uses_kst_day_boundary(client, db_session):
 
     stats = (await client.get("/api/study/stats")).json()
     assert stats["reviews_today"] == 1
+
+
+async def test_queue_reports_done_today_for_resume(client, db_session):
+    """큐 응답 done_today — 재진입 시 '오늘 N개 완료, 이어가기' 표시 재료
+    (2026-08-20 보고: 나가기 후 재진입이 처음부터로 보임 — 저장은 정상,
+    연속성 표시가 없던 것)."""
+    await login(client, db_session)
+    await seed_items(db_session, count=2)
+
+    queue = (await client.get("/api/study/queue")).json()
+    assert queue["done_today"] == 0
+    first = queue["questions"][0]
+
+    await client.post(
+        "/api/study/answer",
+        json={
+            "card_id": first["card_id"],
+            "quiz_mode": first["quiz_mode"],
+            "answer": first["hint_answer"],
+        },
+    )
+    queue2 = (await client.get("/api/study/queue")).json()
+    assert queue2["done_today"] == 1

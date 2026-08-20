@@ -1,6 +1,5 @@
 /** 학습/라이브러리 API 클라이언트 (docs/specs/learning.md) */
 
-
 import { request } from "@/lib/http";
 
 export interface Question {
@@ -320,7 +319,6 @@ export interface LibraryDetail {
   }[];
 }
 
-
 export const studyApi = {
   // contentId 지정 시 해당 덱(콘텐츠)만 학습 (docs/specs/study-decks.md)
   // mode="weak" 는 오답 정리 — 최근 오답 카드만 (docs/specs/learning.md)
@@ -336,6 +334,8 @@ export const studyApi = {
       deck: { content_id: number; title: string } | null;
       mode?: string;
       questions: Question[];
+      /** 오늘 이미 답한 수 — 재진입 "이어가기" 안내 (답은 즉시 저장) */
+      done_today: number;
     }>(qs ? `/api/study/queue?${qs}` : "/api/study/queue");
   },
   decks: () => request<{ items: StudyDeck[] }>("/api/study/decks"),
