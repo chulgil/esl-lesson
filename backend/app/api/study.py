@@ -147,8 +147,24 @@ async def get_queue(
             # 학습은 레벨 필터를 풀어 덱의 항목을 그대로 낸다
             types = list(ITEM_TYPE_LEVEL.keys())
 
+    # 오늘 이미 답한 수 — 재진입 시 "이어가기" 표시 재료 (done_today, 2026-08-20:
+    # 나가기 후 재진입이 처음부터로 보이던 오해 — 저장은 정상, 연속성 표시 부재)
+    reviews_today = (
+        await db.execute(
+            select(func.count(ReviewLog.id)).where(
+                ReviewLog.user_id == user.id, ReviewLog.reviewed_at >= day_start
+            )
+        )
+    ).scalar_one()
+
     if not types:
-        return {"questions": [], "total_due": 0, "introduced_today": 0, "deck": deck}
+        return {
+            "questions": [],
+            "total_due": 0,
+            "introduced_today": 0,
+            "deck": deck,
+            "done_today": reviews_today,
+        }
 
     # 레벨 1~2 는 9단어+ 문장 제외 — 길이 게이트 (proposal/level-format-fit)
     length_gate = low_level_sentence_gate(settings.study_level)
@@ -174,15 +190,8 @@ async def get_queue(
             "deck": deck,
             "mode": "weak",
             "questions": questions,
+            "done_today": reviews_today,
         }
-
-    reviews_today = (
-        await db.execute(
-            select(func.count(ReviewLog.id)).where(
-                ReviewLog.user_id == user.id, ReviewLog.reviewed_at >= day_start
-            )
-        )
-    ).scalar_one()
 
     review_budget = max(0, settings.daily_review_limit - reviews_today)
 
@@ -304,6 +313,7 @@ async def get_queue(
         "hint_delay_seconds": settings.hint_delay_seconds,
         "deck": deck,
         "questions": questions,
+        "done_today": reviews_today,
     }
 
 
