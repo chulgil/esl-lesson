@@ -1,6 +1,7 @@
 """리스닝 빙고 규칙·세션 검증 (docs/specs/listening-bingo.md)."""
 
 import asyncio
+import time
 
 import pytest
 
@@ -502,3 +503,58 @@ async def test_rematch_alone_after_everyone_left_does_not_start(wired_db, monkey
     await manager.begin(host.id)
     assert not session.started
     assert any(m["t"] == "error" and m["code"] == "room_not_enough_players" for m in s1.messages)
+
+
+# --- 명시적 퇴장·잔여시간 (2026-08-20 교차 리뷰) ---
+
+
+async def test_leave_on_result_screen_drops_player_and_blocks_ghost(wired_db, monkeypatch):  # noqa: F811
+    """결과 화면을 떠난 사람은 방에서 빠지고, 다른 페이지에서 WS 를 열어도
+    재대결에 유령 참가자로 편입되지 않는다 (버그 A)."""
+    monkeypatch.setattr(bg, "COUNTDOWN_SECONDS", 0.0)
+    from app.models import User
+
+    host = await seed_user_and_words(wired_db)
+    stay = User(google_sub="g-bgh1", email="bgh1@example.com", name="ST")
+    gone = User(google_sub="g-bgh2", email="bgh2@example.com", name="GO")
+    wired_db.add_all([stay, gone])
+    await wired_db.commit()
+
+    manager = bg.BingoManager()
+    s1, s2, s3 = Collector(), Collector(), Collector()
+    code = await manager.create(host.id, host.name, s1)
+    await manager.join(stay.id, stay.name, s2, code)
+    await manager.join(gone.id, gone.name, s3, code)
+    await manager.begin(host.id)
+    session = manager.sessions[manager.by_user[host.id]]
+    session.task.cancel()
+    await manager._finish(session, aborted=False)
+    assert session.completed
+
+    await manager.leave(gone.id)  # 결과 화면 이탈 (bg.leave)
+    assert gone.id not in manager.by_user
+    assert all(p.user_id != gone.id for p in session.players)
+    # 다른 페이지의 WS 가 열려도 send 가 되살아나지 않는다
+    assert await manager.attach(gone.id, Collector()) is None
+
+    await manager.begin(host.id)  # 방장 다시하기
+    assert session.started
+    assert all(p.user_id != gone.id for p in session.players)
+    session.task.cancel()
+    manager._cleanup(session)
+
+
+async def test_attach_round_includes_server_remaining(wired_db, monkeypatch):  # noqa: F811
+    """진행 중 재접속의 라운드 재전송에 서버 기준 잔여시간이 실린다 — 없으면
+    클라가 전체 시간으로 타이머를 되감아 마감된 라운드 입력이 무시된다 (버그 B)."""
+    monkeypatch.setattr(bg, "COUNTDOWN_SECONDS", 0.0)
+    user, manager, _sender, session = await _start_solo(wired_db)
+    session.round_no = 0
+    session.round_started = time.monotonic() - 3.0
+
+    resumed = Collector()
+    assert await manager.attach(user.id, resumed) is session
+    rounds = [m for m in resumed.messages if m["t"] == "bg.round"]
+    assert rounds
+    assert 0 < rounds[-1]["remaining"] < bg.ROUND_SECONDS
+    manager._cleanup(session)

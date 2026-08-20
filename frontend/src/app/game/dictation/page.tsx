@@ -118,7 +118,10 @@ function DictationInner() {
         setLastResult(null);
         setReveal(null);
         setRivalDone({});
-        deadlineRef.current = Date.now() + secondsRef.current * 1000;
+        // 재접속 재전송이면 서버 기준 잔여로 — 전체 시간으로 되감으면 이미
+        // 마감된 문장에 제출하게 된다 (2026-08-20 교차 리뷰)
+        deadlineRef.current =
+          Date.now() + (msg.remaining ?? secondsRef.current) * 1000;
         setPhase("racing");
         break;
       case "dt.done_mark":
@@ -151,9 +154,9 @@ function DictationInner() {
               ? "방을 찾을 수 없어요 — 코드를 확인해주세요"
               : msg.code === "room_closed"
                 ? "방장이 나가서 방이 닫혔어요."
-                  : msg.code === "room_not_enough_players"
-                    ? "함께할 사람이 없어요 — 친구를 초대하거나 혼자 한 번 더로 이어가세요."
-                : msg.code,
+                : msg.code === "room_not_enough_players"
+                  ? "함께할 사람이 없어요 — 친구를 초대하거나 혼자 한 번 더로 이어가세요."
+                  : msg.code,
         );
         setPhase("lobby");
         break;
@@ -177,23 +180,31 @@ function DictationInner() {
     return () => clearInterval(timer);
   }, [phase, roundIdx]);
 
+  // 결과 화면(ended)에서 방을 떠날 때만 퇴장 통지 — 안 보내면 서버 players 에
+  // 남아 방장의 다시하기에 유령 참가자로 편입된다. 진행 중 이탈은 보내지
+  // 않는다 (재접속 계약 유지, 2026-08-20 교차 리뷰)
+  const leaveRoomOnUnmountRef = useRef(false);
+  useEffect(() => {
+    leaveRoomOnUnmountRef.current = phase === "ended" && room !== null;
+  }, [phase, room]);
+
   useEffect(() => {
     return () => {
-      socketRef.current?.dtLeave();
+      if (leaveRoomOnUnmountRef.current) socketRef.current?.dtLeave();
       socketRef.current?.close();
     };
   }, []);
 
   function connect(action: (socket: GameSocket) => void) {
     setError(null);
-    // 끊긴 뒤에도 socketRef 가 죽은 소켓을 들고 있어 send() 가 조용히 씹혔다
-    // (버그 헌트 2026-08-11) — truthy 체크 대신 isOpen() 으로 재사용 가능 여부 확인
-    if (socketRef.current?.isOpen()) {
+    // 기존 인스턴스 재사용 — 새 GameSocket 을 만들면 옛 소켓의 자동 재접속과
+    // 이중화되어 핸들러가 중복 배달된다 (2026-08-20 리뷰). 끊겨 있으면
+    // reconnect 로 내부 백오프를 재가동하고, 송신은 첫 open 전 버퍼가 보존
+    if (socketRef.current) {
+      if (!socketRef.current.isOpen()) socketRef.current.reconnect();
       action(socketRef.current);
       return;
     }
-    // 끊겨도 화면을 로비로 되돌리지 않는다 — 소켓이 자동 재접속하고 서버 attach 가
-    // 진행 중 매치를 복원한다 (2026-08-20 재대결·튕김 대응)
     const socket = new GameSocket(
       handleMessage,
       () =>
@@ -202,7 +213,7 @@ function DictationInner() {
     );
     socket.connect();
     socketRef.current = socket;
-    setTimeout(() => action(socket), 300);
+    action(socket);
   }
 
   useEffect(() => {
