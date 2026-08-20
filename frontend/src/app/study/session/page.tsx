@@ -130,6 +130,7 @@ function StudySessionInner() {
   const [showSettings, setShowSettings] = useState(false);
   const [deckTitle, setDeckTitle] = useState<string | null>(null);
   const startedAt = useRef(Date.now());
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     studyApi
@@ -193,8 +194,8 @@ function StudySessionInner() {
     phase === "question" || phase === "feedback"
       ? {
           phase,
-          index: Math.min(idx + 1, queue.length),
-          total: queue.length,
+          index: Math.min(prevDone + idx + 1, prevDone + queue.length),
+          total: prevDone + queue.length,
           correct_count: correctCount,
           prompt: question?.prompt ?? question?.prompt_ko ?? "",
           prompt_ko:
@@ -212,14 +213,17 @@ function StudySessionInner() {
       : phase === "done"
         ? {
             phase: "done",
-            total: queue.length,
+            total: prevDone + queue.length,
             correct_count: correctCount,
             answered_count: answeredCount,
           }
         : null;
 
   async function submit(answer: string) {
-    if (!question) return;
+    // in-flight 가드 — 보기 2연타가 같은 카드를 2회 채점하던 경합 차단
+    // (2026-08-20 리뷰: ReviewLog 2행 + FSRS 2회 적용 + 카운트 과잉)
+    if (!question || submittingRef.current) return;
+    submittingRef.current = true;
     try {
       const res = await studyApi.answer({
         card_id: question.card_id,
@@ -242,6 +246,8 @@ function StudySessionInner() {
       setPhase("feedback");
     } catch (e) {
       setError(e instanceof Error ? e.message : "제출 실패");
+    } finally {
+      submittingRef.current = false;
     }
   }
 
@@ -255,7 +261,9 @@ function StudySessionInner() {
       content: contentId ?? null,
       weak: weakMode,
       order: queue.map((q) => q.card_id),
-      idx,
+      // 피드백 중 이탈은 현재 카드를 소비한 것으로 — 복원 시 이중 집계 방지
+      // (오답 재출제 복사본은 order 끝에 이미 있다, 2026-08-20 리뷰)
+      idx: phase === "feedback" ? idx + 1 : idx,
       answered: answeredCount,
       correct: correctCount,
       longTerm: longTermCount,
@@ -458,7 +466,7 @@ function StudySessionInner() {
           {/* 이어가기 안내 — 답은 제출 즉시 저장되므로 나가도 진행이 사라지지
               않는다. 재진입 카운터 리셋이 "처음부터"로 보이던 오해 해소
               (2026-08-20 보고) */}
-          {(prevDone > 0 || doneToday > 0) &&
+          {(prevDone > 0 || (doneToday > 0 && !contentId && !weakMode)) &&
             idx === 0 &&
             phase === "question" && (
               <p className="mb-3 max-w-2xl rounded-md bg-brick-green/10 px-3 py-1.5 text-xs font-bold text-brick-green">
@@ -539,6 +547,7 @@ function StudySessionInner() {
       {phase === "done" && (
         <SessionDone
           weakMode={weakMode}
+          contentId={contentId}
           answeredCount={answeredCount}
           correctCount={correctCount}
           longTermCount={longTermCount}
@@ -835,9 +844,26 @@ function SentenceAssembleQuiz({
   const [picked, setPicked] = useState<number[]>([]);
   const chips = question.chips ?? [];
 
-  // 진행형 힌트: 지금까지 고른 칩 다음에 올 "한 단어"만 강조 (패턴 조립과 동일)
+  // 진행형 힌트: 지금까지 고른 칩 다음에 올 칩만 강조 (패턴 조립과 동일).
+  // 칩이 다단어 청크(레벨2, my-phrases 형식 사다리)일 수 있어 "고른 칩 수"가
+  // 아니라 "소비한 단어 수" 기준으로, 칩의 단어열 전체를 비교한다
+  // (2026-08-20 리뷰: 단어 단위 비교라 청크 칩 힌트가 사문화돼 있었다)
   const expected = (question.hint_answer ?? "").split(/\s+/).filter(Boolean);
-  const nextWord = hintOn ? expected[picked.length] : undefined;
+  const consumedWords = picked.reduce(
+    (n, i) => n + (chips[i]?.split(/\s+/).filter(Boolean).length ?? 0),
+    0,
+  );
+  const normWord = (w: string) => w.toLowerCase().replace(/[^a-z0-9']/g, "");
+  const isNextChip = (chip: string): boolean => {
+    if (!hintOn) return false;
+    const words = chip.split(/\s+/).filter(Boolean);
+    return (
+      words.length > 0 &&
+      words.every(
+        (w, k) => normWord(w) === normWord(expected[consumedWords + k] ?? ""),
+      )
+    );
+  };
 
   return (
     <div>
@@ -870,7 +896,7 @@ function SentenceAssembleQuiz({
                 onActivity(); // 칩을 넣으면 힌트 타이머 리셋
               }}
               className={`min-h-10 rounded-md border-2 px-3 py-1 text-sm transition hover:border-brick-blue active:scale-95 ${
-                nextWord && chip === nextWord
+                isNextChip(chip)
                   ? "border-brick-yellow bg-highlight/60 font-bold"
                   : "border-ink/15 bg-white"
               }`}
