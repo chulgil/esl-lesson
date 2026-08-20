@@ -217,8 +217,10 @@ export function QuizRoyale({
           </div>
 
           {/* 선지를 문제 카드(스킨 섹션) 안에 함께 — 칠판(헤냥이) 스킨의
-              반투명 선지는 어두운 섹션 위에서만 보인다 */}
-          <div className={`${skin.section} p-6`}>
+              반투명 선지는 어두운 섹션 위에서만 보인다.
+              라운드마다 카드가 아래에서 올라오는 전환 (card-rise — 학습 세션과
+              동일 모션, 2026-08-20 게임 UX) */}
+          <div key={round.no} className={`card-rise ${skin.section} p-6`}>
             <p className="text-center font-hand text-4xl font-bold">
               {round.prompt}
             </p>
