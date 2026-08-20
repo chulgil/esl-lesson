@@ -824,3 +824,24 @@ html[data-theme="excel"] .notebook-lines {
 html[data-theme="excel"] .font-hand {
   font-family: var(--font-sans, ui-sans-serif, system-ui), sans-serif;
 }
+
+/* 학습 카드 스택 전환 — 정답 카드가 문제 위로 올라온다 (learning.md 세션 UX,
+   2026-08-20). 게임 라운드 전환(퀴즈로얄)도 같은 등장 모션을 공유한다. */
+@keyframes card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.card-rise {
+  animation: card-rise 0.28s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-rise {
+    animation: none;
+  }
+}

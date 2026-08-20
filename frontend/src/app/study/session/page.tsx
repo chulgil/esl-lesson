@@ -41,6 +41,8 @@ function StudySessionInner() {
   const [idx, setIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>("loading");
   const [result, setResult] = useState<AnswerResult | null>(null);
+  // 정답 카드 표시 여부 — false 면 제출된 문제를 다시 본다 (문제↔정답 왕복)
+  const [showFeedback, setShowFeedback] = useState(true);
   const [correctCount, setCorrectCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   // 이번 세션에서 장기 기억으로 굳은 카드 수 — 완료 화면 요약 (피크엔드)
@@ -135,6 +137,7 @@ function StudySessionInner() {
         // 오답은 세션 끝에 재출제 (docs/specs/learning.md)
         setQueue((q) => [...q, question]);
       }
+      setShowFeedback(true); // 새 채점마다 정답 카드가 앞으로
       setPhase("feedback");
     } catch (e) {
       setError(e instanceof Error ? e.message : "제출 실패");
@@ -148,6 +151,7 @@ function StudySessionInner() {
     } else {
       setIdx(nextIdx);
       setResult(null);
+      setShowFeedback(true);
       setPhase("question");
       startedAt.current = Date.now();
     }
@@ -318,19 +322,69 @@ function StudySessionInner() {
       {(phase === "question" || phase === "feedback") && question && (
         <>
           <ProgressBricks total={queue.length} done={idx} />
-          <QuestionCard
-            key={`${question.card_id}-${idx}`}
-            question={question}
-            disabled={phase === "feedback"}
-            hintDelay={hintDelay}
-            onSubmit={submit}
-          />
-          {phase === "feedback" && result && (
-            <SessionFeedback
-              question={question}
-              result={result}
-              onNext={next}
-            />
+          {/* 카드 스택 — 정답 카드가 문제 위로 올라와 한 화면에서 전환된다
+              (스크롤 없이 문제↔정답 왕복, 2026-08-20 세션 UX). grid 1칸에
+              두 카드를 겹치고 transform/opacity 로 앞뒤를 바꾼다 */}
+          <div className="grid max-w-2xl">
+            <div
+              className={`col-start-1 row-start-1 transition-all duration-300 motion-reduce:transition-none ${
+                phase === "feedback" && showFeedback
+                  ? "pointer-events-none scale-[0.98] opacity-0"
+                  : "opacity-100"
+              }`}
+              aria-hidden={phase === "feedback" && showFeedback}
+            >
+              <QuestionCard
+                key={`${question.card_id}-${idx}`}
+                question={question}
+                disabled={phase === "feedback"}
+                hintDelay={hintDelay}
+                onSubmit={submit}
+              />
+            </div>
+            {phase === "feedback" && result && (
+              <div
+                className={`card-rise col-start-1 row-start-1 transition-all duration-300 motion-reduce:transition-none ${
+                  showFeedback
+                    ? "opacity-100"
+                    : "pointer-events-none translate-y-6 opacity-0"
+                }`}
+                aria-hidden={!showFeedback}
+              >
+                <SessionFeedback
+                  question={question}
+                  result={result}
+                  onNext={next}
+                />
+              </div>
+            )}
+          </div>
+          {/* 문제↔정답 왕복 — 뒤로 가면 제출된 문제를 다시 보고, 화살표로 복귀 */}
+          {phase === "feedback" && (
+            <div className="mt-3 flex max-w-2xl items-center justify-between gap-3">
+              {showFeedback ? (
+                <button
+                  type="button"
+                  onClick={() => setShowFeedback(false)}
+                  className="inline-flex min-h-10 items-center gap-1 rounded-full border-2 border-ink/20 bg-white px-3 text-sm font-bold opacity-80 transition hover:border-ink/50 hover:opacity-100"
+                >
+                  ← 문제 다시 보기
+                </button>
+              ) : (
+                <>
+                  <span className="self-center text-xs opacity-60">
+                    답은 이미 제출됐어요 — 문제만 다시 보는 중
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowFeedback(true)}
+                    className="inline-flex min-h-10 items-center gap-1 rounded-full border-2 border-brick-blue/60 bg-white px-3 text-sm font-bold text-brick-blue transition hover:-translate-y-0.5 hover:border-brick-blue"
+                  >
+                    정답 확인 →
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </>
       )}
