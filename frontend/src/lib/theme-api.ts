@@ -1,5 +1,8 @@
 /** 테마 몰 API — 카탈로그·지급·회수 (docs/specs/theme-mall.md) */
 
+
+import { request } from "@/lib/http";
+
 export type ThemeAccess = "free" | "restricted";
 
 export interface ThemeCatalogItem {
@@ -41,19 +44,6 @@ export interface ThemeGrantItem {
   created_at: string;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`);
-  }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
-}
 
 export const themeApi = {
   themes: () =>

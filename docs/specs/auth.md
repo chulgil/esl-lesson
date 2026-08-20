@@ -76,6 +76,23 @@ Google OAuth 2.0 Authorization Code 흐름을 백엔드(FastAPI)가 직접 처�
 - 세션 무효화: JWT 특성상 즉시 폐기 불가 → 수명 24h로 제한 + admin API는 DB 확인으로 보완.
 - 실패 처리: 콜백 오류 시 `/login?error=oauth`로 복귀, 상세 원인은 서버 로그에만 남김(정보 노출 방지).
 
+## 세션 만료 라우팅 (2026-08-20 — "모든 화면 not authenticated" 보고 해소)
+
+만료 토큰으로 보호 화면이 열리면 위젯마다 401 에러가 흩어진다 — 2중 게이트로
+**로그인 화면 라우팅**을 보장한다. 판단 규칙은 `lib/auth-gate.ts` 단일 지점.
+
+| 층 | 시점 | 동작 |
+|---|---|---|
+| 미들웨어 게이트 | 페이지 진입/이동 | 보호 경로에서 `els_session` 쿠키 없음/만료(JWT exp 디코딩 — 서명 검증은 백엔드 몫, 라우팅 UX 용) → `/login?next=<원경로>` (만료면 `&reason=expired`) |
+| API 401 인터셉트 | 열린 화면의 fetch | 공용 `lib/http.ts request()` 가 401 이면 같은 로그인 URL 로 이동 (도메인별 *-api.ts 전부 이 헬퍼 사용) — 체류 중 만료 대응 |
+
+- **공개 경로**(랜딩 `/`·`/login`·`/privacy`·`/copyright`·`/build-version`)는
+  두 층 모두 라우팅하지 않는다 — 비로그인 방문자가 랜딩에서 로그인으로 튕기면
+  안 된다 (`fetchMe` 는 401 을 null 로 삼켜 랜딩 분기).
+- 로그인 페이지는 `next` 를 Google 로그인 URL 에 관통(`safe_next_path` 백엔드
+  검증)하고, `reason=expired` 면 "로그인이 만료됐어요 — 다시 로그인하면 보던
+  화면으로 돌아가요" 안내를 띄운다.
+
 ## 에러/엣지 케이스
 
 | 케이스 | 처리 |

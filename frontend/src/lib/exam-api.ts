@@ -1,5 +1,8 @@
 /** 시험 API — 요약·응시·서버 채점·랭킹 (docs/specs/library-exam.md) */
 
+
+import { request } from "@/lib/http";
+
 export interface ExamTopEntry {
   nickname: string;
   score: number;
@@ -82,18 +85,6 @@ export interface ExamRankings {
   me: ExamRankingRow | null;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`);
-  }
-  return (await res.json()) as T;
-}
 
 export const examApi = {
   open: () => request<{ items: OpenExam[] }>("/api/exams/open"),
