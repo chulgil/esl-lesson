@@ -2,6 +2,9 @@
  *  2026-08-14: 언어쌍 학습 방(room)으로 확장 — docs/specs/chat-language-rooms.md.
  *  conversations 테이블 확장이 곧 room 이라 room.id === conversation_id. */
 
+
+import { request } from "@/lib/http";
+
 export type SupportedLang = "ko" | "en" | "ja";
 
 /** 자동 번역 결과 — 상대 언어 자동 감지 후 내 주언어/학습언어로 번역 (i18n) */
@@ -114,18 +117,6 @@ export interface ChatNotice {
   updated_by_name?: string | null;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`);
-  }
-  return (await res.json()) as T;
-}
 
 export const chatApi = {
   deleteMessage: (id: number) =>

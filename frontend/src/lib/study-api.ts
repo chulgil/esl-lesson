@@ -1,5 +1,8 @@
 /** 학습/라이브러리 API 클라이언트 (docs/specs/learning.md) */
 
+
+import { request } from "@/lib/http";
+
 export interface Question {
   card_id: number;
   item_id: number;
@@ -317,23 +320,6 @@ export interface LibraryDetail {
   }[];
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`);
-  }
-  // 204 No Content — 본문이 없어 json() 이 던진다 (2026-08-12 "빼기 미반영"
-  // 실원인: 삭제 성공이 파싱 실패로 실패 처리됨)
-  if (res.status === 204) {
-    return undefined as T;
-  }
-  return (await res.json()) as T;
-}
 
 export const studyApi = {
   // contentId 지정 시 해당 덱(콘텐츠)만 학습 (docs/specs/study-decks.md)

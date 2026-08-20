@@ -1,22 +1,8 @@
 /** XP 상점 API — 마스코트·악세사리·책갈피 (docs/specs/mascot-shop.md) */
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    let code = `HTTP ${res.status}`;
-    try {
-      code = (await res.json()).detail ?? code;
-    } catch {
-      // 본문 없는 오류
-    }
-    throw new Error(code);
-  }
-  return (await res.json()) as T;
-}
+
+
+import { request } from "@/lib/http";
 
 export interface ShopItem {
   key: string;

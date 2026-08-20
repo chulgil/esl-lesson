@@ -1,5 +1,8 @@
 /** 알림 센터 API — 친구 요청·수락·게임 초대 알림함 (docs/specs/notifications.md) */
 
+
+import { request } from "@/lib/http";
+
 export interface NotificationItem {
   id: number;
   type: string;
@@ -9,18 +12,6 @@ export interface NotificationItem {
   created_at: string;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`);
-  }
-  return (await res.json()) as T;
-}
 
 export const notificationsApi = {
   list: () =>

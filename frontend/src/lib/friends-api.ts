@@ -1,5 +1,8 @@
 /** 친구 API — 관전 진입용 (docs/specs/study-spectate.md) */
 
+
+import { request } from "@/lib/http";
+
 export interface FriendEntry {
   user_id: number;
   name: string;
@@ -21,19 +24,6 @@ export interface FriendsList {
   outgoing: FriendRequestEntry[];
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`);
-  }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
-}
 
 export const friendsApi = {
   list: () => request<FriendsList>("/api/friends"),

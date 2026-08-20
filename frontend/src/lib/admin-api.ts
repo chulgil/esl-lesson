@@ -1,5 +1,8 @@
 /** 백오피스 API 클라이언트 (docs/specs/backoffice.md) */
 
+
+import { request } from "@/lib/http";
+
 export interface ContentSummary {
   id: number;
   /** chat = 내가 쓰는 말 덱 (my_phrases 자동 생성 — 목록 응답에 실재) */
@@ -86,19 +89,6 @@ export interface TranslationUsage {
   today_calls: number;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
-    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-    ...init,
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(detail?.detail ?? `${res.status} ${res.statusText}`);
-  }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
-}
 
 /** 원저작자 이용허락 증빙 — 파이프라인이 수행하는 이용 3종이 모두 허락돼야 등록된다 */
 export interface ContentPermission {
