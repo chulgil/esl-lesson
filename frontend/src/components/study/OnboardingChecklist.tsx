@@ -138,7 +138,7 @@ export function OnboardingChecklist({
   const doneCount = steps.filter((s) => s.done).length;
 
   return (
-    <section className="max-w-xl rounded-lg border-2 border-brick-blue/40 bg-white p-4">
+    <section className="w-full rounded-lg border-2 border-brick-blue/40 bg-white p-4 text-left">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <p className="text-sm font-bold">
           시작 체크리스트

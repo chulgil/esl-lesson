@@ -37,7 +37,7 @@ export function StudyingFriendsCard() {
   if (studying.length === 0) return null;
 
   return (
-    <section className="max-w-xl rounded-lg border-2 border-brick-green/40 bg-white p-4">
+    <section className="w-full rounded-lg border-2 border-brick-green/40 bg-white p-3 text-left">
       <p className="mb-2 text-sm font-bold">지금 학습 중인 친구</p>
       <ul className="flex flex-col gap-2">
         {studying.map((f) => (

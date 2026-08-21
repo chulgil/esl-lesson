@@ -34,7 +34,7 @@ export function StreakSaverThanks({
   const [, month, day] = shownDay.split("-");
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border-2 border-brick-yellow/60 bg-highlight/30 px-4 py-2.5 text-sm">
+    <div className="flex w-full flex-wrap items-center gap-2 rounded-md border-2 border-brick-yellow/60 bg-highlight/30 px-4 py-2.5 text-left text-sm">
       <span>
         {Number(month)}월 {Number(day)}일, 책갈피가 하루를 지켜줬어요 —{" "}
         <b>{streakDays}일 연속</b>이 계속되고 있어요

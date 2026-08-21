@@ -15,18 +15,21 @@ import { themeApi } from "@/lib/theme-api";
 export default function SettingsPage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-4 py-8 sm:px-10">
-      <h1 className="mb-6 font-hand text-3xl font-bold">
-        <span className="hl">설정</span>
-      </h1>
+      {/* 콘텐츠 열 중앙 정렬 — 좌측 밀착으로 우측 여백만 남던 와이드 화면 교정 (2026-08-21) */}
+      <div className="mx-auto w-full max-w-lg">
+        <h1 className="mb-6 font-hand text-3xl font-bold">
+          <span className="hl">설정</span>
+        </h1>
 
-      <NicknameCard />
-      <DailyGoalSetting />
-      <NotificationCard />
-      <ChatModeCard />
-      <LanguageCard />
-      <ThemeSection />
-      <ShopLinkCard />
-      <DangerZone />
+        <NicknameCard />
+        <DailyGoalSetting />
+        <NotificationCard />
+        <ChatModeCard />
+        <LanguageCard />
+        <ThemeSection />
+        <ShopLinkCard />
+        <DangerZone />
+      </div>
     </main>
   );
 }

@@ -39,7 +39,7 @@ export function WeeklyReportBanner() {
   if (!report) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border-2 border-brick-yellow/60 bg-highlight/30 px-4 py-2.5 text-sm">
+    <div className="flex w-full flex-wrap items-center gap-2 rounded-md border-2 border-brick-yellow/60 bg-highlight/30 px-4 py-2.5 text-left text-sm">
       <UsageBeacon
         kind="weekly_report_view"
         meta={{ surface: "home_banner" }}

@@ -34,9 +34,9 @@ export default function HomePage() {
   }
 
   return (
-    <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
+    <main className="notebook-lines notebook-margin min-h-screen px-4 py-5 sm:px-16 sm:py-10">
       {loading || !me ? (
-        <p className="text-sm opacity-60">불러오는 중...</p>
+        <p className="text-center text-sm opacity-60">불러오는 중...</p>
       ) : (
         <Dashboard me={me} />
       )}
@@ -60,14 +60,17 @@ function Dashboard({ me }: { me: Me }) {
   );
 
   return (
-    <section className="flex flex-col gap-7">
-      {/* 인사 = 페이지 제목 — 랜딩용 대형 타이틀은 AppNav 로고와 중복이라 제거 (2026-07-15 UX 검토) */}
-      <header>
-        <h1 className="font-hand text-3xl font-bold sm:text-4xl">
+    // 모바일 한 화면 원칙 (2026-08-21): 홈 전체가 390px 세로에서 스크롤 없이
+    // 보이도록 콘텐츠 열을 중앙 정렬 + 카드들을 컴팩트하게 유지한다.
+    <section className="mx-auto flex w-full max-w-xl flex-col items-center gap-4 text-center">
+      {/* 인사 = 페이지 제목 — 랜딩용 대형 타이틀은 AppNav 로고와 중복이라 제거 (2026-07-15 UX 검토).
+          모바일 한 줄에 들어가는 크기로 축소 (2026-08-21 모바일 우선) */}
+      <header className="flex flex-col items-center gap-1.5">
+        <h1 className="font-hand text-xl font-bold sm:text-2xl">
           <span className="hl">{me.nickname}</span> 님, 오늘도 한 브릭
           쌓아볼까요?
         </h1>
-        <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        <p className="flex flex-wrap items-center justify-center gap-2 text-xs">
           {stats && (
             <span
               className="rounded bg-brick-blue/10 px-2 py-0.5 font-bold whitespace-nowrap text-brick-blue"
@@ -86,15 +89,19 @@ function Dashboard({ me }: { me: Me }) {
 
       {/* 라이브러리·채팅·게임 브릭 제거 (2026-08-03) — 전역 5탭에 이미 있어
           홈에서 중복 노출됐다. 홈의 1차 행동은 하나뿐이다 */}
-      <div className="flex flex-wrap gap-4">
+      <div className="flex w-full justify-center">
         {noContent ? (
           // 담은 콘텐츠가 없으면 학습할 카드 자체가 안 생긴다 — 세션이 아니라
           // 라이브러리로 보낸다 (기존엔 "새 카드 만나러 가기"가 빈 세션으로 갔다)
-          <Brick color="blue" href="/library">
+          <Brick color="blue" href="/library" className="w-full max-w-sm">
             라이브러리에서 콘텐츠 담기
           </Brick>
         ) : (
-          <Brick color="green" href="/study/session">
+          <Brick
+            color="green"
+            href="/study/session"
+            className="w-full max-w-sm"
+          >
             {/* 낚싯대: 밀린 전체가 아니라 오늘 목표 잔여만 보여준다 (포기 방지) */}
             {!stats
               ? "오늘의 학습 시작"
@@ -110,7 +117,7 @@ function Dashboard({ me }: { me: Me }) {
         )}
       </div>
       {noContent && (
-        <p className="-mt-4 text-sm opacity-70">
+        <p className="-mt-2 text-xs opacity-70">
           아직 담은 콘텐츠가 없어요 — 라이브러리에서 하나 담으면 오늘 학습할
           카드가 만들어져요.
         </p>

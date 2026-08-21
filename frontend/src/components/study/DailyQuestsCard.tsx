@@ -18,7 +18,7 @@ export function DailyQuestsCard() {
   if (!board) return null;
 
   return (
-    <div className="max-w-xl rounded-lg border-2 border-ink/10 bg-white p-4">
+    <div className="w-full rounded-lg border-2 border-ink/10 bg-white p-3 text-left">
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-sm font-bold">오늘의 미션</p>
         <p className="text-xs opacity-60">
@@ -27,28 +27,28 @@ export function DailyQuestsCard() {
             : "3개 다 모으면 보너스 XP"}
         </p>
       </div>
-      <ul className="mt-3 flex flex-col gap-2">
+      {/* 3열 도장 그리드 — 세로 나열 3행을 가로 1행으로 압축 (모바일 한 화면 원칙
+          2026-08-21). 상세 설명(desc)은 title 툴팁으로 이동 */}
+      <ul className="mt-2 grid grid-cols-3 gap-2">
         {board.items.map((q) => (
-          <li key={q.key} className="flex items-center gap-3">
+          <li
+            key={q.key}
+            title={`${q.title} — ${q.desc}`}
+            className="flex flex-col items-center gap-1 rounded-md border border-ink/10 px-1 py-2 text-center"
+          >
             <Stamp done={q.done} />
-            <div className="min-w-0 flex-1">
-              <p
-                className={`text-sm font-bold ${q.done ? "text-brick-green" : ""}`}
-              >
-                {q.title}
-                <span className="ml-1.5 text-xs font-normal opacity-60">
-                  +{q.xp} XP
-                </span>
-              </p>
-              <p className="text-xs opacity-60">{q.desc}</p>
-            </div>
-            <span
-              className={`text-xs font-bold whitespace-nowrap ${
-                q.done ? "text-brick-green" : "opacity-50"
+            <p
+              className={`text-xs leading-tight font-bold ${q.done ? "text-brick-green" : ""}`}
+            >
+              {q.title}
+            </p>
+            <p
+              className={`text-[11px] leading-none whitespace-nowrap ${
+                q.done ? "font-bold text-brick-green" : "opacity-60"
               }`}
             >
-              {q.current}/{q.target}
-            </span>
+              {q.current}/{q.target} · +{q.xp}XP
+            </p>
           </li>
         ))}
       </ul>
@@ -60,7 +60,7 @@ export function DailyQuestsCard() {
 function Stamp({ done }: { done: boolean }) {
   return (
     <span
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition ${
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition ${
         done
           ? "-rotate-6 border-brick-green bg-brick-green/15 text-brick-green"
           : "border-dashed border-ink/20 text-ink/20"
