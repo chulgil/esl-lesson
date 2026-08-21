@@ -1290,6 +1290,9 @@ async def get_network(
             "item_type": item.item_type,
             "state": card.state,
             "reps": card.reps,
+            # 기억 강도 색 램프 재료 — 장기 기억(>=7일)은 회색으로 물러난다
+            # (2026-08-21 어휘망 인지 색 재설계)
+            "stability": card.stability,
         }
         for card, item in rows
     ]

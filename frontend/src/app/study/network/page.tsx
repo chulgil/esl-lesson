@@ -5,6 +5,7 @@ import { Brick } from "@/components/brick/Brick";
 import { BackLink } from "@/components/nav/BackLink";
 import { InsightSheet } from "@/components/study/InsightSheet";
 import {
+  MEMORY_TIERS,
   VocabGraph,
   type GraphEdge,
   type GraphNode,
@@ -20,16 +21,11 @@ import {
   type VocabLang,
 } from "@/lib/vocab-lang";
 
+/* 기억 강도 램프 범례 — 모를수록 빨강(주의), 장기 기억일수록 회색(배경으로).
+   색 정의는 VocabGraph.MEMORY_TIERS 단일 근거 (2026-08-21 인지 색 재설계) */
 const STATE_LEGEND = [
-  { state: "new", label: "새 단어", cls: "bg-brick-blue" },
-  { state: "learning", label: "학습 중", cls: "bg-brick-yellow" },
-  { state: "review", label: "복습", cls: "bg-brick-green" },
-  { state: "relearning", label: "재학습", cls: "bg-brick-red" },
-  {
-    state: "ghost",
-    label: "추천",
-    cls: "border-2 border-dashed border-ink/50 bg-paper",
-  },
+  ...MEMORY_TIERS.map((t) => ({ label: t.label, color: t.color as string })),
+  { label: "추천 (아직 내 것 아님)", color: null },
 ];
 
 /** 어휘망 — 내 어휘를 임베딩 근접 관계로 잇는 그래프 (word-insight P3).
@@ -38,9 +34,7 @@ const STATE_LEGEND = [
 export default function VocabNetworkPage() {
   const [data, setData] = useState<VocabNetwork | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [learningLangs, setLearningLangs] = useState<VocabLang[] | null>(
-    null,
-  );
+  const [learningLangs, setLearningLangs] = useState<VocabLang[] | null>(null);
   const [lang, setLang] = useState<VocabLang | null>(null);
   const [error, setError] = useState(false);
   const [needLogin, setNeedLogin] = useState(false);
@@ -124,6 +118,7 @@ export default function VocabNetworkPage() {
       // 원탭 추가 직후엔 새 단어로 표시
       state: addedIds.has(n.item_id) ? "new" : n.state,
       kind: "mine",
+      stability: n.stability ?? null,
     }));
     const ghosts: GraphNode[] = data.suggestions.map((s) => ({
       id: s.item_id,
@@ -177,11 +172,7 @@ export default function VocabNetworkPage() {
       </header>
 
       {lang && (
-        <VocabLangChips
-          langs={activeLangs}
-          lang={lang}
-          onChange={chooseLang}
-        />
+        <VocabLangChips langs={activeLangs} lang={lang} onChange={chooseLang} />
       )}
 
       {needLogin && (
@@ -237,8 +228,15 @@ export default function VocabNetworkPage() {
         <>
           <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs opacity-80">
             {STATE_LEGEND.map((l) => (
-              <span key={l.state} className="flex items-center gap-1.5">
-                <span className={`h-3 w-3 rounded-full ${l.cls}`} />
+              <span key={l.label} className="flex items-center gap-1.5">
+                {l.color ? (
+                  <span
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: l.color }}
+                  />
+                ) : (
+                  <span className="h-3 w-3 rounded-full border-2 border-dashed border-ink/50 bg-paper" />
+                )}
                 {l.label}
               </span>
             ))}

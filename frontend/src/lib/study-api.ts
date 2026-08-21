@@ -77,6 +77,8 @@ export interface NetworkNode {
   item_type: string;
   state: string;
   reps: number;
+  /** FSRS stability(일) — 기억 강도 색 램프 재료 (>=7 이면 장기 기억=회색) */
+  stability: number | null;
 }
 
 export interface NetworkEdge {
