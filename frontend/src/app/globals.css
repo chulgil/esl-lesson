@@ -626,6 +626,48 @@ html[data-theme="candy"] .brick-studs::before {
   animation: cheer-float 4.5s ease-out forwards;
 }
 
+/* 학습 카드 전환 — 왼쪽 하단을 중심점으로 호를 그리며 오른쪽→왼쪽 슬라이드
+ * (2026-08-21 사용자 피드백: 3D 뒤집기 회전이 어지러움 유발 — 플립 폐기).
+ * 시간축은 항상 왼쪽: 새 면은 오른쪽에서 들어오고, 지난 면은 왼쪽으로 나간다.
+ * "문제 다시 보기"(뒤로)는 역재생 — 문제가 왼쪽에서 복귀, 정답이 오른쪽으로 물러남 */
+.card-face {
+  transform-origin: 0% 100%;
+  transition:
+    transform 0.35s cubic-bezier(0.22, 0.9, 0.35, 1),
+    opacity 0.3s ease;
+}
+.card-face-out-left {
+  transform: translateX(-14%) rotate(-5deg);
+  opacity: 0;
+  pointer-events: none;
+}
+.card-face-out-right {
+  transform: translateX(45%) rotate(5deg);
+  opacity: 0;
+  pointer-events: none;
+}
+@keyframes card-arc-in {
+  from {
+    transform: translateX(55%) rotate(6deg);
+    opacity: 0;
+  }
+}
+.card-arc-in {
+  animation: card-arc-in 0.35s cubic-bezier(0.22, 0.9, 0.35, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-face {
+    transition: opacity 0.2s ease;
+  }
+  .card-face-out-left,
+  .card-face-out-right {
+    transform: none;
+  }
+  .card-arc-in {
+    animation: none;
+  }
+}
+
 /* 게임 오답 피드백 — 입력 영역 좌우 셰이크 */
 @keyframes miss-shake {
   0%,

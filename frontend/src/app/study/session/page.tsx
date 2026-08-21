@@ -475,44 +475,41 @@ function StudySessionInner() {
                   : `오늘 이미 ${doneToday}개를 끝냈어요 — 이어서 진행해요 (답은 제출 즉시 저장돼요)`}
               </p>
             )}
-          {/* 카드 플립 — 채점하면 카드가 뒤집히며 정답 면이 나온다 (플래시카드
-              은유, 2026-08-20 요청). 앞면=문제, 뒷면=정답(180도 선회전 +
-              backface 숨김). 문제↔정답 왕복은 뒤집기 방향만 바뀐다.
-              reduced-motion 은 전환 없이 즉시 교체 */}
-          <div className="grid max-w-2xl [perspective:1400px]">
+          {/* 카드 호 슬라이드 — 왼쪽 하단을 중심점으로 살짝 호를 그리며
+              오른쪽→왼쪽으로 넘어간다 (2026-08-21 사용자 피드백: 3D 뒤집기
+              회전이 어지러움 유발 — 플립 폐기). 앞으로 갈 땐 오른쪽에서 진입,
+              "문제 다시 보기"는 왼쪽에서 복귀 — 시간축이 항상 왼쪽으로 흐른다.
+              reduced-motion 은 페이드만 (globals.css .card-face) */}
+          <div className="grid max-w-2xl overflow-x-clip">
             <div
-              className={`col-start-1 row-start-1 grid transition-transform duration-500 [transform-style:preserve-3d] motion-reduce:transition-none ${
-                phase === "feedback" && showFeedback
-                  ? "[transform:rotateY(180deg)]"
-                  : ""
+              key={`${question.card_id}-${idx}`}
+              className={`card-face card-arc-in col-start-1 row-start-1 ${
+                phase === "feedback" && showFeedback ? "card-face-out-left" : ""
               }`}
+              // inert — 숨은 면이 Tab 순서·스크린리더에 남지 않게 (2026-08-20 점검)
+              inert={phase === "feedback" && showFeedback}
             >
+              <QuestionCard
+                question={question}
+                disabled={phase === "feedback"}
+                hintDelay={hintDelay}
+                onSubmit={submit}
+              />
+            </div>
+            {phase === "feedback" && result && (
               <div
-                className="col-start-1 row-start-1 [-webkit-backface-visibility:hidden] [backface-visibility:hidden]"
-                // inert — 숨은 면이 Tab 순서·스크린리더에 남지 않게 (2026-08-20 점검)
-                inert={phase === "feedback" && showFeedback}
+                className={`card-face card-arc-in col-start-1 row-start-1 ${
+                  showFeedback ? "" : "card-face-out-right"
+                }`}
+                inert={!showFeedback}
               >
-                <QuestionCard
-                  key={`${question.card_id}-${idx}`}
+                <SessionFeedback
                   question={question}
-                  disabled={phase === "feedback"}
-                  hintDelay={hintDelay}
-                  onSubmit={submit}
+                  result={result}
+                  onNext={next}
                 />
               </div>
-              {phase === "feedback" && result && (
-                <div
-                  className="col-start-1 row-start-1 [-webkit-backface-visibility:hidden] [backface-visibility:hidden] [transform:rotateY(180deg)]"
-                  inert={!showFeedback}
-                >
-                  <SessionFeedback
-                    question={question}
-                    result={result}
-                    onNext={next}
-                  />
-                </div>
-              )}
-            </div>
+            )}
           </div>
           {/* 문제↔정답 왕복 — 뒤로 가면 제출된 문제를 다시 보고, 화살표로 복귀 */}
           {phase === "feedback" && (
