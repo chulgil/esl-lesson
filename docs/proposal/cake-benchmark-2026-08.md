@@ -65,6 +65,10 @@
 중심점 호 슬라이드**로 교체 — 회전이 어지러움을 유발한다는 보고. ui-design.md
 모션 원칙에 "3D 플립 금지" 명문화.
 
+미소화 항목 후속: Cake 의 콘텐츠 측 장점 중 **발음 채점**은 별도 기획으로 분리
+— [pronunciation-scoring-2026-08.md](pronunciation-scoring-2026-08.md) (필요 판정,
+V1 인식 통과형부터).
+
 ## 5. 검증
 
 - 기계: `npm run build` (tsc+lint)
