@@ -314,7 +314,8 @@ html[data-theme="lego"] .notebook-lines {
  * 그대로 차지해 AppNav 만큼 잘려 보이는 문제 — 로그인 상태에서 h-dvh
  * 전체화면을 쓰는 대화방(NoteSkin/ExcelChrome) 전용. */
 .h-dvh-nav-safe {
-  height: calc(100dvh - 66px - 48px);
+  /* 탭바 66px 는 노치 기기에서 inset 만큼 더 높아진다 (viewport-fit=cover) */
+  height: calc(100dvh - 66px - 48px - env(safe-area-inset-bottom, 0px));
 }
 @media (min-width: 640px) {
   .h-dvh-nav-safe {
@@ -578,6 +579,8 @@ html[data-theme="candy"] .brick-studs::before {
   }
   body.chat-focus .h-dvh-nav-safe {
     height: calc(100dvh - 48px); /* 상단 미니바만 남음 */
+    /* 입력줄이 홈 인디케이터에 겹치지 않게 (노치 safe-area 계약, ui-design.md) */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   body.chat-focus .henyang-peek {
     display: none; /* 입력줄 시야 확보 — 게임 집중 모드와 동일 취지 */
@@ -621,6 +624,48 @@ html[data-theme="candy"] .brick-studs::before {
 }
 .cheer-float {
   animation: cheer-float 4.5s ease-out forwards;
+}
+
+/* 학습 카드 전환 — 왼쪽 하단을 중심점으로 호를 그리며 오른쪽→왼쪽 슬라이드
+ * (2026-08-21 사용자 피드백: 3D 뒤집기 회전이 어지러움 유발 — 플립 폐기).
+ * 시간축은 항상 왼쪽: 새 면은 오른쪽에서 들어오고, 지난 면은 왼쪽으로 나간다.
+ * "문제 다시 보기"(뒤로)는 역재생 — 문제가 왼쪽에서 복귀, 정답이 오른쪽으로 물러남 */
+.card-face {
+  transform-origin: 0% 100%;
+  transition:
+    transform 0.35s cubic-bezier(0.22, 0.9, 0.35, 1),
+    opacity 0.3s ease;
+}
+.card-face-out-left {
+  transform: translateX(-14%) rotate(-5deg);
+  opacity: 0;
+  pointer-events: none;
+}
+.card-face-out-right {
+  transform: translateX(45%) rotate(5deg);
+  opacity: 0;
+  pointer-events: none;
+}
+@keyframes card-arc-in {
+  from {
+    transform: translateX(55%) rotate(6deg);
+    opacity: 0;
+  }
+}
+.card-arc-in {
+  animation: card-arc-in 0.35s cubic-bezier(0.22, 0.9, 0.35, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-face {
+    transition: opacity 0.2s ease;
+  }
+  .card-face-out-left,
+  .card-face-out-right {
+    transform: none;
+  }
+  .card-arc-in {
+    animation: none;
+  }
 }
 
 /* 게임 오답 피드백 — 입력 영역 좌우 셰이크 */
