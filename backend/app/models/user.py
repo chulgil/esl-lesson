@@ -54,6 +54,9 @@ class UserSettings(Base):
     weekly_report_week: Mapped[str | None] = mapped_column(Text)
     # 활성 마스코트 — 좌하단에 상시 표시되는 캐릭터, NULL=끔 (docs/specs/mascot-shop.md)
     mascot_key: Mapped[str | None] = mapped_column(Text)
+    # 착용 중인 악세사리 키 목록 — NULL=보유분 전부 착용(구 all-on 정책, 기존
+    # 사용자 동작 보존), []=전부 해제 (2026-08-21 착용 토글)
+    mascot_outfits: Mapped[list[str] | None] = mapped_column(StrList, nullable=True)
     # 대표 업적 키 — 대전·리더보드 프로필 밑 칭호 (mascot-shop.md 플레이어 배지)
     featured_achievement: Mapped[str | None] = mapped_column(Text)
     # 다국어 학습 (docs/specs/chat-translation.md) — 주언어(모국어)·학습언어(복수)

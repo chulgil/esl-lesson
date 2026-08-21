@@ -59,7 +59,7 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
           <b>확인 즉시 해당 콘텐츠와 파생 학습 자료를 지체 없이 삭제</b>합니다.
         </p>
         <p className="mt-2">
-          이메일: <b>rimanbackend@gmail.com</b>
+          이메일: <b>lessonaza@gmail.com</b>
           <br />
           포함해 주실 내용: 해당 유튜브 영상 URL, 권리 관계를 확인할 수 있는
           간단한 소명(채널 소유 확인 등)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PurchaseConfirmDialog } from "@/components/shop/PurchaseConfirmDialog";
 import { MascotSvg } from "@/components/theme/mascots";
 import {
   SHOP_EVENT,
@@ -11,12 +12,19 @@ import {
 
 /** 캐릭터 상점 — 마스코트·악세사리·책갈피를 XP 로 구매 (docs/specs/mascot-shop.md).
  *
- *  산 캐릭터는 즉시 좌하단에 나타나고(자동 활성), 악세는 all-on — 보유하면
- *  활성 캐릭터에 전부 착용된다 (2026-08-11 사용자 결정). */
+ *  산 캐릭터는 즉시 좌하단에 나타나고(자동 활성), 악세사리는 탭으로
+ *  착용/해제한다 (2026-08-21 토글 — 구 all-on 정책 개정). 모든 구매는
+ *  확인 다이얼로그를 거친다 — 현재 XP·가격·구매 후 잔액을 보고 확정. */
 export function MascotShopSection() {
   const [shop, setShop] = useState<ShopCatalog | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // 구매 확인 다이얼로그 — run 이 실제 구매를 실행 (마스코트·악세·책갈피 공용)
+  const [confirm, setConfirm] = useState<{
+    label: string;
+    price: number;
+    run: () => Promise<void>;
+  } | null>(null);
 
   const load = () =>
     shopApi
@@ -33,7 +41,9 @@ export function MascotShopSection() {
 
   if (!shop) return null;
 
-  const ownedOutfits = shop.outfits.filter((o) => o.owned).map((o) => o.key);
+  const wornOutfits = shop.outfits
+    .filter((o) => o.worn ?? o.owned)
+    .map((o) => o.key);
 
   function fail(e: unknown) {
     const code = e instanceof Error ? e.message : "실패";
@@ -44,6 +54,7 @@ export function MascotShopSection() {
         saver_full: "책갈피는 최대 2개까지 보관돼요",
         item_not_found: "존재하지 않는 아이템이에요",
         event_only_item: "이벤트로만 받을 수 있는 아이템이에요",
+        not_owned: "먼저 구매해야 착용할 수 있어요",
       }[code] ?? "구매에 실패했어요 — 잠시 후 다시 시도해주세요.",
     );
   }
@@ -68,6 +79,19 @@ export function MascotShopSection() {
       await shopApi.setMascot(key);
       await load();
       dispatchShopUpdated();
+    } catch (e) {
+      fail(e);
+    }
+    setBusy(null);
+  }
+
+  async function toggleOutfit(key: string, worn: boolean) {
+    setBusy(`wear:${key}`);
+    setNotice(null);
+    try {
+      await shopApi.setOutfit(key, worn);
+      await load();
+      dispatchShopUpdated(); // 좌하단·런처의 착용 상태 즉시 갱신
     } catch (e) {
       fail(e);
     }
@@ -115,7 +139,7 @@ export function MascotShopSection() {
                 >
                   <MascotSvg
                     kind={m.key}
-                    outfits={m.owned ? ownedOutfits : []}
+                    outfits={m.owned ? wornOutfits : []}
                   />
                 </div>
                 <p className="text-sm font-bold">{m.label}</p>
@@ -140,7 +164,13 @@ export function MascotShopSection() {
                   <button
                     type="button"
                     disabled={busy !== null}
-                    onClick={() => buy(`mascot:${m.key}`)}
+                    onClick={() =>
+                      setConfirm({
+                        label: m.label,
+                        price: m.price_xp,
+                        run: () => buy(`mascot:${m.key}`),
+                      })
+                    }
                     className={`min-h-9 w-full rounded-full border-2 text-xs font-bold transition ${
                       shop.available_xp >= m.price_xp
                         ? "border-brick-blue bg-brick-blue/10 text-brick-blue hover:-translate-y-0.5"
@@ -149,9 +179,7 @@ export function MascotShopSection() {
                   >
                     {busy === `mascot:${m.key}`
                       ? "구매 중..."
-                      : shop.available_xp >= m.price_xp
-                        ? `${m.price_xp.toLocaleString()} XP`
-                        : `${m.price_xp.toLocaleString()} XP · ${(m.price_xp - shop.available_xp).toLocaleString()} 부족`}
+                      : `${m.price_xp.toLocaleString()} XP`}
                   </button>
                 )}
               </div>
@@ -160,9 +188,9 @@ export function MascotShopSection() {
         </div>
       )}
 
-      {/* 악세사리 — all-on: 사면 캐릭터가 전부 착용한다 */}
+      {/* 악세사리 — 보유한 것은 탭으로 착용/해제 (2026-08-21 토글) */}
       <p className="mt-4 mb-1 text-xs font-bold opacity-70">
-        악세사리 — 사면 캐릭터가 바로 착용해요 (보유한 것 전부)
+        악세사리 — 산 악세사리는 탭해서 착용하거나 벗길 수 있어요
       </p>
       {shop.outfits.length === 0 ? (
         <p className="rounded-lg border-2 border-ink/10 bg-white p-3 text-xs opacity-60">
@@ -170,34 +198,49 @@ export function MascotShopSection() {
         </p>
       ) : (
         <div className="flex flex-wrap gap-2">
-          {shop.outfits.map((o) => (
-            <button
-              key={o.key}
-              type="button"
-              disabled={o.owned || busy !== null || o.sale === "event"}
-              onClick={() => buy(`outfit:${o.key}`)}
-              className={`min-h-9 rounded-full border-2 px-3 text-xs font-bold transition ${
-                o.owned
-                  ? "border-brick-green/50 bg-brick-green/10 text-brick-green"
+          {shop.outfits.map((o) => {
+            const worn = o.worn ?? o.owned;
+            return (
+              <button
+                key={o.key}
+                type="button"
+                disabled={busy !== null || (!o.owned && o.sale === "event")}
+                onClick={() =>
+                  o.owned
+                    ? toggleOutfit(o.key, !worn)
+                    : setConfirm({
+                        label: `악세사리 ${o.label}`,
+                        price: o.price_xp,
+                        run: () => buy(`outfit:${o.key}`),
+                      })
+                }
+                className={`min-h-9 rounded-full border-2 px-3 text-xs font-bold transition ${
+                  o.owned
+                    ? worn
+                      ? "border-brick-green bg-brick-green/15 text-brick-green"
+                      : "border-ink/25 bg-white opacity-70 hover:border-brick-green/60"
+                    : o.sale === "event"
+                      ? "border-brick-yellow/60 bg-highlight/40"
+                      : shop.available_xp >= o.price_xp
+                        ? "border-brick-blue/50 bg-white text-brick-blue hover:-translate-y-0.5"
+                        : "border-ink/15 opacity-50"
+                }`}
+              >
+                {o.label}{" "}
+                {o.owned
+                  ? busy === `wear:${o.key}`
+                    ? "..."
+                    : worn
+                      ? "착용 중"
+                      : "벗음"
                   : o.sale === "event"
-                    ? "border-brick-yellow/60 bg-highlight/40"
-                    : shop.available_xp >= o.price_xp
-                      ? "border-brick-blue/50 bg-white text-brick-blue hover:-translate-y-0.5"
-                      : "border-ink/15 opacity-50"
-              }`}
-            >
-              {o.label}{" "}
-              {o.owned
-                ? "착용 중"
-                : o.sale === "event"
-                  ? "이벤트 한정"
-                  : busy === `outfit:${o.key}`
-                    ? "구매 중..."
-                    : shop.available_xp >= o.price_xp
-                      ? `${o.price_xp.toLocaleString()} XP`
-                      : `${o.price_xp.toLocaleString()} XP · ${(o.price_xp - shop.available_xp).toLocaleString()} 부족`}
-            </button>
-          ))}
+                    ? "이벤트 한정"
+                    : busy === `outfit:${o.key}`
+                      ? "구매 중..."
+                      : `${o.price_xp.toLocaleString()} XP`}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -213,7 +256,13 @@ export function MascotShopSection() {
           disabled={
             busy !== null || shop.streak_saver.count >= shop.streak_saver.max
           }
-          onClick={buySaver}
+          onClick={() =>
+            setConfirm({
+              label: "책갈피 1개 충전",
+              price: shop.streak_saver.price_xp,
+              run: buySaver,
+            })
+          }
           className={`min-h-9 rounded-full border-2 px-3 font-bold transition ${
             shop.streak_saver.count >= shop.streak_saver.max
               ? "border-ink/15 opacity-50"
@@ -224,11 +273,24 @@ export function MascotShopSection() {
         >
           {busy === "saver"
             ? "구매 중..."
-            : shop.available_xp >= shop.streak_saver.price_xp
-              ? `${shop.streak_saver.price_xp} XP로 1개 충전`
-              : `${shop.streak_saver.price_xp} XP · ${(shop.streak_saver.price_xp - shop.available_xp).toLocaleString()} 부족`}
+            : `${shop.streak_saver.price_xp} XP로 1개 충전`}
         </button>
       </div>
+
+      {/* 구매 확인 — 현재 XP·가격·잔액 확인 후 확정, 부족하면 안내만 (2026-08-21) */}
+      {confirm && (
+        <PurchaseConfirmDialog
+          label={confirm.label}
+          priceXp={confirm.price}
+          availableXp={shop.available_xp}
+          busy={busy !== null}
+          onConfirm={async () => {
+            await confirm.run();
+            setConfirm(null);
+          }}
+          onClose={() => setConfirm(null)}
+        />
+      )}
     </section>
   );
 }

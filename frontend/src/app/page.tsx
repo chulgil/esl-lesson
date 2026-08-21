@@ -10,6 +10,7 @@ import { ResumeRoutineCard } from "@/components/study/ResumeRoutineCard";
 import { StreakCelebration } from "@/components/study/StreakCelebration";
 import { StreakSaverThanks } from "@/components/study/StreakSaverThanks";
 import { StudyingFriendsCard } from "@/components/study/StudyingFriendsCard";
+import { UpdatesNewsBanner } from "@/components/study/UpdatesNewsBanner";
 import { WeeklyReportBanner } from "@/components/study/WeeklyReportBanner";
 import { fetchMe, type Me } from "@/lib/api";
 import { studyApi, type Stats } from "@/lib/study-api";
@@ -137,6 +138,9 @@ function Dashboard({ me }: { me: Me }) {
           streakDays={stats.streak_days}
         />
       )}
+
+      {/* 새소식 — 안 본 업데이트가 있을 때 1회 (updates-changelog.md 신뢰 루프) */}
+      <UpdatesNewsBanner />
 
       {/* 주간 성적표 — 새 성적표가 나온 주의 첫 방문에 1회 (weekly-report.md) */}
       <WeeklyReportBanner />

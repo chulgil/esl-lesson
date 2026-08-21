@@ -27,7 +27,10 @@ export function MascotPeek() {
           if (!alive) return;
           setState({
             active: s.active_mascot,
-            outfits: s.outfits.filter((o) => o.owned).map((o) => o.key),
+            // 착용 토글 (2026-08-21): worn 우선, 구 응답 폴백은 owned(all-on)
+            outfits: s.outfits
+              .filter((o) => o.worn ?? o.owned)
+              .map((o) => o.key),
           });
         })
         .catch(() => {
