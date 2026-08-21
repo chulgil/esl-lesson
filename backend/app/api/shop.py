@@ -87,6 +87,13 @@ async def shop_catalog(
             "count": settings.streak_savers,
             "max": SAVER_MAX,
         },
+        # 말풍선 변경권 — 소모성 1회권 (2026-08-21, mascot-shop.md 변경권)
+        "message_ticket": {
+            "price_xp": policies["perk:message"]["price_xp"],
+            "sale": policies["perk:message"]["sale"],
+            "count": settings.mascot_message_tickets,
+            "current_message": settings.mascot_message,
+        },
     }
 
 
@@ -136,6 +143,9 @@ async def purchase_item(
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     if item_price(body.item_key) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "item_not_found")
+    if body.item_key.startswith("perk:"):
+        # 소모성 이용권은 보유가 item_grants 가 아니라 카운터 — 전용 엔드포인트로
         raise HTTPException(status.HTTP_404_NOT_FOUND, "item_not_found")
     policy = (await item_policies(db))[body.item_key]
     if policy["sale"] == "event":
@@ -279,3 +289,77 @@ async def purchase_streak_saver(
         "count": settings.streak_savers,
         "available_xp": available - STREAK_SAVER_PRICE_XP,
     }
+
+
+@router.post("/message-ticket/purchase")
+async def purchase_message_ticket(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """말풍선 변경권 구매 — 소모성 1회권, 가격은 perk:message 정책(백오피스 설정).
+
+    책갈피 충전과 동일 골격 (2026-08-21, mascot-shop.md §말풍선 변경권)."""
+    policy = (await item_policies(db))["perk:message"]
+    if policy["sale"] == "event":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "event_only_item")
+    price = policy["price_xp"]
+    settings = await _settings_of(db, user.id)
+    available = await progress.available_xp(db, user.id)
+    if available < price:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
+    xp_spend = XpSpend(user_id=user.id, amount=price, reason="perk:message")
+    purchase = Purchase(user_id=user.id, item_key="perk:message", method="xp", amount=price)
+    db.add(xp_spend)
+    db.add(purchase)
+    prev_tickets = settings.mascot_message_tickets
+    settings.mascot_message_tickets = prev_tickets + 1
+    await db.commit()
+
+    # TOCTOU 경합 — 커밋 후 재검증으로 음수 잔액을 잡고 티켓 증가를 되돌린다
+    if await progress.revert_if_overdrawn(
+        db,
+        user.id,
+        [xp_spend, purchase],
+        extra_revert=lambda: setattr(settings, "mascot_message_tickets", prev_tickets),
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "insufficient_xp")
+
+    return {
+        "count": settings.mascot_message_tickets,
+        "available_xp": available - price,
+    }
+
+
+MESSAGE_MAX_CHARS = 6
+
+
+class MascotMessageIn(BaseModel):
+    # null = 기본 대사로 복귀 (무료 — 되돌리기는 이용권을 소모하지 않는다)
+    message: str | None
+
+
+@router.patch("/mascot-message")
+async def set_mascot_message(
+    body: MascotMessageIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """말풍선 문구 변경 — 변경권 1개 소모 (2026-08-21, mascot-shop.md).
+
+    말풍선이 작아 1~6자만 허용. 커스텀 설정만 이용권을 소모하고,
+    기본 대사 복귀(null)는 무료다."""
+    settings = await _settings_of(db, user.id)
+    if body.message is None:
+        settings.mascot_message = None
+        await db.commit()
+        return {"message": None, "tickets": settings.mascot_message_tickets}
+
+    text = body.message.strip()
+    if not text or len(text) > MESSAGE_MAX_CHARS or "\n" in text:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_message")
+    if settings.mascot_message_tickets < 1:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "no_ticket")
+    settings.mascot_message_tickets -= 1
+    settings.mascot_message = text
+    await db.commit()
+    return {"message": text, "tickets": settings.mascot_message_tickets}

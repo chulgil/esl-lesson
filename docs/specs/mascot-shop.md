@@ -19,10 +19,25 @@ XP 로 움직이는 캐릭터(마스코트)와 악세사리를 사서 **좌하�
 | 마스코트 | henyang 헤냥이 2000 / bricky 브리키 1500 / mongi 몽이 1500 | | 1개 활성(`user_settings.mascot_key`), 구매 즉시 자동 활성 — 산 캐릭터가 바로 화면에 |
 | 악세사리 | ribbon 300 / glasses 400 / scarf 500 / crown 1000 | | **착용 토글** (2026-08-21 사용자 요청 — 구 all-on 정책 개정): 상점에서 보유 악세를 탭해 착용/해제. `user_settings.mascot_outfits` (NULL=보유분 전부 착용=구 동작 보존), `PATCH /api/shop/outfit {key, worn}`, 구매 시 착용 목록에 자동 추가 |
 
-**구매 확인 다이얼로그** (2026-08-21): 모든 XP 구매(마스코트·악세·책갈피·테마)는
-`PurchaseConfirmDialog` 를 거친다 — 현재 보유 XP·가격·구매 후 잔액 표시,
-부족 시 부족분과 모으는 방법 안내(구매 버튼 없음). 오버레이 절연 계약
-(`bg-paper text-ink`, ui-design.md) 준수.
+**구매 확인 다이얼로그** (2026-08-21): 모든 XP 구매(마스코트·악세·책갈피·테마·
+변경권)는 `PurchaseConfirmDialog` 를 거친다 — 현재 보유 XP·가격·구매 후 잔액
+표시 + **취소·환불 불가 고지**(같은 날 추가 요청), 부족 시 부족분과 모으는
+방법 안내(구매 버튼 없음). 오버레이 절연 계약(`bg-paper text-ink`,
+ui-design.md) 준수.
+
+**말풍선 변경권** (2026-08-21 요청): 캐릭터 말풍선 문구를 바꾸는 소모성 1회권.
+
+- 가격: `perk:message` 정책 (기본 800XP) — **백오피스 상점 관리에서 가격·판매
+  상태 설정** (mascot/outfit 과 동일 item_settings 오버라이드). 소모성이라
+  지급(grants)은 불가(`perk_not_grantable`)
+- 보유: `user_settings.mascot_message_tickets` 카운터 (item_grants 아님) —
+  구매 `POST /api/shop/message-ticket/purchase` (책갈피 골격, TOCTOU 방어)
+- 사용: `PATCH /api/shop/mascot-message {message}` — 1~6자(공백만·줄바꿈·초과
+  422 `invalid_message`), 변경권 없으면 422 `no_ticket`, 성공 시 1개 소모.
+  **null = 기본 대사 복귀(무료)**. 변경 다이얼로그에 "변경권 1개 사용·재변경엔
+  새 변경권 필요" 신중 안내 필수
+- 렌더: `MascotSvg message` prop — 말풍선이 글자 수에 맞춰 왼쪽으로 늘어난다
+  (오른쪽 끝 고정). 아바타 모드는 말풍선 없음 (기존 계약 유지)
 | 책갈피 충전 | 500 XP | | 주 1회 무료 지급과 별개, 최대 보유 `SAVER_MAX`(2) 동일 — 손실 회피 상품(벤치마크 1순위) |
 
 테마 가격도 같은 마이그레이션(3d4c34e2c8d9)이 시드했다 — candy/lego 500,

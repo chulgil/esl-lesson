@@ -25,6 +25,9 @@ export function MascotShopSection() {
     price: number;
     run: () => Promise<void>;
   } | null>(null);
+  // 말풍선 문구 변경 다이얼로그 (변경권 1개 소모 — 신중 안내 포함)
+  const [messageDialog, setMessageDialog] = useState(false);
+  const [draftMessage, setDraftMessage] = useState("");
 
   const load = () =>
     shopApi
@@ -55,6 +58,8 @@ export function MascotShopSection() {
         item_not_found: "존재하지 않는 아이템이에요",
         event_only_item: "이벤트로만 받을 수 있는 아이템이에요",
         not_owned: "먼저 구매해야 착용할 수 있어요",
+        no_ticket: "말풍선 변경권이 필요해요 — 먼저 구매해주세요",
+        invalid_message: "문구는 공백 없이 1~6자로 적어주세요",
       }[code] ?? "구매에 실패했어요 — 잠시 후 다시 시도해주세요.",
     );
   }
@@ -110,6 +115,32 @@ export function MascotShopSection() {
     setBusy(null);
   }
 
+  async function buyMessageTicket() {
+    setBusy("message-ticket");
+    setNotice(null);
+    try {
+      await shopApi.buyMessageTicket();
+      await load();
+    } catch (e) {
+      fail(e);
+    }
+    setBusy(null);
+  }
+
+  async function applyMessage(message: string | null) {
+    setBusy("message-apply");
+    setNotice(null);
+    try {
+      await shopApi.setMascotMessage(message);
+      await load();
+      dispatchShopUpdated(); // 좌하단·런처 말풍선 즉시 갱신
+      setMessageDialog(false);
+    } catch (e) {
+      fail(e);
+    }
+    setBusy(null);
+  }
+
   return (
     <section className="mt-8">
       <p className="mb-1 text-sm font-bold">캐릭터</p>
@@ -140,6 +171,9 @@ export function MascotShopSection() {
                   <MascotSvg
                     kind={m.key}
                     outfits={m.owned ? wornOutfits : []}
+                    message={
+                      m.owned ? shop.message_ticket.current_message : null
+                    }
                   />
                 </div>
                 <p className="text-sm font-bold">{m.label}</p>
@@ -276,6 +310,124 @@ export function MascotShopSection() {
             : `${shop.streak_saver.price_xp} XP로 1개 충전`}
         </button>
       </div>
+
+      {/* 말풍선 문구 변경권 — 소모성 1회권 (2026-08-21 요청) */}
+      <p className="mt-4 mb-1 text-xs font-bold opacity-70">말풍선 문구 변경권</p>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="opacity-70">
+          보유 {shop.message_ticket.count}개 — 캐릭터 말풍선 문구(1~6자)를 바꿀
+          수 있어요
+          {shop.message_ticket.current_message &&
+            ` · 현재 "${shop.message_ticket.current_message}"`}
+        </span>
+        {shop.message_ticket.sale === "event" ? (
+          <span className="rounded-full border-2 border-brick-yellow/60 bg-highlight/40 px-3 py-1 font-bold">
+            이벤트 한정
+          </span>
+        ) : (
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() =>
+              setConfirm({
+                label: "말풍선 변경권 1개",
+                price: shop.message_ticket.price_xp,
+                run: buyMessageTicket,
+              })
+            }
+            className={`min-h-9 rounded-full border-2 px-3 font-bold transition ${
+              shop.available_xp >= shop.message_ticket.price_xp
+                ? "border-brick-blue/50 bg-white text-brick-blue hover:-translate-y-0.5"
+                : "border-ink/15 opacity-50"
+            }`}
+          >
+            {busy === "message-ticket"
+              ? "구매 중..."
+              : `${shop.message_ticket.price_xp.toLocaleString()} XP로 1개 구매`}
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={busy !== null || shop.message_ticket.count === 0}
+          onClick={() => {
+            setDraftMessage("");
+            setMessageDialog(true);
+          }}
+          className={`min-h-9 rounded-full border-2 px-3 font-bold transition ${
+            shop.message_ticket.count > 0
+              ? "border-brick-green/60 bg-white text-brick-green hover:-translate-y-0.5"
+              : "border-ink/15 opacity-50"
+          }`}
+        >
+          문구 바꾸기{shop.message_ticket.count === 0 ? " (변경권 필요)" : ""}
+        </button>
+        {shop.message_ticket.current_message && (
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => applyMessage(null)}
+            className="min-h-9 rounded-full border-2 border-ink/20 bg-white px-3 font-bold opacity-70 transition hover:border-ink/50"
+          >
+            기본 문구로 (무료)
+          </button>
+        )}
+      </div>
+
+      {/* 문구 변경 다이얼로그 — 변경권 소모 전 신중 안내 (오버레이 절연 계약) */}
+      {messageDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 px-6"
+          onClick={() => busy === null && setMessageDialog(false)}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border-2 border-ink/15 bg-paper p-5 text-ink shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="말풍선 문구 바꾸기"
+          >
+            <p className="font-bold">말풍선 문구 바꾸기</p>
+            <p className="mt-2 text-sm">
+              캐릭터가 말풍선에 이 문구를 들고 다녀요 (1~6자).
+            </p>
+            <p className="mt-1.5 rounded-md border-2 border-brick-yellow/60 bg-highlight/30 p-2.5 text-xs">
+              변경권 <b>1개가 사용</b>돼요. 다시 바꾸려면 새 변경권이 필요하니
+              <b> 신중하게</b> 정해주세요. (기본 문구로 되돌리기는 무료)
+            </p>
+            <input
+              type="text"
+              value={draftMessage}
+              onChange={(e) => setDraftMessage(e.target.value)}
+              maxLength={6}
+              placeholder="예: 화이팅!"
+              className="mt-3 w-full rounded-md border-2 border-ink/20 bg-white px-3 py-2.5 text-base focus:border-brick-blue focus:outline-none"
+            />
+            <p className="mt-1 text-right text-xs opacity-50">
+              {draftMessage.trim().length}/6자
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMessageDialog(false)}
+                disabled={busy !== null}
+                className="min-h-11 flex-1 rounded-md border-2 border-ink/20 bg-white text-sm font-bold opacity-80 transition hover:border-ink/50 disabled:opacity-40"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => applyMessage(draftMessage.trim())}
+                disabled={busy !== null || draftMessage.trim().length === 0}
+                className="min-h-11 flex-1 rounded-md bg-brick-green text-sm font-bold text-brick-label transition-colors hover:bg-brick-green/85 disabled:opacity-60"
+              >
+                {busy === "message-apply"
+                  ? "바꾸는 중..."
+                  : "변경권 1개 사용해 바꾸기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 구매 확인 — 현재 XP·가격·잔액 확인 후 확정, 부족하면 안내만 (2026-08-21) */}
       {confirm && (

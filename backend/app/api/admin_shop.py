@@ -16,7 +16,7 @@ from app.core.db import get_db
 from app.core.security import require_admin
 from app.models import ItemGrant, ItemSetting, User
 from app.models.user import UserSettings
-from app.services.mascots import MASCOTS, OUTFITS, item_policies, item_price
+from app.services.mascots import MASCOTS, OUTFITS, PERKS, item_policies, item_price
 from app.services.notifications import notify
 
 router = APIRouter(prefix="/admin/shop", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -49,7 +49,7 @@ async def item_stats(db: Annotated[AsyncSession, Depends(get_db)]) -> dict:
                 "sale": policies[f"{kind}:{key}"]["sale"],
                 "grants": counts.get(f"{kind}:{key}", 0),
             }
-            for kind, catalog in (("mascot", MASCOTS), ("outfit", OUTFITS))
+            for kind, catalog in (("mascot", MASCOTS), ("outfit", OUTFITS), ("perk", PERKS))
             for key, meta in catalog.items()
         ]
     }
@@ -126,6 +126,9 @@ async def create_grant(
 ) -> dict:
     """이벤트 지급 — 구매가 아니므로 purchases 이력에는 남기지 않는다 (지갑 무변동)."""
     _known_or_raise(item_key)
+    if item_key.startswith("perk:"):
+        # 소모성 이용권은 grants(영구 보유)가 아니라 카운터 — 지급 경로 없음 (V1)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "perk_not_grantable")
     user = (
         await db.execute(select(User).where(func.lower(User.email) == body.email.strip().lower()))
     ).scalar_one_or_none()

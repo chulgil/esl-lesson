@@ -1,6 +1,5 @@
 /** 백오피스 API 클라이언트 (docs/specs/backoffice.md) */
 
-
 import { request } from "@/lib/http";
 
 export interface ContentSummary {
@@ -88,7 +87,6 @@ export interface TranslationUsage {
   by_engine: { deepl: number; haiku: number };
   today_calls: number;
 }
-
 
 /** 원저작자 이용허락 증빙 — 파이프라인이 수행하는 이용 3종이 모두 허락돼야 등록된다 */
 export interface ContentPermission {
@@ -251,7 +249,7 @@ export const adminApi = {
 /** 백오피스 캐릭터 상점 — 가격·판매 방식·지급 관리 (docs/specs/mascot-shop.md) */
 export interface AdminShopItem {
   key: string;
-  kind: "mascot" | "outfit";
+  kind: "mascot" | "outfit" | "perk";
   label: string;
   default_price_xp: number;
   price_xp: number;

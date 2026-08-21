@@ -16,6 +16,7 @@ export function MascotPeek() {
   const [state, setState] = useState<{
     active: string | null;
     outfits: string[];
+    message: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -31,10 +32,12 @@ export function MascotPeek() {
             outfits: s.outfits
               .filter((o) => o.worn ?? o.owned)
               .map((o) => o.key),
+            // 말풍선 커스텀 문구 (변경권) — 구 응답 폴백 null=기본 대사
+            message: s.message_ticket?.current_message ?? null,
           });
         })
         .catch(() => {
-          if (alive) setState({ active: null, outfits: [] }); // 미로그인 등 — 테마 폴백만
+          if (alive) setState({ active: null, outfits: [], message: null }); // 미로그인 등 — 테마 폴백만
         });
     load();
     window.addEventListener(SHOP_EVENT, load);
@@ -53,7 +56,7 @@ export function MascotPeek() {
       // 기존 henyang-peek CSS 훅 재사용 — game-focus/chat-focus 숨김·모바일 탭바 회피
       className="henyang-peek pointer-events-none fixed bottom-16 left-1 z-30 origin-bottom-left scale-x-[-0.75] scale-y-75 sm:bottom-2 sm:left-3 sm:scale-x-[-1] sm:scale-y-100"
     >
-      <MascotSvg kind={kind} outfits={state?.outfits ?? []} flip />
+      <MascotSvg kind={kind} outfits={state?.outfits ?? []} message={state?.message} flip />
     </div>
   );
 }
