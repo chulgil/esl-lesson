@@ -42,58 +42,63 @@ export default function MethodPage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
       <UsageBeacon kind="method_view" />
-      <header className="mb-6 flex flex-wrap items-center gap-4">
-        <BackLink href="/" label="홈" />
-        <h1 className="font-hand text-3xl font-bold sm:text-4xl">
-          <span className="hl">이 앱이 영어를 늘리는 방법</span>
-        </h1>
-      </header>
+      {/* 콘텐츠 열 중앙 정렬 — 전 화면 스윕과 통일 (2026-08-21) */}
+      <div className="mx-auto w-full max-w-2xl">
+        <header className="mb-6 flex flex-wrap items-center gap-4">
+          <BackLink href="/" label="홈" />
+          <h1 className="font-hand text-3xl font-bold sm:text-4xl">
+            <span className="hl">이 앱이 영어를 늘리는 방법</span>
+          </h1>
+        </header>
 
-      <div className="flex max-w-2xl flex-col gap-5">
-        <p className="rounded-lg border-2 border-brick-blue/40 bg-white p-4 text-sm leading-relaxed">
-          한 줄 요약:{" "}
-          <b>
-            좋아하는 영상에서 뽑은 진짜 표현을, 잊기 직전에 다시 만나고, 입으로
-            꺼내보고, 그 영상이 들리는지로 확인합니다.
-          </b>
-        </p>
-
-        {RINGS.map((r, i) => (
-          <section
-            key={r.ring}
-            className={`rounded-lg border-2 border-ink/10 bg-white p-5 shadow-sm ${
-              i % 2 ? "rotate-[0.3deg]" : "-rotate-[0.3deg]"
-            }`}
-          >
-            <p className="flex items-baseline gap-2">
-              <span className="font-hand text-3xl font-bold text-brick-red">
-                {r.no}
-              </span>
-              <span className="rounded bg-highlight/70 px-2 py-0.5 text-xs font-bold">
-                {r.ring}
-              </span>
-            </p>
-            <h2 className="mt-1 font-bold">{r.title}</h2>
-            <p className="mt-2 text-sm leading-relaxed opacity-80">{r.body}</p>
-          </section>
-        ))}
-
-        {/* 첫 주 기대치 — "얼마나 해야 하는가"를 못 박아 부담을 끊는다 */}
-        <section className="rounded-lg border-2 border-brick-green/50 bg-white p-5 shadow-sm">
-          <h2 className="font-hand text-2xl font-bold">
-            첫 주엔 이만큼이면 돼요
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed">
-            <b>하루 15개 복습 + 영상 1편 정복 시작</b>이면 충분해요. 바쁜 날은
-            줄여도 됩니다 — <b>1개만 해도 스트릭은 이어져요.</b> 복습 리마인더
-            시각을 정해두면 그 시각에 알림이 도착해요.
+        <div className="flex max-w-2xl flex-col gap-5">
+          <p className="rounded-lg border-2 border-brick-blue/40 bg-white p-4 text-sm leading-relaxed">
+            한 줄 요약:{" "}
+            <b>
+              좋아하는 영상에서 뽑은 진짜 표현을, 잊기 직전에 다시 만나고,
+              입으로 꺼내보고, 그 영상이 들리는지로 확인합니다.
+            </b>
           </p>
-          <div className="mt-4">
-            <Brick color="green" href="/study/session">
-              학습 시작
-            </Brick>
-          </div>
-        </section>
+
+          {RINGS.map((r, i) => (
+            <section
+              key={r.ring}
+              className={`rounded-lg border-2 border-ink/10 bg-white p-5 shadow-sm ${
+                i % 2 ? "rotate-[0.3deg]" : "-rotate-[0.3deg]"
+              }`}
+            >
+              <p className="flex items-baseline gap-2">
+                <span className="font-hand text-3xl font-bold text-brick-red">
+                  {r.no}
+                </span>
+                <span className="rounded bg-highlight/70 px-2 py-0.5 text-xs font-bold">
+                  {r.ring}
+                </span>
+              </p>
+              <h2 className="mt-1 font-bold">{r.title}</h2>
+              <p className="mt-2 text-sm leading-relaxed opacity-80">
+                {r.body}
+              </p>
+            </section>
+          ))}
+
+          {/* 첫 주 기대치 — "얼마나 해야 하는가"를 못 박아 부담을 끊는다 */}
+          <section className="rounded-lg border-2 border-brick-green/50 bg-white p-5 shadow-sm">
+            <h2 className="font-hand text-2xl font-bold">
+              첫 주엔 이만큼이면 돼요
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed">
+              <b>하루 15개 복습 + 영상 1편 정복 시작</b>이면 충분해요. 바쁜 날은
+              줄여도 됩니다 — <b>1개만 해도 스트릭은 이어져요.</b> 복습 리마인더
+              시각을 정해두면 그 시각에 알림이 도착해요.
+            </p>
+            <div className="mt-4">
+              <Brick color="green" href="/study/session">
+                학습 시작
+              </Brick>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   );

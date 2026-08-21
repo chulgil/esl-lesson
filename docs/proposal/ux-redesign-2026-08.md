@@ -12,9 +12,10 @@
 | 카드 컬렉션을 홈 → 학습 탭 이동 | **완료** | `components/study/CardCollection.tsx` |
 | 5탭 테마 라벨 (`NAV_LABEL_OF`) | **완료** | `lib/theme-surfaces.ts`, `nav/AppNav.tsx` |
 | 라이브러리 탭이 `/my` 흡수 | **완료** | `nav/AppNav.tsx` match 규칙 |
-| **D1 중복 대시보드의 본체** (홈 ↔ `/study` 지표·CTA 이원화) | **미착수** | 아래 §2 D1 |
-| 진입점 20화면 정리 (D2 이하) | **미착수** | 아래 §2 |
+| **D1 중복 대시보드의 본체** (홈 ↔ `/study` 지표·CTA 이원화) | **완료** (§7 실행 1~4 + 2026-08-21 학습 탭 접기 정리) | `app/study/page.tsx` 요약 줄·CollapsibleSection |
+| 진입점 20화면 정리 (D2 이하) | **완료** (D2=홈 컴팩트·D3=NAV_LABEL_OF·D4=CTA 분기·D5=추천 한 판) | 아래 §2 각 항목 |
 | §6 성공 기준 "홈 스크롤 없이 노출(390px)" | **완료** (2026-08-21) | [cake-benchmark-2026-08.md](cake-benchmark-2026-08.md) — 홈 컴팩트·중앙 정렬·잔디 접기 |
+| 랜딩(Showcase)·`/method` 중앙 정렬 + 히어로 모바일 타이포 축소 | **완료** (2026-08-21) | `landing/Showcase.tsx`, `app/method/page.tsx` |
 
 스펙 반영: [ui-design.md](../specs/ui-design.md) 대시보드 지표 표기 규칙 · 메뉴 라벨 절.
 
