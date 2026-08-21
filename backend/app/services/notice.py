@@ -6,6 +6,7 @@
 인지시킨다 — 별도 푸시·벨 없음(스펙 결정). 웹푸시는 이 경로에서 호출하지 않는다.
 """
 
+import re
 import uuid
 from datetime import UTC, datetime
 
@@ -20,6 +21,17 @@ from app.services import goals as goals_service
 NOTICE_MAX = 500
 TITLE_MAX = 80
 PREVIEW_MAX = 80
+
+# 체크 항목 줄 — "[] 항목" / "[x] 항목" (docs/specs/chat-notice.md §공지 체크리스트)
+CHECK_LINE_RE = re.compile(r"^\[( |x)?\]\s?(.*)$")
+
+
+def parse_check_line(line: str) -> tuple[bool, str] | None:
+    """체크 항목 줄이면 (checked, label), 일반 줄이면 None."""
+    m = CHECK_LINE_RE.match(line)
+    if m is None:
+        return None
+    return m.group(1) == "x", m.group(2)
 
 
 async def _existing_conversation_or_404(
@@ -131,6 +143,41 @@ async def set_notice(
     # 제목이 곧 미리보기 — TITLE_MAX(80) <= PREVIEW_MAX 라 자름 없음
     system_line = await _record_system_line(db, conv, user_id, "notice_set", title)
     return await _notice_dict(db, conv), system_line, conv
+
+
+async def toggle_check(
+    db: AsyncSession, user_id: int, other_id: int, line_index: int, checked: bool
+) -> tuple[dict, Conversation]:
+    """체크 항목 토글 — 해당 줄만 원자 치환 (행 잠금으로 동시 토글 직렬화).
+
+    시스템 줄 없음 — 체크마다 대화가 오염되지 않게 WS 재조회만
+    (docs/specs/chat-notice.md §공지 체크리스트)."""
+    conv = await _existing_conversation_or_404(db, user_id, other_id)
+    if conv is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "notice_not_found")
+    await _require_mutable(db, conv, user_id)
+    # 행 잠금 — 동시 PATCH 2건이 서로를 덮어쓰지 않게 직렬화
+    row = (
+        await db.execute(
+            select(SharedGoal)
+            .where(SharedGoal.conversation_id == conv.id, SharedGoal.kind == "notice")
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if row is None or not row.text:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "notice_not_found")
+
+    lines = row.text.split("\n")
+    if not 0 <= line_index < len(lines):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "not_check_line")
+    parsed = parse_check_line(lines[line_index])
+    if parsed is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "not_check_line")
+    _, label = parsed
+    lines[line_index] = f"[{'x' if checked else ''}] {label}"
+    row.text = "\n".join(lines)
+    await db.commit()
+    return await _notice_dict(db, conv), conv
 
 
 async def clear_notice(

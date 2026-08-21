@@ -15,7 +15,21 @@ const NOTICE_ERROR_MESSAGES: Record<string, string> = {
   invalid_title: "제목을 입력해주세요",
   title_too_long: "제목이 너무 길어요",
   text_too_long: "내용이 너무 길어요",
+  not_check_line: "공지가 방금 바뀌었어요 — 다시 열어 확인해주세요",
+  notice_not_found: "공지가 내려갔어요",
 };
+
+/** 체크 항목 줄 — "[] 항목" / "[x] 항목" (chat-notice.md §공지 체크리스트).
+ *  백엔드 CHECK_LINE_RE 와 동일 문법 */
+const CHECK_RE = /^\[( |x)?\]\s?(.*)$/;
+
+function parseCheckLine(
+  line: string,
+): { checked: boolean; label: string } | null {
+  const m = CHECK_RE.exec(line);
+  if (!m) return null;
+  return { checked: m[1] === "x", label: m[2] };
+}
 
 function noticeErrorMessage(e: unknown, fallback: string): string {
   const code = e instanceof Error ? e.message : "";
@@ -139,6 +153,20 @@ export function NoticeBar({
       .finally(() => setBusy(false));
   }
 
+  function onToggleCheck(lineIndex: number, next: boolean) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    chatApi
+      .checkNotice(otherId, lineIndex, next)
+      .then(setNotice)
+      .catch((e) => {
+        setError(noticeErrorMessage(e, "체크를 반영하지 못했어요"));
+        load(); // 줄 구성이 바뀌었을 수 있다 — 서버 상태로 재동기화
+      })
+      .finally(() => setBusy(false));
+  }
+
   function onClear() {
     setBusy(true);
     chatApi
@@ -186,10 +214,27 @@ export function NoticeBar({
           }
         />
         <div className="mt-1 flex items-center gap-3">
+          {/* 체크리스트 문법 진입점 — 줄 앞 "[]" 가 체크 항목이 된다 (§공지 체크리스트) */}
+          <button
+            type="button"
+            onClick={() =>
+              setDraft((d) =>
+                (d && !d.endsWith("\n") ? `${d}\n[] ` : `${d}[] `).slice(
+                  0,
+                  MAX_LEN,
+                ),
+              )
+            }
+            className={`text-[11px] font-bold ${
+              excel ? "text-[#217346]" : "text-brick-blue"
+            }`}
+          >
+            [] 체크 항목 추가
+          </button>
           <span
             className={`text-[10px] ${excel ? "text-[#999]" : "opacity-50"}`}
           >
-            {draft.length}/{MAX_LEN}
+            {draft.length}/{MAX_LEN} · [] 로 시작하는 줄은 체크리스트가 돼요
           </span>
           <button
             type="button"
@@ -217,6 +262,12 @@ export function NoticeBar({
 
   // 레거시 행(제목 도입 전)은 내용 첫 줄이 제목 역할을 대신한다
   const barTitle = notice.title ?? (notice.text?.split("\n")[0] || "");
+  // 체크 항목 진행 — 접힌 바에도 정보 냄새 (n/N 배지)
+  const noticeLines = notice.text ? notice.text.split("\n") : [];
+  const checkTotal = noticeLines.filter((l) => parseCheckLine(l)).length;
+  const checkDone = noticeLines.filter(
+    (l) => parseCheckLine(l)?.checked,
+  ).length;
 
   return (
     <section className={wrapClass}>
@@ -234,6 +285,19 @@ export function NoticeBar({
         >
           <span className="min-w-0 flex-1 truncate text-xs">
             [공지] <span className="font-bold">{barTitle}</span>
+            {checkTotal > 0 && (
+              <span
+                className={`ml-1.5 font-bold ${
+                  excel
+                    ? "text-[#217346]"
+                    : checkDone === checkTotal
+                      ? "text-brick-green"
+                      : "opacity-60"
+                }`}
+              >
+                {checkDone}/{checkTotal}
+              </span>
+            )}
           </span>
         </button>
         <button
@@ -276,9 +340,51 @@ export function NoticeBar({
             <p className="text-sm font-bold break-words">{notice.title}</p>
           )}
           {notice.text && (
-            <p className="mt-1 text-sm break-words whitespace-pre-wrap">
-              {notice.text}
-            </p>
+            <div className="mt-1 flex flex-col gap-0.5 text-sm">
+              {noticeLines.map((line, i) => {
+                const check = parseCheckLine(line);
+                if (!check) {
+                  return (
+                    <p key={i} className="break-words whitespace-pre-wrap">
+                      {line}
+                    </p>
+                  );
+                }
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onToggleCheck(i, !check.checked)}
+                    className={`flex items-start gap-1.5 rounded px-0.5 text-left transition-colors disabled:opacity-50 ${
+                      excel ? "hover:bg-[#f6f8f9]" : "hover:bg-highlight/30"
+                    }`}
+                  >
+                    <span
+                      className={`shrink-0 font-mono text-xs leading-5 font-bold ${
+                        check.checked
+                          ? excel
+                            ? "text-[#217346]"
+                            : "text-brick-green"
+                          : excel
+                            ? "text-[#8a8f98]"
+                            : "opacity-50"
+                      }`}
+                      aria-hidden
+                    >
+                      {check.checked ? "[x]" : "[ ]"}
+                    </span>
+                    <span
+                      className={`break-words ${
+                        check.checked ? "line-through opacity-50" : ""
+                      }`}
+                    >
+                      {check.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
