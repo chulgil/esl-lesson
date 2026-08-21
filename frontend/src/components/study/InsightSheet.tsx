@@ -41,8 +41,12 @@ export function InsightSheet({
       onClick={onClose}
       role="presentation"
     >
+      {/* text-ink 명시 — 이 시트는 피드백 카드 DOM 안에서 열리므로, 어두운
+          표면 테마(학교수업 칠판 등)의 분필색 글자를 상속하면 밝은 시트
+          배경에서 글자가 사라진다 (2026-08-21 크리티컬 보고). 오버레이는
+          표면 스킨과 무관하게 paper+ink 짝을 강제한다 */}
       <div
-        className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border-2 border-ink/15 bg-paper p-5 shadow-xl sm:rounded-2xl"
+        className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border-2 border-ink/15 bg-paper p-5 text-ink shadow-xl sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label={`${word} 단어 정보`}
