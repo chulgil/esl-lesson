@@ -53,6 +53,11 @@ export function PurchaseConfirmDialog({
                 </dd>
               </div>
             </dl>
+            {/* 취소 불가 고지 (2026-08-21 요청) — 모든 XP 구매 공통 */}
+            <p className="mt-2 text-xs opacity-60">
+              구매 후에는 취소·환불(XP 반환)이 되지 않아요 — 신중히
+              결정해주세요.
+            </p>
             <div className="mt-4 flex gap-2">
               <button
                 type="button"

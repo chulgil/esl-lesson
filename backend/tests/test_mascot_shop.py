@@ -148,6 +148,44 @@ async def test_streak_saver_purchase_reverts_on_toctou_race(client, db_session, 
     assert shop["available_xp"] == 400  # 동시 구매분만 반영
 
 
+async def test_message_ticket_purchase_and_consume(client, db_session):
+    """말풍선 변경권 — 구매(카운터 증가) → 문구 변경(1개 소모) → 검증·복귀
+    (2026-08-21, mascot-shop.md §말풍선 변경권)."""
+    user = await login(client, db_session)
+
+    # 변경권 없이 변경 시도 → no_ticket
+    res = await client.patch("/api/shop/mascot-message", json={"message": "화이팅"})
+    assert res.status_code == 422
+    assert res.json()["detail"] == "no_ticket"
+
+    # perk 는 일반 구매 엔드포인트로 살 수 없다 (카운터 상품)
+    res = await client.post("/api/shop/purchase", json={"item_key": "perk:message"})
+    assert res.status_code == 404
+
+    await _earn_xp(db_session, user.id, 1000)
+    res = await client.post("/api/shop/message-ticket/purchase")
+    assert res.status_code == 200
+    assert res.json()["count"] == 1
+
+    # 유효성 — 7자·공백만 422
+    for bad in ("일곱글자라서안돼", "   "):
+        res = await client.patch("/api/shop/mascot-message", json={"message": bad})
+        assert res.status_code == 422
+
+    res = await client.patch("/api/shop/mascot-message", json={"message": "화이팅!"})
+    assert res.status_code == 200
+    assert res.json() == {"message": "화이팅!", "tickets": 0}
+
+    shop = (await client.get("/api/shop")).json()
+    assert shop["message_ticket"]["current_message"] == "화이팅!"
+    assert shop["message_ticket"]["count"] == 0
+
+    # 기본 복귀는 무료 (변경권 0개여도 가능)
+    res = await client.patch("/api/shop/mascot-message", json={"message": None})
+    assert res.status_code == 200
+    assert res.json()["message"] is None
+
+
 async def test_outfit_worn_toggle(client, db_session):
     """악세 착용 토글 (2026-08-21) — 기본 all-on, 해제 후 worn=False,
     비보유 403, 착용 목록 관리 중 새 구매는 자동 착용."""

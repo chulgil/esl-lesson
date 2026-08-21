@@ -23,14 +23,22 @@ OUTFITS: dict[str, dict] = {
 # 책갈피(스트릭 보호) 충전 — 벤치마크 1순위 상품(손실 회피). 주 1회 무료 지급과 별개
 STREAK_SAVER_PRICE_XP = 500
 
+# 소모성 이용권 — 1회권, 보유는 user_settings 카운터 (item_grants 아님).
+# message: 캐릭터 말풍선 문구 변경권 (2026-08-21 요청, docs/specs/mascot-shop.md)
+PERKS: dict[str, dict] = {
+    "message": {"label": "말풍선 변경권", "price_xp": 800},
+}
+
 
 def item_price(item_key: str) -> int | None:
-    """ "mascot:henyang" / "outfit:ribbon" 형식 키의 카탈로그 기본가. 모르는 키는 None."""
+    """ "mascot:henyang" / "outfit:ribbon" / "perk:message" 형식 키의 카탈로그 기본가."""
     kind, _, key = item_key.partition(":")
     if kind == "mascot":
         entry = MASCOTS.get(key)
     elif kind == "outfit":
         entry = OUTFITS.get(key)
+    elif kind == "perk":
+        entry = PERKS.get(key)
     else:
         return None
     return entry["price_xp"] if entry else None
@@ -48,7 +56,7 @@ async def item_policies(db) -> dict[str, dict]:
 
     overrides = {s.item_key: s for s in (await db.execute(select(ItemSetting))).scalars()}
     policies: dict[str, dict] = {}
-    for kind, catalog in (("mascot", MASCOTS), ("outfit", OUTFITS)):
+    for kind, catalog in (("mascot", MASCOTS), ("outfit", OUTFITS), ("perk", PERKS)):
         for key, meta in catalog.items():
             item_key = f"{kind}:{key}"
             setting = overrides.get(item_key)

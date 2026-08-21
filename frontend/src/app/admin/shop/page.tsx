@@ -147,7 +147,11 @@ export default function AdminShopPage() {
                 <td className="p-2 font-mono text-xs">{item.key}</td>
                 <td className="p-2">{item.label}</td>
                 <td className="p-2 text-xs">
-                  {item.kind === "mascot" ? "마스코트" : "악세사리"}
+                  {item.kind === "mascot"
+                    ? "마스코트"
+                    : item.kind === "perk"
+                      ? "이용권"
+                      : "악세사리"}
                 </td>
                 <td className="p-2">
                   <button

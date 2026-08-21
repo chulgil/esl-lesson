@@ -92,6 +92,7 @@ export function ChatWidget() {
   const [mascot, setMascot] = useState<{
     kind: string;
     outfits: string[];
+    message: string | null;
   } | null>(null);
   useEffect(() => {
     let alive = true;
@@ -108,6 +109,7 @@ export function ChatWidget() {
                   outfits: s.outfits
                     .filter((o) => o.worn ?? o.owned)
                     .map((o) => o.key),
+                  message: s.message_ticket?.current_message ?? null,
                 }
               : null,
           );
@@ -467,7 +469,7 @@ export function ChatWidget() {
           {excel ? (
             <span>문서</span>
           ) : mascotLauncher && mascot ? (
-            <MascotSvg kind={mascot.kind} outfits={mascot.outfits} />
+            <MascotSvg kind={mascot.kind} outfits={mascot.outfits} message={mascot.message} />
           ) : (
             <PencilNoteIcon />
           )}

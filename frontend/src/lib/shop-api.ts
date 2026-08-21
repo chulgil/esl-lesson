@@ -27,6 +27,13 @@ export interface ShopCatalog {
   mascots: ShopItem[];
   outfits: ShopItem[];
   streak_saver: { price_xp: number; count: number; max: number };
+  /** 말풍선 변경권 — 소모성 1회권 (mascot-shop.md §말풍선 변경권) */
+  message_ticket: {
+    price_xp: number;
+    sale: "xp" | "event";
+    count: number;
+    current_message: string | null;
+  };
 }
 
 /** 구매·활성 변경 후 발행 — 레이아웃의 MascotPeek 이 구독해 즉시 갱신 */
@@ -63,5 +70,17 @@ export const shopApi = {
     request<{ count: number; available_xp: number }>(
       "/api/shop/streak-saver/purchase",
       { method: "POST" },
+    ),
+  /** 말풍선 변경권 구매 — 소모성 1회권 */
+  buyMessageTicket: () =>
+    request<{ count: number; available_xp: number }>(
+      "/api/shop/message-ticket/purchase",
+      { method: "POST" },
+    ),
+  /** 말풍선 문구 변경 (변경권 1개 소모) — null 은 기본 대사 복귀(무료) */
+  setMascotMessage: (message: string | null) =>
+    request<{ message: string | null; tickets: number }>(
+      "/api/shop/mascot-message",
+      { method: "PATCH", body: JSON.stringify({ message }) },
     ),
 };
