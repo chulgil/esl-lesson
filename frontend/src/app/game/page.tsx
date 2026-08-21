@@ -129,77 +129,80 @@ const GAMES: {
 export default function GameHubPage() {
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
-      <header className="mb-2">
-        <h1 className="font-hand text-4xl font-bold">
-          <span className="hl">게임</span>
-        </h1>
-        <p className="mt-2 text-sm opacity-70">
-          배운 단어와 문장이 게임 소재가 돼요 — 놀수록 복습이 됩니다.
-        </p>
-        <GameLangChips />
-        <MyBests />
-      </header>
+      {/* 콘텐츠 열 중앙 정렬 — 좌측 밀착으로 우측 여백만 남던 와이드 화면 교정 (2026-08-21) */}
+      <div className="mx-auto w-full max-w-4xl">
+        <header className="mb-2">
+          <h1 className="font-hand text-4xl font-bold">
+            <span className="hl">게임</span>
+          </h1>
+          <p className="mt-2 text-sm opacity-70">
+            배운 단어와 문장이 게임 소재가 돼요 — 놀수록 복습이 됩니다.
+          </p>
+          <GameLangChips />
+          <MyBests />
+        </header>
 
-      <RecommendedMatch />
+        <RecommendedMatch />
 
-      <div className="mt-6 grid max-w-4xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {GAMES.map((game) => (
-          <div
-            key={game.href}
-            className={`group relative flex flex-col rounded-xl border-2 ${game.color} bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md`}
-          >
-            <h2 className="font-hand text-2xl font-bold group-hover:underline group-hover:decoration-highlight group-hover:decoration-4 group-hover:underline-offset-4">
-              {game.name}
-            </h2>
-            <p className="mt-1 text-sm font-medium opacity-80">
-              {game.tagline}
-            </p>
-            <p className="mt-2 flex flex-wrap items-center gap-1.5 self-start">
-              {/* 스킬 칩 — 훈련 목적(단어/듣기/문장)별로 고르게 (2026-08-18) */}
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs font-bold ${SKILL_CHIP_STYLES[game.skill]}`}
-              >
-                {SKILL_LABELS[game.skill]} 연습
-              </span>
-              <span className="rounded-full bg-ink/5 px-2.5 py-1 text-xs font-bold">
-                {game.players}
-              </span>
-            </p>
-            {/* 모바일: 게임 방법 접기 — 카드 6장 스크롤 부담 절반으로 / 데스크톱: 상시 노출 */}
-            <details className="group relative z-10 mt-1 self-start sm:hidden">
-              {/* inline-flex 가 ::marker 를 지우므로 펼침 화살표를 직접 그림 */}
-              <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1 text-xs font-bold opacity-60">
-                게임 방법
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="transition group-open:rotate-180"
-                  aria-hidden
-                >
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </summary>
-              <HowList how={game.how} className="mb-2 flex" />
-            </details>
-            <HowList how={game.how} className="mt-3 hidden sm:flex" />
-            <Link
-              href={game.href}
-              className="mt-auto self-start pt-2 text-sm font-bold text-brick-blue after:absolute after:inset-0 sm:mt-4 sm:pt-0"
+        <div className="mt-6 grid max-w-4xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {GAMES.map((game) => (
+            <div
+              key={game.href}
+              className={`group relative flex flex-col rounded-xl border-2 ${game.color} bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md`}
             >
-              플레이 →
-            </Link>
-          </div>
-        ))}
-      </div>
+              <h2 className="font-hand text-2xl font-bold group-hover:underline group-hover:decoration-highlight group-hover:decoration-4 group-hover:underline-offset-4">
+                {game.name}
+              </h2>
+              <p className="mt-1 text-sm font-medium opacity-80">
+                {game.tagline}
+              </p>
+              <p className="mt-2 flex flex-wrap items-center gap-1.5 self-start">
+                {/* 스킬 칩 — 훈련 목적(단어/듣기/문장)별로 고르게 (2026-08-18) */}
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-bold ${SKILL_CHIP_STYLES[game.skill]}`}
+                >
+                  {SKILL_LABELS[game.skill]} 연습
+                </span>
+                <span className="rounded-full bg-ink/5 px-2.5 py-1 text-xs font-bold">
+                  {game.players}
+                </span>
+              </p>
+              {/* 모바일: 게임 방법 접기 — 카드 6장 스크롤 부담 절반으로 / 데스크톱: 상시 노출 */}
+              <details className="group relative z-10 mt-1 self-start sm:hidden">
+                {/* inline-flex 가 ::marker 를 지우므로 펼침 화살표를 직접 그림 */}
+                <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1 text-xs font-bold opacity-60">
+                  게임 방법
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="transition group-open:rotate-180"
+                    aria-hidden
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </summary>
+                <HowList how={game.how} className="mb-2 flex" />
+              </details>
+              <HowList how={game.how} className="mt-3 hidden sm:flex" />
+              <Link
+                href={game.href}
+                className="mt-auto self-start pt-2 text-sm font-bold text-brick-blue after:absolute after:inset-0 sm:mt-4 sm:pt-0"
+              >
+                플레이 →
+              </Link>
+            </div>
+          ))}
+        </div>
 
-      {/* 게임별 주간 최고 기록 — 매주 리셋되는 경쟁 루프 (P3) */}
-      <WeeklyLeaderboardsCard />
+        {/* 게임별 주간 최고 기록 — 매주 리셋되는 경쟁 루프 (P3) */}
+        <WeeklyLeaderboardsCard />
+      </div>
     </main>
   );
 }
