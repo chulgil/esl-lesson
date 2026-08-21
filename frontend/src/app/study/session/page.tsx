@@ -698,7 +698,9 @@ function QuestionCard({
   // 학습 카드도 테마 컨셉을 따른다 — 시험지와 동일 표면 스킨 (theme-surfaces)
   const skin = useSurfaceSkin();
   return (
-    <div className={`max-w-xl -rotate-[0.4deg] p-6 shadow-md ${skin.section}`}>
+    // 카드 기울임 제거 (2026-08-21 요청) — 인덱스 카드 회전 은유는 학습
+    // 화면에서 폐기, 전 템플릿 수평
+    <div className={`max-w-xl p-6 shadow-md ${skin.section}`}>
       <p className="mb-1 text-xs opacity-50">레벨 {question.level}</p>
       {(question.quiz_mode === "choice_en2ko" ||
         question.quiz_mode === "choice_ko2en" ||
