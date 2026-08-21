@@ -129,6 +129,10 @@ function StudySessionInner() {
   const [studyLevel, setStudyLevel] = useState(2);
   const [showSettings, setShowSettings] = useState(false);
   const [deckTitle, setDeckTitle] = useState<string | null>(null);
+  // 마이크로 세션 — 기본 세션은 오늘 목표 잔여만큼만 담는다 (cake-benchmark C7).
+  // cutCount = 잘라낸 문항 수 (0 이면 전부 담김), fullQueueRef = 전부 풀기 복원용
+  const [cutCount, setCutCount] = useState(0);
+  const fullQueueRef = useRef<Question[]>([]);
   const startedAt = useRef(Date.now());
   const submittingRef = useRef(false);
 
@@ -158,13 +162,30 @@ function StudySessionInner() {
           }
           const fresh = res.questions.filter((q) => byId.has(q.card_id));
           setQueue([...resumed, ...fresh]);
+          setCutCount(0); // 이어가기는 스냅샷 순서가 정본 — 다시 자르지 않는다
           setPrevDone(saved.answered);
           setCorrectCount(saved.correct);
           setAnsweredCount(saved.answered);
           setLongTermCount(saved.longTerm);
           setPhase(resumed.length + fresh.length ? "question" : "empty");
         } else {
-          setQueue(res.questions);
+          // 마이크로 세션 (cake-benchmark C7): 기본 세션은 오늘 목표 잔여만큼만.
+          // 홈 낚싯대("N개만")의 약속을 세션이 실제로 지킨다 — 밀린 100개를
+          // 다 담으면 1/100 카운터가 시작부터 포기를 부른다. 덱 한정·오답
+          // 모드는 의도된 선택이라 자르지 않는다. "전부 풀기" 칩으로 해제 가능
+          const goalRemainder = res.daily_goal
+            ? Math.max(0, res.daily_goal - (res.done_today ?? 0))
+            : 0;
+          const micro =
+            !contentId &&
+            !weakMode &&
+            goalRemainder > 0 &&
+            res.questions.length > goalRemainder;
+          fullQueueRef.current = res.questions;
+          setQueue(
+            micro ? res.questions.slice(0, goalRemainder) : res.questions,
+          );
+          setCutCount(micro ? res.questions.length - goalRemainder : 0);
           setPrevDone(0);
           setCorrectCount(0);
           setAnsweredCount(0);
@@ -475,6 +496,25 @@ function StudySessionInner() {
                   : `오늘 이미 ${doneToday}개를 끝냈어요 — 이어서 진행해요 (답은 제출 즉시 저장돼요)`}
               </p>
             )}
+          {/* 마이크로 세션 칩 — 목표만 담았음을 알리고, 원하면 전부로 확장
+              (첫 제출 전까지만 — 제출 후 확장은 오답 재출제 복사본을 잃는다) */}
+          {cutCount > 0 && answeredCount === 0 && phase === "question" && (
+            <p className="mb-3 flex max-w-2xl flex-wrap items-center gap-2 rounded-md bg-brick-blue/10 px-3 py-1.5 text-xs">
+              <span className="font-bold text-brick-blue">
+                오늘 목표까지 {queue.length}개만 담았어요
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setQueue(fullQueueRef.current);
+                  setCutCount(0);
+                }}
+                className="ml-auto min-h-8 rounded-full border-2 border-brick-blue/50 bg-white px-2.5 font-bold text-brick-blue transition-colors hover:border-brick-blue"
+              >
+                밀린 것까지 전부 풀기 (+{cutCount}개)
+              </button>
+            </p>
+          )}
           {/* 카드 호 슬라이드 — 왼쪽 하단을 중심점으로 살짝 호를 그리며
               오른쪽→왼쪽으로 넘어간다 (2026-08-21 사용자 피드백: 3D 뒤집기
               회전이 어지러움 유발 — 플립 폐기). 앞으로 갈 땐 오른쪽에서 진입,
@@ -542,14 +582,33 @@ function StudySessionInner() {
       )}
 
       {phase === "done" && (
-        <SessionDone
-          weakMode={weakMode}
-          contentId={contentId}
-          answeredCount={answeredCount}
-          correctCount={correctCount}
-          longTermCount={longTermCount}
-          onRestart={() => window.location.reload()}
-        />
+        <>
+          <SessionDone
+            weakMode={weakMode}
+            contentId={contentId}
+            answeredCount={answeredCount}
+            correctCount={correctCount}
+            longTermCount={longTermCount}
+            onRestart={() => window.location.reload()}
+          />
+          {/* 마이크로 세션 이어가기 — 축하(피크엔드)가 먼저, 추가 분량은 선택.
+              재로딩 시 목표가 이미 달성돼 있어 남은 큐가 전부 담긴다 */}
+          {cutCount > 0 && (
+            <div className="mt-4 flex max-w-2xl flex-wrap items-center gap-2 rounded-md border-2 border-ink/10 bg-white px-4 py-2.5 text-sm">
+              <span>
+                밀린 문제 <b>{cutCount}개</b>가 더 남아 있어요 — 오늘 목표는
+                끝냈으니 쉬어도 좋아요
+              </span>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="ml-auto inline-flex min-h-10 items-center rounded-md border-2 border-brick-green/60 bg-white px-3 text-sm font-bold text-brick-green transition hover:-translate-y-0.5 hover:border-brick-green"
+              >
+                마저 풀기
+              </button>
+            </div>
+          )}
+        </>
       )}
     </main>
   );
