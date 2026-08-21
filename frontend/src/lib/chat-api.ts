@@ -2,7 +2,6 @@
  *  2026-08-14: 언어쌍 학습 방(room)으로 확장 — docs/specs/chat-language-rooms.md.
  *  conversations 테이블 확장이 곧 room 이라 room.id === conversation_id. */
 
-
 import { request } from "@/lib/http";
 
 export type SupportedLang = "ko" | "en" | "ja";
@@ -117,7 +116,6 @@ export interface ChatNotice {
   updated_by_name?: string | null;
 }
 
-
 export const chatApi = {
   deleteMessage: (id: number) =>
     request<void>(`/api/chat/messages/${id}`, { method: "DELETE" }),
@@ -127,6 +125,11 @@ export const chatApi = {
   translation: (id: number) =>
     request<{ translation: Translation | null }>(
       `/api/chat/messages/${id}/translation`,
+    ),
+  /** 외국어 문장의 한글 독음 — [읽기] 토글 지연 로드 (chat-translation §한글 독음) */
+  reading: (text: string, lang: SupportedLang) =>
+    request<{ reading: string | null }>(
+      `/api/chat/reading?text=${encodeURIComponent(text)}&lang=${lang}`,
     ),
   uploadImage: async (file: File) => {
     const form = new FormData();

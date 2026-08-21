@@ -26,6 +26,20 @@ class ChatTranslation(Base, PkMixin, CreatedAtMixin):
     engine: Mapped[str] = mapped_column(String(16))
 
 
+class HangulReading(Base, PkMixin, CreatedAtMixin):
+    """외국어 문장의 한글 독음 캐시 — 학습 방에서 보낸 번역문을 소리 내어
+    읽을 수 있게 발음을 한글로 표기한다 (chat-translation.md §한글 독음)."""
+
+    __tablename__ = "hangul_readings"
+    __table_args__ = (UniqueConstraint("text_key", "lang", name="uq_hangul_readings_key_lang"),)
+
+    # 외국어 원문의 정규화 키 — chat_translations.text_key 와 같은 원칙
+    text_key: Mapped[str] = mapped_column(String(200))
+    # 원문(외국어) 언어 — en | ja
+    lang: Mapped[str] = mapped_column(String(8))
+    reading: Mapped[str] = mapped_column(Text)
+
+
 class TranslationUsage(Base, PkMixin, CreatedAtMixin):
     """번역 엔진 호출 1건 = 1행 (캐시 히트는 기록 안 함 — 비용 0)."""
 

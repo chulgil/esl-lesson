@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { LinkifiedText } from "@/components/chat/LinkifiedText";
-import type { Translation } from "@/lib/chat-api";
+import { chatApi, type Translation } from "@/lib/chat-api";
 
 /** 방 메시지 본문 — 번역 반전 표시 (docs/specs/chat-language-rooms.md 번역 규칙).
  *  본문 = 번역문(있으면), 원문은 [원문] 토글로 하단에 확인. TTS 스피커는 표시
@@ -19,8 +19,29 @@ export function MessageBody({
 }) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [playing, setPlaying] = useState(false);
+  // 한글 독음 — [읽기] 토글 지연 로드 (2026-08-21 요청: 보낸 번역문을 바로
+  // 소리 내어 읽게). undefined=미조회, "loading"=조회 중, ""=실패/예산 초과
+  const [showReading, setShowReading] = useState(false);
+  const [reading, setReading] = useState<string | undefined>(undefined);
 
   const shown = translation?.text || body;
+  const readable =
+    translation && (translation.lang === "en" || translation.lang === "ja");
+
+  function toggleReading() {
+    if (showReading) {
+      setShowReading(false);
+      return;
+    }
+    setShowReading(true);
+    if (reading === undefined && translation) {
+      setReading("loading");
+      chatApi
+        .reading(shown, translation.lang)
+        .then((res) => setReading(res.reading ?? ""))
+        .catch(() => setReading(""));
+    }
+  }
 
   function play() {
     if (playing || !translation) return;
@@ -75,6 +96,28 @@ export function MessageBody({
           {showOriginal && (
             <span className="break-words whitespace-pre-wrap italic">
               {body}
+            </span>
+          )}
+        </div>
+      )}
+      {/* 한글 독음 — 원문 힌트 아래 줄. 본문(외국어)을 소리 나는 대로 한글로
+          (2026-08-21 요청). 뜻이 아니라 발음 — TTS 스피커와 한 쌍 */}
+      {readable && (
+        <div className={`mt-0.5 flex items-start gap-1.5 ${hintTextCls}`}>
+          <button
+            type="button"
+            onClick={toggleReading}
+            className={`shrink-0 underline-offset-2 ${hintBtnCls} ${showReading ? "underline" : ""}`}
+          >
+            [읽기]
+          </button>
+          {showReading && (
+            <span className="break-words whitespace-pre-wrap">
+              {reading === "loading"
+                ? "읽는 법을 만들고 있어요..."
+                : reading === ""
+                  ? "지금은 읽기를 만들 수 없어요"
+                  : reading}
             </span>
           )}
         </div>
