@@ -314,6 +314,9 @@ async def get_queue(
         "deck": deck,
         "questions": questions,
         "done_today": reviews_today,
+        # 마이크로 세션 — 기본 세션을 목표 잔여만큼 자르는 재료
+        # (cake-benchmark P2 C7, 프론트에서 slice)
+        "daily_goal": settings.daily_goal,
     }
 
 

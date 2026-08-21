@@ -338,6 +338,8 @@ export const studyApi = {
       questions: Question[];
       /** 오늘 이미 답한 수 — 재진입 "이어가기" 안내 (답은 즉시 저장) */
       done_today: number;
+      /** 오늘의 목표 — 마이크로 세션(목표 잔여만 담기) 재료. weak 모드 응답엔 없음 */
+      daily_goal?: number;
     }>(qs ? `/api/study/queue?${qs}` : "/api/study/queue");
   },
   decks: () => request<{ items: StudyDeck[] }>("/api/study/decks"),
