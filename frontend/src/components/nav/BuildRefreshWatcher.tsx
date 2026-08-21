@@ -41,13 +41,15 @@ export function BuildRefreshWatcher() {
   }, []);
 
   if (!stale) return null;
+  // 업데이트 소식으로 이동 — 무엇이 바뀌었는지 보고 [확인]으로 업데이트
+  // (2026-08-21 요청: 변경 내역을 보여줘 신뢰를 높인다). /updates 는 새 문서
+  // 요청이라 이동 자체가 새 번들을 받는다 — 소식 화면의 확인 버튼이 reload 마무리
   return (
-    <button
-      type="button"
-      onClick={() => window.location.reload()}
+    <a
+      href="/updates?refresh=1"
       className="fixed bottom-4 left-4 z-50 flex min-h-11 items-center gap-2 rounded-full border-2 border-brick-blue bg-white px-4 text-sm font-bold text-brick-blue shadow-lg transition hover:-translate-y-0.5"
     >
-      새 버전이 나왔어요 — 눌러서 새로고침
-    </button>
+      새 업데이트가 도착했어요 — 무엇이 바뀌었을까요?
+    </a>
   );
 }

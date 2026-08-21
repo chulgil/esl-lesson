@@ -7,7 +7,14 @@
 export const SESSION_COOKIE = "els_session";
 
 /** 비로그인에게도 열린 경로 — 랜딩·로그인·정책·빌드 버전 프로브 */
-const PUBLIC_PATHS = ["/login", "/privacy", "/copyright", "/build-version"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/privacy",
+  "/copyright",
+  "/build-version",
+  // 업데이트 소식 — 신뢰 화면이라 비로그인 열람 허용 (updates-changelog.md)
+  "/updates",
+];
 
 export function isPublicPath(pathname: string): boolean {
   if (pathname === "/") return true;
