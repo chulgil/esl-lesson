@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Brick } from "@/components/brick/Brick";
 import {
@@ -23,6 +23,8 @@ export default function UpdatesPage() {
 
 function UpdatesInner() {
   const fromStale = useSearchParams().get("refresh") === "1";
+  // null=확인 중, true=구버전(업데이트 버튼), false=이미 최신(확인 문구)
+  const [stale, setStale] = useState<boolean | null>(null);
 
   // 열람 즉시 "봤음" 기록 — 홈 새소식 배너가 다시 조르지 않는다
   useEffect(() => {
@@ -32,6 +34,21 @@ function UpdatesInner() {
       // 저장 실패는 무해 — 배너가 한 번 더 보일 뿐
     }
   }, []);
+
+  // CTA 는 실제로 구버전일 때만 — reload 후에도 ?refresh=1 이 남아 버튼이
+  // 계속 노출되던 혼란 픽스 (2026-08-21 보고). 번들 SHA 실측으로 판정한다
+  useEffect(() => {
+    if (!fromStale) return;
+    const mine = process.env.NEXT_PUBLIC_BUILD_SHA ?? "dev";
+    if (mine === "dev") {
+      setStale(false);
+      return;
+    }
+    fetch("/build-version", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setStale(Boolean(data?.sha && data.sha !== mine)))
+      .catch(() => setStale(false));
+  }, [fromStale]);
 
   return (
     <main className="notebook-lines notebook-margin min-h-screen px-6 py-10 sm:px-16">
@@ -45,16 +62,25 @@ function UpdatesInner() {
           </p>
         </header>
 
-        {/* 새 버전 배너에서 온 경우 — 확인 = 최신 버전으로 새로고침 */}
-        {fromStale && (
+        {/* 새 버전 배너에서 온 경우 — 실제 구버전일 때만 업데이트 버튼,
+            이미 최신이면 완료 확인 문구 (버튼이 반복 노출되던 혼란 픽스) */}
+        {fromStale && stale === true && (
           <div className="mx-auto mt-4 flex max-w-md flex-col items-center gap-2 rounded-lg border-2 border-brick-blue/50 bg-white p-4 text-center">
             <p className="text-sm font-bold">
               새 버전이 준비됐어요 — 아래 내용을 확인하고 업데이트하세요
             </p>
-            <Brick color="green" onClick={() => window.location.reload()}>
+            <Brick
+              color="green"
+              onClick={() => window.location.replace("/updates")}
+            >
               확인 — 최신 버전으로 업데이트
             </Brick>
           </div>
+        )}
+        {fromStale && stale === false && (
+          <p className="mx-auto mt-4 max-w-md rounded-lg border-2 border-brick-green/50 bg-brick-green/10 p-3 text-center text-sm font-bold text-brick-green">
+            [v] 최신 버전을 사용 중이에요
+          </p>
         )}
 
         <div className="mt-6 flex flex-col gap-5">
