@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { PurchaseConfirmDialog } from "@/components/shop/PurchaseConfirmDialog";
 import { SHOP_EVENT, dispatchShopUpdated } from "@/lib/shop-api";
 import { studyApi } from "@/lib/study-api";
 import { APP_THEMES, setAppTheme, useAppTheme } from "@/lib/theme";
@@ -86,6 +87,12 @@ export function ThemeShopSection() {
     return () => clearTimeout(timer);
   }, [highlightParam]);
 
+  // 구매 확인 다이얼로그 — 현재 XP·가격·잔액 확인 후 확정 (2026-08-21 요청)
+  const [confirmKey, setConfirmKey] = useState<{
+    key: string;
+    label: string;
+  } | null>(null);
+
   // XP 구매 — 성공 시 즉시 해금 + 그 테마로 전환 (구매의 보상을 바로 체감)
   async function buyTheme(key: string) {
     if (buying) return;
@@ -162,7 +169,9 @@ export function ThemeShopSection() {
                   {prices[t.key] != null && (
                     <button
                       type="button"
-                      onClick={() => buyTheme(t.key)}
+                      onClick={() =>
+                        setConfirmKey({ key: t.key, label: `${t.label} 테마` })
+                      }
                       className={`cursor-pointer rounded-full border-2 px-3 py-1 text-xs font-bold transition ${
                         availableXp !== null && availableXp >= prices[t.key]
                           ? "border-brick-blue bg-brick-blue/10 text-brick-blue hover:-translate-y-0.5"
@@ -198,6 +207,21 @@ export function ThemeShopSection() {
           );
         })}
       </div>
+
+      {/* 구매 확인 — 현재 XP·가격·잔액 확인 후 확정, 부족하면 안내만 (2026-08-21) */}
+      {confirmKey && prices[confirmKey.key] != null && (
+        <PurchaseConfirmDialog
+          label={confirmKey.label}
+          priceXp={prices[confirmKey.key]}
+          availableXp={availableXp ?? 0}
+          busy={buying !== null}
+          onConfirm={async () => {
+            await buyTheme(confirmKey.key);
+            setConfirmKey(null);
+          }}
+          onClose={() => setConfirmKey(null)}
+        />
+      )}
     </section>
   );
 }

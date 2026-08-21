@@ -1,7 +1,5 @@
 /** XP 상점 API — 마스코트·악세사리·책갈피 (docs/specs/mascot-shop.md) */
 
-
-
 import { request } from "@/lib/http";
 
 export interface ShopItem {
@@ -11,6 +9,8 @@ export interface ShopItem {
   /** "event" = 이벤트 지급 전용 — XP 구매 불가 (백오피스 설정) */
   sale: "xp" | "event";
   owned: boolean;
+  /** 악세사리만 — 착용 중 여부 (2026-08-21 착용 토글). 마스코트 행엔 없음 */
+  worn?: boolean;
 }
 
 export interface PurchaseRow {
@@ -52,6 +52,12 @@ export const shopApi = {
     request<{ active_mascot: string | null }>("/api/shop/mascot", {
       method: "PATCH",
       body: JSON.stringify({ key }),
+    }),
+  /** 악세사리 착용/해제 (2026-08-21 토글) */
+  setOutfit: (key: string, worn: boolean) =>
+    request<{ outfits_worn: string[] }>("/api/shop/outfit", {
+      method: "PATCH",
+      body: JSON.stringify({ key, worn }),
     }),
   buySaver: () =>
     request<{ count: number; available_xp: number }>(

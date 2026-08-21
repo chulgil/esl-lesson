@@ -146,3 +146,33 @@ async def test_streak_saver_purchase_reverts_on_toctou_race(client, db_session, 
     shop = (await client.get("/api/shop")).json()
     assert shop["streak_saver"]["count"] == 0  # 증가분 되돌림
     assert shop["available_xp"] == 400  # 동시 구매분만 반영
+
+
+async def test_outfit_worn_toggle(client, db_session):
+    """악세 착용 토글 (2026-08-21) — 기본 all-on, 해제 후 worn=False,
+    비보유 403, 착용 목록 관리 중 새 구매는 자동 착용."""
+    user = await login(client, db_session)
+    db_session.add(ItemGrant(user_id=user.id, item_key="outfit:ribbon", note="test"))
+    await db_session.commit()
+
+    shop = (await client.get("/api/shop")).json()
+    ribbon = next(o for o in shop["outfits"] if o["key"] == "ribbon")
+    assert ribbon["worn"] is True  # NULL = 보유분 전부 착용 (구 all-on 보존)
+
+    res = await client.patch("/api/shop/outfit", json={"key": "ribbon", "worn": False})
+    assert res.status_code == 200
+    assert res.json()["outfits_worn"] == []
+    shop = (await client.get("/api/shop")).json()
+    assert next(o for o in shop["outfits"] if o["key"] == "ribbon")["worn"] is False
+
+    # 비보유 악세는 403
+    res = await client.patch("/api/shop/outfit", json={"key": "crown", "worn": True})
+    assert res.status_code == 403
+
+    # 착용 목록 관리 중 새 구매 → 자동 착용
+    await _earn_xp(db_session, user.id, 1000)
+    res = await client.post("/api/shop/purchase", json={"item_key": "outfit:glasses"})
+    assert res.status_code == 200
+    shop = (await client.get("/api/shop")).json()
+    assert next(o for o in shop["outfits"] if o["key"] == "glasses")["worn"] is True
+    assert next(o for o in shop["outfits"] if o["key"] == "ribbon")["worn"] is False

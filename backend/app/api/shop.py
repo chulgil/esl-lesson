@@ -68,7 +68,8 @@ async def shop_catalog(
             }
             for key, meta in MASCOTS.items()
         ],
-        # 악세는 all-on — 보유하면 활성 마스코트에 전부 착용 (2026-08-11 사용자 결정)
+        # 악세 착용: NULL=보유분 전부 착용(구 all-on), 목록=그것만 착용
+        # (2026-08-21 착용해제 토글 — 사용자 요청으로 all-on 정책 개정)
         "outfits": [
             {
                 "key": key,
@@ -76,6 +77,8 @@ async def shop_catalog(
                 "price_xp": policies[f"outfit:{key}"]["price_xp"],
                 "sale": policies[f"outfit:{key}"]["sale"],
                 "owned": f"outfit:{key}" in owned,
+                "worn": f"outfit:{key}" in owned
+                and (settings.mascot_outfits is None or key in settings.mascot_outfits),
             }
             for key, meta in OUTFITS.items()
         ],
@@ -158,6 +161,9 @@ async def purchase_item(
     if kind == "mascot":
         # 산 캐릭터는 즉시 화면에 — 활성 마스코트로 자동 전환 (2026-08-11 기획)
         settings.mascot_key = key
+    if kind == "outfit" and settings.mascot_outfits is not None:
+        # 착용 목록 관리 중이면 새 악세도 즉시 착용 (구매 보상 체감)
+        settings.mascot_outfits = [*settings.mascot_outfits, key]
     try:
         await db.commit()
     except IntegrityError as exc:  # 동시 구매 경합 (uq_item_grants_user_key)
@@ -179,6 +185,40 @@ async def purchase_item(
         "available_xp": available - price,
         "active_mascot": settings.mascot_key,
     }
+
+
+class OutfitIn(BaseModel):
+    key: str
+    worn: bool
+
+
+@router.patch("/outfit")
+async def set_outfit_worn(
+    body: OutfitIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """악세사리 착용/해제 토글 (2026-08-21 사용자 요청 — 구 all-on 정책 개정).
+
+    첫 토글 시 NULL(전부 착용)을 보유 목록으로 구체화한 뒤 반영한다."""
+    if body.key not in OUTFITS:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "outfit_not_found")
+    owned = await _owned_keys(db, user.id)
+    if f"outfit:{body.key}" not in owned:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_owned")
+    settings = await _settings_of(db, user.id)
+    worn_now = (
+        [k for k in OUTFITS if f"outfit:{k}" in owned]
+        if settings.mascot_outfits is None
+        else list(settings.mascot_outfits)
+    )
+    if body.worn and body.key not in worn_now:
+        worn_now.append(body.key)
+    if not body.worn and body.key in worn_now:
+        worn_now.remove(body.key)
+    settings.mascot_outfits = worn_now
+    await db.commit()
+    return {"outfits_worn": worn_now}
 
 
 class MascotIn(BaseModel):
