@@ -11,7 +11,7 @@
 | `lib/changelog.ts` `CHANGELOG` | 배포일별 사용자 언어 항목 — **단일 근거** (최신이 앞) |
 | `/updates` 페이지 | 소식 목록. 열람 즉시 localStorage `esl:changelog:seen` 에 최신 날짜 기록 |
 | `BuildRefreshWatcher` (좌하단) | 새 번들 감지 → "새 업데이트가 도착했어요" → `/updates?refresh=1` 링크 (a 태그 전체 탐색 — 이동 자체가 새 번들 로드) |
-| `/updates?refresh=1` | 상단에 "확인 — 최신 버전으로 업데이트" 브릭 → `location.reload()` |
+| `/updates?refresh=1` | **실제 구버전일 때만** 업데이트 브릭 (번들 SHA 를 /build-version 과 실측 대조 — 2026-08-21 픽스: reload 후 쿼리가 남아 버튼이 반복 노출). 확인 = `location.replace("/updates")` (쿼리 제거 + 새 번들). 이미 최신이면 "[v] 최신 버전을 사용 중이에요" 문구 |
 | `UpdatesNewsBanner` (홈) | 안 본 업데이트가 있으면 조용한 한 줄 1회 — 방문/닫기로 소멸 (성적표 배너 패턴) |
 
 ## 유지 규칙 (배포 시)
