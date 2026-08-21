@@ -84,34 +84,35 @@ export function MessageBody({
           <SpeakerIcon />
         </button>
       )}
+      {/* 힌트 줄 — [원문] [읽기] 버튼을 한 줄에 (2026-08-21 요청: 두 줄로
+          쪼개지 않는다). 펼친 내용은 각각 아래 줄에 표시 */}
       {translation && (
-        <div className={`mt-0.5 flex items-start gap-1.5 ${hintTextCls}`}>
-          <button
-            type="button"
-            onClick={() => setShowOriginal((v) => !v)}
-            className={`shrink-0 underline-offset-2 ${hintBtnCls} ${showOriginal ? "underline" : ""}`}
-          >
-            [원문]
-          </button>
+        <div className={`mt-0.5 flex flex-col gap-0.5 ${hintTextCls}`}>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowOriginal((v) => !v)}
+              className={`shrink-0 underline-offset-2 ${hintBtnCls} ${showOriginal ? "underline" : ""}`}
+            >
+              [원문]
+            </button>
+            {readable && (
+              <button
+                type="button"
+                onClick={toggleReading}
+                className={`shrink-0 underline-offset-2 ${hintBtnCls} ${showReading ? "underline" : ""}`}
+              >
+                [읽기]
+              </button>
+            )}
+          </div>
           {showOriginal && (
             <span className="break-words whitespace-pre-wrap italic">
               {body}
             </span>
           )}
-        </div>
-      )}
-      {/* 한글 독음 — 원문 힌트 아래 줄. 본문(외국어)을 소리 나는 대로 한글로
-          (2026-08-21 요청). 뜻이 아니라 발음 — TTS 스피커와 한 쌍 */}
-      {readable && (
-        <div className={`mt-0.5 flex items-start gap-1.5 ${hintTextCls}`}>
-          <button
-            type="button"
-            onClick={toggleReading}
-            className={`shrink-0 underline-offset-2 ${hintBtnCls} ${showReading ? "underline" : ""}`}
-          >
-            [읽기]
-          </button>
-          {showReading && (
+          {/* 한글 독음 — 본문(외국어)을 소리 나는 대로. 뜻이 아니라 발음 */}
+          {readable && showReading && (
             <span className="break-words whitespace-pre-wrap">
               {reading === "loading"
                 ? "읽는 법을 만들고 있어요..."

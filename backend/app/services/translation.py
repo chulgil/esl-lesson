@@ -161,11 +161,20 @@ READING_MAX_CHARS = 500
 
 
 def _reading_system(lang: str) -> str:
-    """한글 독음 지시 — 번역이 아니라 소리 나는 대로 (chat-translation.md §한글 독음)."""
+    """한글 독음 지시 — 번역이 아니라 소리 나는 대로 (chat-translation.md §한글 독음).
+
+    2026-08-21 제보: 必要そうですね → "히츠요우 소우데스네" — う단 장음을
+    '우'로 그대로 적으면 두 음절로 읽혀 틀린다. 장음은 앞 모음 반복으로 명시."""
     example = (
-        "예: Could you send me the file → 쿠쥬 센드 미 더 파일"
+        "예: Could you send me the file → 쿠쥬 센드 미 더 파일 / "
+        "I think I have to work late → 아이 씽크 아이 해브 투 워크 레이트"
         if lang == "en"
-        else "예: ありがとうございます → 아리가토 고자이마스 / 頑張って → 간밧테"
+        else (
+            "일본어 장음은 'う'를 '우'로 적지 않고 앞 모음을 한 번 더 적는다: "
+            "ひつよう→히츠요오(히츠요우 아님), そうですね→소오데스네(소우데스네 아님), "
+            "ありがとう→아리가토오. 촉음(っ)은 받침으로: ちょっと→촛토. "
+            "예: 必要そうですね → 히츠요오 소오데스네 / 頑張って → 간밧테"
+        )
     )
     return (
         PAYLOAD_RULE + f"<message> 태그 안 {LANG_LABELS[lang]} 문장의 발음을 "
