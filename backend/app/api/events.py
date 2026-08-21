@@ -18,7 +18,10 @@ from app.models.user import User
 router = APIRouter(prefix="/events", tags=["events"])
 
 # 관측 대상 표면 (effectiveness-audit 4차 P1-D) — 새 표면은 여기에 추가
-KINDS = frozenset({"record_compare", "method_view", "weekly_report_view", "review_add"})
+# speech_check: 발음 확인 시도 (pronunciation-scoring V1) — speak_3 미션 집계 재료
+KINDS = frozenset(
+    {"record_compare", "method_view", "weekly_report_view", "review_add", "speech_check"}
+)
 META_MAX_KEYS = 8
 META_MAX_VALUE_LEN = 100
 
