@@ -256,3 +256,68 @@ async def test_concurrent_cache_insert_returns_existing_row(db_session, monkeypa
 
     count = (await db_session.execute(select(func.count(ChatTranslation.id)))).scalar_one()
     assert count == 1  # 경합해도 캐시 행은 1개만
+
+
+# --- 한글 독음 (chat-translation.md §한글 독음) -----------------------------------
+
+
+async def test_reading_cached_and_usage_logged(db_session, monkeypatch):
+    calls = []
+
+    async def fake_reading(text, lang):
+        calls.append(text)
+        return "쿠쥬 센드 미 더 파일"
+
+    monkeypatch.setattr(translation, "_call_haiku_reading", fake_reading)
+
+    r1 = await translation.hangul_reading(db_session, 1, "Could you send me the file", "en")
+    assert r1 == "쿠쥬 센드 미 더 파일"
+    # 캐시 히트 — 엔진 재호출·usage 추가 없음
+    r2 = await translation.hangul_reading(db_session, 1, "Could you send me the file", "en")
+    assert r2 == r1
+    assert len(calls) == 1
+
+    from app.models import HangulReading
+
+    rows = (await db_session.execute(select(func.count(HangulReading.id)))).scalar_one()
+    assert rows == 1
+    usage = (
+        await db_session.execute(
+            select(func.count(TranslationUsage.id)).where(TranslationUsage.engine == "reading")
+        )
+    ).scalar_one()
+    assert usage == 1
+
+
+async def test_reading_rejects_unsupported_and_untranslatable(db_session, monkeypatch):
+    async def boom(text, lang):
+        raise AssertionError("engine must not be called")
+
+    monkeypatch.setattr(translation, "_call_haiku_reading", boom)
+    assert await translation.hangul_reading(db_session, 1, "hello", "ko") is None
+    assert await translation.hangul_reading(db_session, 1, "ㅋㅋㅋ", "en") is None
+
+
+async def test_reading_engine_failure_returns_none(db_session, monkeypatch):
+    async def boom(text, lang):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(translation, "_call_haiku_reading", boom)
+    assert await translation.hangul_reading(db_session, 1, "hello there", "en") is None
+
+
+async def test_mixed_script_output_rejected_not_cached(db_session, monkeypatch):
+    """한→일 번역에 한글이 남으면(원文に…) 무효 — 캐시 오염 차단 (2026-08-21 제보)."""
+
+    async def bad_haiku(text, target):
+        return "원文に読み方も追加してみましょうか？"
+
+    monkeypatch.setattr(translation, "_call_haiku", bad_haiku)
+    monkeypatch.setattr(get_settings(), "deepl_api_key", "", raising=False)
+
+    result = await translation.translate_to(
+        db_session, 1, "원문에 읽는방법까지 추가해볼까요?", "ja"
+    )
+    assert result is None
+    count = (await db_session.execute(select(func.count(ChatTranslation.id)))).scalar_one()
+    assert count == 0  # 오염 출력은 캐시하지 않는다

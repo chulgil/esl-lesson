@@ -51,6 +51,23 @@
   번역 줄 + 스피커(해당 언어 TTS). 위장 테마에선 각주처럼 보인다
 - WS 수신 메시지는 클라이언트가 단건 번역 엔드포인트로 지연 로드
 
+## 한글 독음 (2026-08-21 — 학습 방 발음 표기)
+
+> 요청: 학습 방(한→일/한→영)에서 보낸 번역문을 바로 소리 내어 읽을 수 있게,
+> 원문 힌트 아래에 외국어 문장의 **읽는 법을 한글로** 표기한다.
+
+- **표시**: MessageBody 의 [원문] 아래 **[읽기] 토글** — 열면 본문(외국어)의
+  한글 독음을 지연 로드. 번역이 en/ja 일 때만 노출. 실패·예산 초과 시
+  "지금은 읽기를 만들 수 없어요" (채팅은 정상)
+- **API**: GET `/api/chat/reading?text&lang=en|ja` → `{reading|null}` —
+  로그인 필수, 500자 초과·미지원 언어 422
+- **캐시**: `hangul_readings(text_key, lang, reading)` 유니크 — 전역 공유
+  (chat_translations 와 같은 원칙, 마이그레이션 h2c3d4e5f6a7)
+- **엔진**: Haiku 전용 (`_call_haiku_reading` — 독음 프롬프트: 번역 금지·연음
+  반영·한글만). DeepL 폴백 없음 (음역 불가). 예산은 번역과 동일 원장
+  (TranslationUsage engine="reading") + 동일 하드캡 게이트
+- 이모티콘·초성 전용(has_translatable_text 미통과)은 대상 아님
+
 ## 콘텐츠 다국어 (Phase 3)
 
 - `contents.lang` en/ja/ko (기존 en 백필) — 자막 fetch·번역 프롬프트·추출

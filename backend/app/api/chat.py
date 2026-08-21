@@ -327,6 +327,26 @@ async def message_translation(
     return {"translation": result}
 
 
+@router.get("/reading")
+async def hangul_reading(
+    text: str,
+    lang: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """외국어 문장의 한글 독음 — 학습 방 번역문을 소리 내어 읽는 용도
+    (2026-08-21 요청, chat-translation.md §한글 독음). [읽기] 토글의 지연 로드.
+
+    실패·예산 초과는 {"reading": null} — 표시만 생략, 채팅은 정상."""
+    if lang not in translation_service.READING_LANGS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "unsupported_lang")
+    if not text.strip() or len(text) > translation_service.READING_MAX_CHARS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_text")
+    reading = await translation_service.hangul_reading(db, user.id, text, lang)
+    await db.commit()
+    return {"reading": reading}
+
+
 # --- 이미지 업로드 (docs/specs/chat.md 이미지 전송) ------------------------------
 
 IMAGE_TYPES = {

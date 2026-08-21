@@ -9,6 +9,7 @@
 """
 
 import logging
+import re
 from datetime import UTC, datetime, timedelta, timezone
 
 import httpx
@@ -18,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models.translation import ChatTranslation, TranslationUsage
+from app.models.translation import ChatTranslation, HangulReading, TranslationUsage
 from app.models.user import UserSettings
 from app.services.langs import (
     DEEPL_CODES,
@@ -155,6 +156,88 @@ async def translate_chat(
     return await translate_to(db, user_id, text, target)
 
 
+READING_LANGS = frozenset({"en", "ja"})
+READING_MAX_CHARS = 500
+
+
+def _reading_system(lang: str) -> str:
+    """한글 독음 지시 — 번역이 아니라 소리 나는 대로 (chat-translation.md §한글 독음)."""
+    example = (
+        "예: Could you send me the file → 쿠쥬 센드 미 더 파일"
+        if lang == "en"
+        else "예: ありがとうございます → 아리가토 고자이마스 / 頑張って → 간밧테"
+    )
+    return (
+        PAYLOAD_RULE + f"<message> 태그 안 {LANG_LABELS[lang]} 문장의 발음을 "
+        "한국어 한글로만 표기한다(독음). 번역이 아니다 — 뜻을 옮기지 말고 "
+        f"원어민이 자연스럽게 말할 때의 소리(연음 포함)를 적는다. {example}. "
+        "한글과 공백 외 다른 문자를 출력하지 않는다. 독음만 출력한다."
+    )
+
+
+async def _call_haiku_reading(text: str, lang: str) -> str | None:
+    cfg = get_settings()
+    if not cfg.anthropic_api_key:
+        return None
+    client = _haiku_client()
+    res = await client.messages.create(
+        model=cfg.anthropic_translate_model,
+        max_tokens=1000,
+        system=_reading_system(lang),
+        messages=[{"role": "user", "content": _wrap_payload(text)}],
+    )
+    return _first_text(res).strip() or None
+
+
+async def hangul_reading(db: AsyncSession, user_id: int, text: str, lang: str) -> str | None:
+    """외국어 문장의 한글 독음 — 캐시 → 예산 게이트 → Haiku (전용 캐시 테이블).
+
+    학습 방에서 내가 보낸 번역문을 바로 소리 내어 읽는 용도 (2026-08-21 요청).
+    실패·예산 초과는 None — 채팅 표시는 계속 정상 동작한다."""
+    if lang not in READING_LANGS or not has_translatable_text(text):
+        return None
+
+    key = normalize_text_key(text)
+    cached = (
+        await db.execute(
+            select(HangulReading.reading).where(
+                HangulReading.text_key == key, HangulReading.lang == lang
+            )
+        )
+    ).scalar_one_or_none()
+    if cached is not None:
+        return cached
+
+    if not await _within_budget(db, user_id):
+        return None
+
+    try:
+        reading = await _call_haiku_reading(text, lang)
+    except Exception:  # noqa: BLE001 — 독음 실패는 조용히 (표시만 생략)
+        logger.warning("hangul reading failed text=%r", text[:40])
+        return None
+    if not reading:
+        return None
+
+    try:
+        # SAVEPOINT — 동시 요청 캐시 경합 격리 (translate_to 와 동일 패턴)
+        async with db.begin_nested():
+            db.add(HangulReading(text_key=key, lang=lang, reading=reading))
+            await db.flush()
+    except IntegrityError:
+        return (
+            await db.execute(
+                select(HangulReading.reading).where(
+                    HangulReading.text_key == key, HangulReading.lang == lang
+                )
+            )
+        ).scalar_one()
+
+    db.add(TranslationUsage(user_id=user_id, chars=len(text), engine="reading"))
+    await db.flush()
+    return reading
+
+
 async def cache_lookup(db: AsyncSession, text: str, target: str) -> str | None:
     """전역 번역 캐시만 조회 — 엔진 호출·예산 소모 없음 (방 목록 미리보기 등 저비용 경로,
     docs/specs/chat-language-rooms.md). 캐시 미스면 번역을 시도하지 않고 None."""
@@ -170,6 +253,18 @@ async def cache_lookup(db: AsyncSession, text: str, target: str) -> str | None:
     ).scalar_one_or_none()
 
 
+_HANGUL_RE = re.compile(r"[가-힣]")
+
+
+def _valid_translation(target: str, translated: str) -> bool:
+    """스크립트 가드 — en/ja 번역문에 한글이 남으면 무효 (2026-08-21 제보:
+    "원문에…" → "원文に…" 혼용 출력이 캐시에 박제됨). 무효면 캐시하지 않고
+    다음 엔진으로 폴백한다."""
+    if target in ("en", "ja") and _HANGUL_RE.search(translated):
+        return False
+    return True
+
+
 async def _translate_via_chain(text: str, target: str) -> tuple[str, str] | None:
     """Haiku(원어민 캐주얼 프롬프트) 우선, DeepL 폴백.
 
@@ -182,14 +277,16 @@ async def _translate_via_chain(text: str, target: str) -> tuple[str, str] | None
     cfg = get_settings()
     try:
         translated = await _call_haiku(text, target)
-        if translated:
+        if translated and _valid_translation(target, translated):
             return translated, "haiku"
+        if translated:
+            logger.warning("haiku mixed-script output rejected text=%r", text[:40])
     except Exception:  # noqa: BLE001 — 실패는 폴백으로, 채팅은 계속 진행
         logger.warning("haiku translate failed, falling back to deepl text=%r", text[:40])
     if cfg.deepl_api_key:
         try:
             translated = await _call_deepl(text, target, cfg.deepl_api_key)
-            if translated:
+            if translated and _valid_translation(target, translated):
                 return translated, "deepl"
         except Exception:  # noqa: BLE001
             logger.exception("deepl translate failed text=%r", text[:40])
@@ -271,7 +368,10 @@ def _haiku_system(target: str) -> str:
         f"사람 이름(님·씨·야 호칭 포함)은 반드시 발음·성별을 고려해 {LANG_LABELS[target]}권에서 "
         f"흔한 이름으로 바꾼다 — 로마자·원어 표기를 그대로 두지 않는다 ({name_examples}). "
         "단, 직급·직함(팀장님·부장님·과장님 등)은 바꾸지 않고 그대로 옮긴다. "
-        "같은 이름은 항상 같은 이름으로 옮긴다. 번역문만 출력한다."
+        "같은 이름은 항상 같은 이름으로 옮긴다. "
+        "번역문은 대상 언어의 정서법으로만 쓴다 — 원문의 한글 음절을 출력에 "
+        "남기지 않는다 (2026-08-21 실사용 제보: 원문에→원文に 처럼 한글+한자가 "
+        "섞여 나옴. 올바른 출력은 原文に). 번역문만 출력한다."
     )
 
 

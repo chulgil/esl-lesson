@@ -266,3 +266,28 @@ async def test_single_message_translation_null_for_deleted(client, db_session, m
     res = await client.get(f"/api/chat/messages/{sent['id']}/translation")
     assert res.status_code == 200
     assert res.json()["translation"] is None
+
+
+# --- 한글 독음 엔드포인트 (chat-translation.md §한글 독음) -----------------------
+
+
+async def test_reading_endpoint_validation_and_happy_path(client, db_session, monkeypatch):
+    async def fake_reading(text, lang):
+        return "쿠쥬 센드 미 더 파일"
+
+    monkeypatch.setattr(translation_service, "_call_haiku_reading", fake_reading)
+    a, _b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    res = await client.get(
+        "/api/chat/reading", params={"text": "Could you send me the file", "lang": "en"}
+    )
+    assert res.status_code == 200
+    assert res.json()["reading"] == "쿠쥬 센드 미 더 파일"
+
+    assert (
+        await client.get("/api/chat/reading", params={"text": "hi", "lang": "ko"})
+    ).status_code == 422
+    assert (
+        await client.get("/api/chat/reading", params={"text": "x" * 501, "lang": "en"})
+    ).status_code == 422

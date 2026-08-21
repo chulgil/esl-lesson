@@ -30,7 +30,12 @@ from app.models.retention import QuestCompletion, StreakSaverUse, XpSpend
 from app.models.routine import ContentRoutineProgress, ContentSummary, ListenCheck
 from app.models.shop import ItemGrant, ItemSetting, Purchase
 from app.models.theme import ThemeGrant, ThemeRewardRule, ThemeSetting
-from app.models.translation import ChatTranslation, PhraseExclusion, TranslationUsage
+from app.models.translation import (
+    ChatTranslation,
+    HangulReading,
+    PhraseExclusion,
+    TranslationUsage,
+)
 from app.models.tts import TtsAudio
 from app.models.usage import UsageEvent
 from app.models.user import User, UserSettings
@@ -39,6 +44,7 @@ __all__ = [
     "Base",
     "ChatMessage",
     "ChatTranslation",
+    "HangulReading",
     "ChatRead",
     "Conversation",
     "DailyPuzzlePlay",
