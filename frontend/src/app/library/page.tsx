@@ -283,87 +283,108 @@ function LibraryInner() {
               {visible.map(({ c, fit }, i) => (
                 <div
                   key={c.id}
-                  className={`flex flex-col rounded-lg border-2 bg-white p-4 shadow-sm transition hover:shadow-md ${
+                  className={`flex flex-col overflow-hidden rounded-lg border-2 bg-white shadow-sm transition hover:shadow-md ${
                     fit >= 4 ? "border-brick-yellow" : "border-ink/10"
                   } ${i % 2 ? "rotate-[0.4deg]" : "-rotate-[0.4deg]"}`}
                 >
                   <Link href={`/library/${c.id}`} className="block">
-                    <p className="flex items-center gap-2 text-xs">
-                      <span className="opacity-50">
-                        {c.source === "youtube" ? "유튜브" : "수기"}
-                      </span>
-                      {c.mine && (
-                        <span className="rounded bg-brick-yellow/40 px-1.5 py-0.5 font-bold">
-                          내 것
-                        </span>
-                      )}
-                      {/* CC 배지 — 재사용 허용 영상 표시 (consult-brief §5 저작자표시 보강) */}
-                      {c.youtube_license === "creativeCommon" && (
-                        <span className="rounded bg-brick-green/15 px-1.5 py-0.5 font-bold text-brick-green">
-                          CC BY
-                        </span>
-                      )}
-                      {c.difficulty && (
-                        <span
-                          className={`rounded px-1.5 py-0.5 font-bold ${DIFFICULTY_STYLES[c.difficulty]}`}
-                        >
-                          {DIFFICULTY_LABELS[c.difficulty]}
-                        </span>
-                      )}
-                      {/* 언어 배지 — en 은 기존 화면 유지를 위해 생략 (i18n) */}
-                      {c.lang !== "en" && (
-                        <span className="rounded bg-ink/10 px-1.5 py-0.5 font-bold">
-                          {LANG_LABELS[c.lang]}
-                        </span>
-                      )}
-                      {/* 이해 가능 입력(i+1) 적합 — 내 레벨 ±1 + 아는 표현 60~85% */}
-                      {fit >= 4 && (
-                        <span className="rounded bg-brick-yellow/40 px-1.5 py-0.5 font-bold">
-                          지금 내 수준
-                        </span>
-                      )}
-                    </p>
-                    <p className="mt-1 font-bold">{c.title}</p>
-                    <p className="mt-2 flex items-center gap-2 text-xs opacity-60">
-                      <span>학습 항목 {c.item_count}개</span>
-                      {c.known_ratio !== null && (
-                        <span className="rounded-full bg-ink/10 px-2 py-0.5">
-                          아는 표현 {c.known_ratio}%
-                        </span>
-                      )}
-                    </p>
-                  </Link>
-                  {/* 시험 칩 — 도전 상태(내 최고점·1위)를 카드에서 바로 보여준다 */}
-                  {examByContent.has(c.id) && (
-                    <Link
-                      href={`/exam/${c.id}`}
-                      className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-full border-2 border-brick-red/40 bg-brick-red/5 px-2.5 py-1 text-xs font-bold text-brick-red transition hover:border-brick-red"
-                    >
-                      시험 도전
-                      {(() => {
-                        const exam = examByContent.get(c.id)!;
-                        if (exam.my_best)
-                          return ` · 내 최고 ${exam.my_best.score}점`;
-                        if (exam.top_name) return ` · 1위 ${exam.top_name}`;
-                        return " · 첫 도전자가 돼보세요";
-                      })()}
-                    </Link>
-                  )}
-                  {/* 개인 콘텐츠는 이미 내 것이라 담기 대상이 아니다
-                    (chat 덱은 상단 "내가 쓰는 말" 섹션에서 담고 뺀다) */}
-                  {!c.mine && (
-                    <div className="mt-3">
-                      <SubscribeButton
-                        contentId={c.id}
-                        subscribed={c.subscribed}
-                        onChange={(on) =>
-                          setContents((prev) =>
-                            prev.map((x) =>
-                              x.id === c.id ? { ...x, subscribed: on } : x,
-                            ),
-                          )
-                        }
+                    {/* 썸네일 전면화 — 담기 판단은 글보다 화면이 빠르다 (cake-benchmark
+                      P1 C4). "유튜브/수기" 소스 라벨은 썸네일 유무가 대신 말해줘 제거 */}
+                    {c.youtube_video_id && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`https://i.ytimg.com/vi/${c.youtube_video_id}/mqdefault.jpg`}
+                        alt=""
+                        loading="lazy"
+                        className="aspect-video w-full border-b-2 border-ink/10 object-cover"
                       />
+                    )}
+                    <div className="p-3">
+                      {(c.mine ||
+                        c.youtube_license === "creativeCommon" ||
+                        c.difficulty ||
+                        c.lang !== "en" ||
+                        fit >= 4) && (
+                        <p className="flex flex-wrap items-center gap-1.5 text-xs">
+                          {c.mine && (
+                            <span className="rounded bg-brick-yellow/40 px-1.5 py-0.5 font-bold">
+                              내 것
+                            </span>
+                          )}
+                          {/* CC 배지 — 재사용 허용 영상 표시 (consult-brief §5 저작자표시 보강) */}
+                          {c.youtube_license === "creativeCommon" && (
+                            <span className="rounded bg-brick-green/15 px-1.5 py-0.5 font-bold text-brick-green">
+                              CC BY
+                            </span>
+                          )}
+                          {c.difficulty && (
+                            <span
+                              className={`rounded px-1.5 py-0.5 font-bold ${DIFFICULTY_STYLES[c.difficulty]}`}
+                            >
+                              {DIFFICULTY_LABELS[c.difficulty]}
+                            </span>
+                          )}
+                          {/* 언어 배지 — en 은 기존 화면 유지를 위해 생략 (i18n) */}
+                          {c.lang !== "en" && (
+                            <span className="rounded bg-ink/10 px-1.5 py-0.5 font-bold">
+                              {LANG_LABELS[c.lang]}
+                            </span>
+                          )}
+                          {/* 이해 가능 입력(i+1) 적합 — 내 레벨 ±1 + 아는 표현 60~85% */}
+                          {fit >= 4 && (
+                            <span className="rounded bg-brick-yellow/40 px-1.5 py-0.5 font-bold">
+                              지금 내 수준
+                            </span>
+                          )}
+                        </p>
+                      )}
+                      {/* 제목 2줄 제한 — 카드 높이 요동 방지 (텍스트 다이어트) */}
+                      <p className="mt-1 line-clamp-2 leading-snug font-bold">
+                        {c.title}
+                      </p>
+                      <p className="mt-1.5 flex items-center gap-2 text-xs opacity-60">
+                        <span>학습 항목 {c.item_count}개</span>
+                        {c.known_ratio !== null && (
+                          <span className="rounded-full bg-ink/10 px-2 py-0.5">
+                            아는 표현 {c.known_ratio}%
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </Link>
+                  {(examByContent.has(c.id) || !c.mine) && (
+                    <div className="mt-auto flex flex-col items-start gap-2 px-3 pb-3">
+                      {/* 시험 칩 — 도전 상태(내 최고점·1위)를 카드에서 바로 보여준다 */}
+                      {examByContent.has(c.id) && (
+                        <Link
+                          href={`/exam/${c.id}`}
+                          className="inline-flex w-fit items-center gap-1.5 rounded-full border-2 border-brick-red/40 bg-brick-red/5 px-2.5 py-1 text-xs font-bold text-brick-red transition hover:border-brick-red"
+                        >
+                          시험 도전
+                          {(() => {
+                            const exam = examByContent.get(c.id)!;
+                            if (exam.my_best)
+                              return ` · 내 최고 ${exam.my_best.score}점`;
+                            if (exam.top_name) return ` · 1위 ${exam.top_name}`;
+                            return " · 첫 도전자가 돼보세요";
+                          })()}
+                        </Link>
+                      )}
+                      {/* 개인 콘텐츠는 이미 내 것이라 담기 대상이 아니다
+                        (chat 덱은 상단 "내가 쓰는 말" 섹션에서 담고 뺀다) */}
+                      {!c.mine && (
+                        <SubscribeButton
+                          contentId={c.id}
+                          subscribed={c.subscribed}
+                          onChange={(on) =>
+                            setContents((prev) =>
+                              prev.map((x) =>
+                                x.id === c.id ? { ...x, subscribed: on } : x,
+                              ),
+                            )
+                          }
+                        />
+                      )}
                     </div>
                   )}
                 </div>

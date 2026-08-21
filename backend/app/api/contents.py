@@ -102,6 +102,8 @@ async def list_ready_contents(
                 "subscribed": c.id in subscribed,
                 # CC 배지·저작자표시용 (consult-brief §5 — 라이선스 명칭 표시 요건)
                 "youtube_license": c.youtube_license,
+                # 카드 썸네일용 (cake-benchmark P1 — 썸네일 전면화)
+                "youtube_video_id": c.youtube_video_id,
                 "item_count": item_counts.get(c.id, 0),
                 "difficulty": difficulty.get(c.id),
                 "known_ratio": known_ratio.get(c.id),
