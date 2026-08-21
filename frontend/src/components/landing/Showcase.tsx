@@ -9,22 +9,23 @@ export function Showcase() {
     <div className="relative">
       <TypoBackground />
 
-      {/* 히어로 */}
-      <section className="relative flex min-h-[70vh] flex-col items-start justify-center gap-6 px-6 py-16 sm:px-16">
+      {/* 히어로 — 중앙 정렬 + 모바일 타이포 축소 (2026-08-21 모바일 우선 스윕,
+          카피는 유지 — /method 가 이 서사를 재사용한다) */}
+      <section className="relative mx-auto flex min-h-[70vh] w-full max-w-4xl flex-col items-center justify-center gap-6 px-6 py-16 text-center sm:px-16">
         <p className="rounded-full border-2 border-ink/15 bg-white/80 px-4 py-1 text-sm font-bold">
           유튜브 영상이 나만의 영어 교재가 됩니다
         </p>
-        <h1 className="font-hand text-5xl font-bold leading-tight sm:text-7xl">
+        <h1 className="font-hand text-4xl leading-tight font-bold sm:text-6xl">
           좋아하는 영상으로 배우고,
           <br />
           <span className="hl">잊기 직전에 다시 만나는</span> 영어
         </h1>
-        <p className="max-w-xl text-lg leading-relaxed">
+        <p className="max-w-xl text-base leading-relaxed sm:text-lg">
           유튜브 URL 하나면 AI가 단어·숙어·패턴·문장을 뽑아냅니다. 그리고
           망각곡선이 계산한 <b>&quot;잊어버리기 직전&quot;</b>에 퀴즈로 다시
           찾아옵니다. 안키처럼 과학적으로, 듀오링고처럼 가볍게.
         </p>
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-wrap justify-center gap-4">
           <Brick color="red" href={loginUrl("/")}>
             Google로 시작하기
           </Brick>
@@ -35,8 +36,11 @@ export function Showcase() {
       </section>
 
       {/* 3단계 흐름 */}
-      <section id="how" className="relative px-6 py-14 sm:px-16">
-        <h2 className="font-hand text-3xl font-bold">
+      <section
+        id="how"
+        className="relative mx-auto w-full max-w-4xl px-6 py-14 sm:px-16"
+      >
+        <h2 className="text-center font-hand text-3xl font-bold">
           <span className="hl">3단계면 끝나요</span>
         </h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -59,8 +63,8 @@ export function Showcase() {
       </section>
 
       {/* 레벨 1-4 퀴즈 쇼케이스 */}
-      <section className="relative px-6 py-14 sm:px-16">
-        <h2 className="font-hand text-3xl font-bold">
+      <section className="relative mx-auto w-full max-w-4xl px-6 py-14 sm:px-16">
+        <h2 className="text-center font-hand text-3xl font-bold">
           <span className="hl">레벨 1부터 4까지, 브릭 쌓듯이</span>
         </h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -136,14 +140,14 @@ export function Showcase() {
             }
           />
         </div>
-        <p className="mt-4 max-w-2xl text-sm opacity-70">
+        <p className="mx-auto mt-4 max-w-2xl text-center text-sm opacity-70">
           레벨 4는 한글 문제 옆에 <b>영어식 사고 힌트</b>가 붙어요 — 영어 어순
           그대로 생각하는 훈련이라, 문장이 통째로 몸에 남습니다.
         </p>
       </section>
 
       {/* 구간 반복 + 게임 */}
-      <section className="relative grid gap-6 px-6 py-14 sm:grid-cols-2 sm:px-16">
+      <section className="relative mx-auto grid w-full max-w-4xl gap-6 px-6 py-14 sm:grid-cols-2 sm:px-16">
         <FeatureCard
           title="원어민 음성을 문장 단위로 반복"
           body="스크립트 문장을 클릭하면 유튜브에서 딱 그 구간만 재생됩니다. 구간 반복(A-B 루프)을 켜면 귀에 붙을 때까지 무한 반복."

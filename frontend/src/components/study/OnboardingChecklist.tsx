@@ -171,7 +171,7 @@ export function OnboardingChecklist({
               {choice.label}
             </button>
           ))}
-          <span className="opacity-50">
+          <span className="hidden opacity-50 sm:inline">
             라이브러리가 이 레벨 영상을 먼저 보여줘요
           </span>
         </div>
@@ -189,14 +189,19 @@ export function OnboardingChecklist({
             ) : (
               <Link
                 href={step.href}
+                title={step.desc}
                 className="group flex items-center gap-2 rounded-md p-1 text-sm transition-colors hover:bg-ink/5"
               >
-                <span className="h-5 w-5 rounded-full border-2 border-ink/25" />
+                <span className="h-5 w-5 shrink-0 rounded-full border-2 border-ink/25" />
                 <span>
                   <span className="font-bold group-hover:underline">
                     {step.label}
                   </span>
-                  <span className="ml-2 text-xs opacity-60">{step.desc}</span>
+                  {/* 상세 설명은 모바일에서 숨김 — 신규 홈도 한 화면 원칙
+                      (설명은 title 툴팁, 이동한 화면이 다시 말해준다) */}
+                  <span className="ml-2 hidden text-xs opacity-60 sm:inline">
+                    {step.desc}
+                  </span>
                 </span>
                 <span className="ml-auto text-brick-blue">→</span>
               </Link>
