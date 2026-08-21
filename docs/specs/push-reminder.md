@@ -43,7 +43,7 @@
 ```
 VAPID_PUBLIC_KEY=   # base64url — 브라우저 applicationServerKey 와 동일 값
 VAPID_PRIVATE_KEY=  # base64url raw
-VAPID_SUBJECT=mailto:rimanbackend@gmail.com
+VAPID_SUBJECT=mailto:lessonaza@gmail.com
 ```
 
 키 생성 (1회):

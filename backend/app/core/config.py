@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # 공개키=브라우저 applicationServerKey(base64url), 개인키=base64url raw
     vapid_public_key: str = ""
     vapid_private_key: str = ""
-    vapid_subject: str = "mailto:rimanbackend@gmail.com"
+    vapid_subject: str = "mailto:lessonaza@gmail.com"
 
     # 유튜브 자막 프록시 (클라우드 IP 차단 우회 — docs/specs/content-pipeline.md)
     webshare_proxy_username: str = ""
