@@ -153,10 +153,12 @@ async def test_message_ticket_purchase_and_consume(client, db_session):
     (2026-08-21, mascot-shop.md §말풍선 변경권)."""
     user = await login(client, db_session)
 
-    # 변경권 없이 변경 시도 → no_ticket
-    res = await client.patch("/api/shop/mascot-message", json={"message": "화이팅"})
-    assert res.status_code == 422
-    assert res.json()["detail"] == "no_ticket"
+    # 변경권 없이 변경 시도 → no_ticket. 폭 기준 허용 검증 겸용 —
+    # 영어 9자(9칸)·일본어 5자(10칸)는 형식을 통과해 티켓 검증까지 도달한다
+    for ok in ("화이팅", "Fighting!", "がんばって"):
+        res = await client.patch("/api/shop/mascot-message", json={"message": ok})
+        assert res.status_code == 422
+        assert res.json()["detail"] == "no_ticket"
 
     # perk 는 일반 구매 엔드포인트로 살 수 없다 (카운터 상품)
     res = await client.post("/api/shop/purchase", json={"item_key": "perk:message"})
@@ -167,10 +169,11 @@ async def test_message_ticket_purchase_and_consume(client, db_session):
     assert res.status_code == 200
     assert res.json()["count"] == 1
 
-    # 유효성 — 7자·공백만 422
-    for bad in ("일곱글자라서안돼", "   "):
+    # 유효성 — 폭 초과(한글 8자=16칸)·공백만·특수문자(보안 화이트리스트) 422
+    for bad in ("일곱글자라서안돼", "   ", "<script>", "a{b}c"):
         res = await client.patch("/api/shop/mascot-message", json={"message": bad})
         assert res.status_code == 422
+        assert res.json()["detail"] == "invalid_message"
 
     res = await client.patch("/api/shop/mascot-message", json={"message": "화이팅!"})
     assert res.status_code == 200

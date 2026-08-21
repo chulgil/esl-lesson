@@ -4,6 +4,7 @@
 보유 = 원장 행 존재, 동시 구매 경합은 uq 로 409.
 """
 
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -330,7 +331,19 @@ async def purchase_message_ticket(
     }
 
 
-MESSAGE_MAX_CHARS = 6
+# 표시 폭 기준 한도 — 한글·한자·가나=2칸, 영문·숫자·기호=1칸, 총 12칸
+# (한글 6자 = 영문 12자. 2026-08-21: "Fighting!" 같은 영어·일본어 단어 허용 요구)
+MESSAGE_MAX_WIDTH = 12
+_WIDE_CH_RE = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ\u3040-\u30ff\u4e00-\u9fff]")
+# 허용 문자 화이트리스트 — 한글·영문·숫자·일본어(가나·한자)·공백·기본 기호만
+# (2026-08-21 보안 요구: 특수문자·위험 문구 차단. SVG text 라 이스케이프되지만 심층 방어)
+MESSAGE_ALLOWED_RE = re.compile(
+    r"^[가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9 !?.,~^+\-\u3040-\u30ff\u4e00-\u9fffー]+$"
+)
+
+
+def message_width(text: str) -> int:
+    return sum(2 if _WIDE_CH_RE.match(ch) else 1 for ch in text)
 
 
 class MascotMessageIn(BaseModel):
@@ -355,7 +368,11 @@ async def set_mascot_message(
         return {"message": None, "tickets": settings.mascot_message_tickets}
 
     text = body.message.strip()
-    if not text or len(text) > MESSAGE_MAX_CHARS or "\n" in text:
+    if (
+        not text
+        or message_width(text) > MESSAGE_MAX_WIDTH
+        or MESSAGE_ALLOWED_RE.fullmatch(text) is None
+    ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_message")
     if settings.mascot_message_tickets < 1:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "no_ticket")
