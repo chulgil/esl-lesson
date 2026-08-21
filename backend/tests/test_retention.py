@@ -258,6 +258,11 @@ async def test_quest_all_done_bonus(client, db_session):
             db_session.add(
                 ReviewCard(user_id=user.id, item_id=item.id, state="new", due_at=datetime.now(UTC))
             )
+    if "speak_3" in picked:
+        from app.models import UsageEvent
+
+        for _ in range(3):
+            db_session.add(UsageEvent(user_id=user.id, kind="speech_check", meta={}))
     await db_session.flush()
 
     res = await client.get("/api/study/quests")
@@ -276,3 +281,22 @@ async def test_quest_all_done_bonus(client, db_session):
         )
     ).scalar_one()
     assert bonus.xp == retention.ALL_DONE_XP
+
+
+async def test_speak_quest_counts_speech_events(client, db_session):
+    """speak_3 — 발음 확인 시도(usage_events kind=speech_check)로 진행 집계.
+
+    이벤트 API 화이트리스트 통과 + _quest_progress 파생까지 한 번에 검증
+    (pronunciation-scoring-2026-08 V1)."""
+    user = await login(client, db_session)
+
+    for grade in ("retry", "good", "perfect"):
+        res = await client.post(
+            "/api/events", json={"kind": "speech_check", "meta": {"grade": grade}}
+        )
+        assert res.status_code == 204
+
+    today = datetime.now(KST).date()
+    day_start = datetime.combine(today, datetime.min.time(), tzinfo=KST).astimezone(UTC)
+    progress = await retention._quest_progress(db_session, user.id, ["speak_3"], day_start, today)
+    assert progress["speak_3"] == 3

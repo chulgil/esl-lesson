@@ -24,6 +24,7 @@ from app.models import (
     ScrambleRace,
     StreakSaverUse,
     TypingRace,
+    UsageEvent,
     UserSettings,
 )
 
@@ -138,6 +139,9 @@ QUEST_DEFS: dict[str, tuple[str, str, int, int]] = {
     "game_1": ("게임 1판", "아무 게임이나 1판 즐겨요", 1, 30),
     "puzzle_try": ("데일리 퍼즐", "오늘의 단어 퍼즐에 도전해요", 1, 20),
     "new_cards_5": ("새 카드 5개", "새 카드 5개를 만나요", 5, 20),
+    # 발음 확인 V1 (pronunciation-scoring-2026-08) — 시도 자체가 연습이라
+    # 등급 무관 3회. 라이브러리 플레이어의 "이 문장 말해보기"가 집계 재료
+    "speak_3": ("소리 내어 말하기", "문장을 소리 내어 3번 말해요", 3, 20),
 }
 CORE_QUEST = "review_10"  # 코어 루프(복습)는 매일 고정
 ALL_DONE_KEY = "all_done"
@@ -223,6 +227,17 @@ async def _quest_progress(
             await db.execute(
                 select(func.count(ReviewCard.id)).where(
                     ReviewCard.user_id == user_id, ReviewCard.created_at >= day_start
+                )
+            )
+        ).scalar_one()
+    if "speak_3" in keys:
+        # 발음 확인 시도 수 — usage_events 파생 (별도 추적 테이블 없음 원칙 유지)
+        progress["speak_3"] = (
+            await db.execute(
+                select(func.count(UsageEvent.id)).where(
+                    UsageEvent.user_id == user_id,
+                    UsageEvent.kind == "speech_check",
+                    UsageEvent.created_at >= day_start,
                 )
             )
         ).scalar_one()

@@ -655,6 +655,42 @@ html[data-theme="candy"] .brick-studs::before {
 .card-arc-in {
   animation: card-arc-in 0.35s cubic-bezier(0.22, 0.9, 0.35, 1);
 }
+/* 판정 모션 (2026-08-21 요청: 맞음/틀림이 몸으로 느껴지되 어지럽지 않게).
+ * 호 슬라이드가 끝날 무렵(0.2s 딜레이) 시작 — transform 충돌 방지를 위해
+ * card-face 내부 래퍼에 건다. 회전 없음. */
+@keyframes grade-ok {
+  0% {
+    transform: scale(0.99);
+  }
+  55% {
+    transform: scale(1.012);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.card-grade-ok {
+  animation: grade-ok 0.28s cubic-bezier(0.34, 1.4, 0.5, 1) 0.2s both;
+}
+@keyframes grade-bad {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  55% {
+    transform: translateX(4px);
+  }
+  80% {
+    transform: translateX(-2px);
+  }
+}
+.card-grade-bad {
+  animation: grade-bad 0.32s ease-out 0.2s both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .card-face {
     transition: opacity 0.2s ease;
@@ -663,7 +699,9 @@ html[data-theme="candy"] .brick-studs::before {
   .card-face-out-right {
     transform: none;
   }
-  .card-arc-in {
+  .card-arc-in,
+  .card-grade-ok,
+  .card-grade-bad {
     animation: none;
   }
 }

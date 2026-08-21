@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RoutineGuide } from "@/components/content/RoutineGuide";
 import { RecordCompare } from "@/components/media/RecordCompare";
+import { SpeechCheck } from "@/components/media/SpeechCheck";
 import { SubscribeButton } from "@/components/content/SubscribeButton";
 import { ExamEntryCard } from "@/components/exam/ExamEntryCard";
 import { TranscriptWords } from "@/components/media/TranscriptWords";
@@ -417,6 +418,10 @@ export default function LibraryDetailPage() {
                 }
               }}
             />
+
+            {/* 발음 확인 V1 — 인식 통과형 (pronunciation-scoring-2026-08 P1).
+                미지원 브라우저는 컴포넌트가 자체 숨김 — 위 녹음-비교가 폴백 */}
+            <SpeechCheck targetText={current?.en_text ?? null} />
 
             <p className="text-center text-xs opacity-50">
               원저작자 보호를 위해 전체 스크립트는 제공하지 않아요 — 문장별

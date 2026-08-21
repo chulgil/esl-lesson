@@ -14,6 +14,11 @@
 | `method_view` | `/method` 열람 (로그인 사용자만 — 익명은 미기록) | — |
 | `weekly_report_view` | 성적표 노출 1회 | `surface: home_banner \| study_tab` |
 | `review_add` | 게임 오답 원탭 담기 (`ReviewPanel`) | `game: tetris \| quiz \| typing \| scramble \| dictation \| bingo` |
+| `speech_check` | 발음 확인 시도 (`SpeechCheck` — 인식 결과 수신 시) | `grade: perfect \| good \| retry` |
+
+`speech_check` 는 `speak_3` 미션의 집계 재료다 (retention `_quest_progress`) —
+클라이언트 로그 파생이라 이론상 스푸핑 가능하지만 XP 20 저부담이라 허용
+(pronunciation-scoring-2026-08 V1 결정).
 
 새 표면 추가 시 `api/events.py` `KINDS` 에 등록 — 화이트리스트 밖은 422.
 

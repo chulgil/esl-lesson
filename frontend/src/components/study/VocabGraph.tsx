@@ -9,6 +9,8 @@ export interface GraphNode {
   ko: string;
   state: string; // new | learning | review | relearning | ghost
   kind: "mine" | "ghost";
+  /** FSRS stability(일) — 기억 강도 색 램프 재료. ghost/구 응답은 null */
+  stability?: number | null;
 }
 
 export interface GraphEdge {
@@ -37,19 +39,37 @@ function jitter(id: number, salt: number): number {
   return v - Math.floor(v);
 }
 
-function stateColor(state: string, css: (name: string) => string): string {
-  switch (state) {
-    case "learning":
-      return css("--color-brick-yellow");
-    case "review":
-      return css("--color-brick-green");
-    case "relearning":
-      return css("--color-brick-red");
-    case "ghost":
-      return css("--color-paper");
-    default:
-      return css("--color-brick-blue"); // new
-  }
+/** 기억 강도 색 램프 (2026-08-21 인지 색 재설계) — 모를수록 뜨겁게(빨강),
+ *  장기 기억일수록 회색으로 물러난다. 주의 자원은 아직 모르는 것에 가야
+ *  하고(경고색의 선주의적 포착), 끝난 처리는 배경으로(figure-ground).
+ *  순서 데이터라 색상환이 아닌 채도·명도 램프 — 테마와 무관한 고정색
+ *  (데이터 시각화 색은 테마 따라 흔들리면 판독 학습이 무효가 된다). */
+export const MEMORY_TIERS = [
+  { key: "unknown", label: "모름 (새 단어)", color: "#d0342c" },
+  { key: "shaky", label: "흔들림 (틀린 기억)", color: "#e06a2b" },
+  { key: "learning", label: "익히는 중", color: "#eaa13c" },
+  { key: "settling", label: "자리 잡는 중", color: "#8fac74" },
+  { key: "longterm", label: "장기 기억", color: "#a8adb4" },
+] as const;
+
+/** 백엔드 LONG_TERM_STABILITY_DAYS(7.0) 미러 — stats 장기 기억 판정과 동일 */
+const LONG_TERM_DAYS = 7;
+
+function memoryColor(node: {
+  state: string;
+  stability?: number | null;
+}): string {
+  const tier =
+    node.state === "new"
+      ? "unknown"
+      : node.state === "relearning"
+        ? "shaky"
+        : node.state === "learning"
+          ? "learning"
+          : (node.stability ?? 0) >= LONG_TERM_DAYS
+            ? "longterm"
+            : "settling"; // review, 아직 7일 미만
+  return MEMORY_TIERS.find((t) => t.key === tier)!.color;
 }
 
 /** 자체 force-directed 캔버스 그래프 — 외부 의존성 없음 (게임 캔버스와 동일 접근) */
@@ -247,7 +267,9 @@ export function VocabGraph({
 
         ctx.beginPath();
         ctx.arc(s.x, s.y, NODE_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = stateColor(n.state, css);
+        // 추천(ghost)은 내 기억 축 밖 — 종이색 + 점선 유령 유지
+        ctx.fillStyle =
+          n.kind === "ghost" ? css("--color-paper") : memoryColor(n);
         ctx.fill();
         if (n.kind === "ghost") {
           ctx.setLineDash([3, 3]);
@@ -266,7 +288,9 @@ export function VocabGraph({
 
         if (viewRef.current.scale >= 0.55 || isSelected) {
           ctx.fillStyle = ink;
-          ctx.font = "bold 11px var(--font-hand, 'Comic Sans MS'), sans-serif";
+          // 버그 픽스 (2026-08-21): canvas font 는 var() 를 해석하지 않아
+          // 기본 폰트로 조용히 폴백되고 있었다 — css() 로 실값을 풀어 넣는다
+          ctx.font = `bold 11px ${css("--font-hand") || "sans-serif"}`;
           ctx.textAlign = "center";
           ctx.fillText(n.en, s.x, s.y + NODE_RADIUS + 13);
         }
