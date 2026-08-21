@@ -55,9 +55,19 @@ export function NotificationBell() {
       )
         load();
     });
+    // 탭 복귀 시 재조회 — 모바일 백그라운드에서 타이머·WS 가 죽으면 복귀 후
+    // 벨이 옛 스냅샷(빈 목록)을 보여줬다 (2026-08-21 보고: "새로고침해야
+    // 나옴". OS 푸시로 알림이 온 걸 아는데 벨엔 없던 현상)
+    const onBack = () => {
+      if (!document.hidden) load();
+    };
+    document.addEventListener("visibilitychange", onBack);
+    window.addEventListener("focus", onBack);
     return () => {
       clearInterval(timer);
       off();
+      document.removeEventListener("visibilitychange", onBack);
+      window.removeEventListener("focus", onBack);
     };
   }, [load]);
 
@@ -76,6 +86,11 @@ export function NotificationBell() {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
+
+  function toggle() {
+    if (!open) load(); // 여는 순간 재조회 — 옛 스냅샷을 보여주지 않는다
+    setOpen(!open);
+  }
 
   function openItem(n: NotificationItem) {
     setOpen(false);
@@ -99,10 +114,11 @@ export function NotificationBell() {
       <button
         type="button"
         // 누르는 순간 토글 — press~release 사이 리렌더로 click 이 유실될 여지를
-        // 원천 제거 (2026-07-29 간헐 무반응 보고). 키보드는 click(detail 0)으로
-        onPointerDown={() => setOpen((v) => !v)}
+        // 원천 제거 (2026-07-29 간헐 무반응 보고). 키보드는 click(detail 0)으로.
+        // 여는 순간 재조회 — 항상 현재 시점의 알림을 보여준다 (2026-08-21)
+        onPointerDown={toggle}
         onClick={(e) => {
-          if (e.detail === 0) setOpen((v) => !v);
+          if (e.detail === 0) toggle();
         }}
         aria-label={`알림${unread + chatUnread > 0 ? ` — ${unread + chatUnread}건` : ""}`}
         aria-expanded={open}
