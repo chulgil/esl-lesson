@@ -183,6 +183,12 @@ export const chatApi = {
     }),
   clearNotice: (otherId: number) =>
     request<void>(`/api/chat/with/${otherId}/notice`, { method: "DELETE" }),
+  /** 공지 체크 항목 토글 — 해당 줄만 원자 치환 (chat-notice.md §공지 체크리스트) */
+  checkNotice: (otherId: number, lineIndex: number, checked: boolean) =>
+    request<ChatNotice>(`/api/chat/with/${otherId}/notice/check`, {
+      method: "PATCH",
+      body: JSON.stringify({ line_index: lineIndex, checked }),
+    }),
 };
 
 /** 언어 학습 대화방 API (docs/specs/chat-language-rooms.md §API) */

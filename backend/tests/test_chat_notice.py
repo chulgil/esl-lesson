@@ -309,3 +309,52 @@ async def test_my_phrases_does_not_collect_notice_system_lines(client, db_sessio
     res = await client.get("/api/study/my-phrases")
     assert res.status_code == 200
     assert res.json()["total"] == 0
+
+
+# --- 체크리스트 (chat-notice.md §공지 체크리스트) ----------------------------------
+
+
+async def test_notice_check_toggle_and_validation(client, db_session, monkeypatch):
+    """체크 항목 토글 — 해당 줄만 변경, 일반 줄·범위 밖 422, WS 재조회 푸시."""
+    pushed = await _fake_deliver(monkeypatch)
+    a, b = await two_friends(client, db_session)
+    await login(client, db_session, a)
+
+    text = "[] 단어 10개\n일반 메모 줄\n[x] 예습"
+    res = await client.put(
+        f"/api/chat/with/{b.id}/notice", json={"title": "스터디 규칙", "text": text}
+    )
+    assert res.status_code == 200
+    pushed.clear()
+
+    # 0번 줄 체크
+    res = await client.patch(
+        f"/api/chat/with/{b.id}/notice/check", json={"line_index": 0, "checked": True}
+    )
+    assert res.status_code == 200
+    assert res.json()["text"] == "[x] 단어 10개\n일반 메모 줄\n[x] 예습"
+    # WS chat.notice 양쪽 푸시, 시스템 줄 없음
+    assert [m["t"] for _, m in pushed] == ["chat.notice", "chat.notice"]
+
+    # 2번 줄 해제 — 다른 줄 불변
+    res = await client.patch(
+        f"/api/chat/with/{b.id}/notice/check", json={"line_index": 2, "checked": False}
+    )
+    assert res.json()["text"] == "[x] 단어 10개\n일반 메모 줄\n[] 예습"
+
+    # 일반 줄·범위 밖 → not_check_line
+    for idx in (1, 99, -1):
+        res = await client.patch(
+            f"/api/chat/with/{b.id}/notice/check",
+            json={"line_index": idx, "checked": True},
+        )
+        assert res.status_code == 422
+        assert res.json()["detail"] == "not_check_line"
+
+    # 상대도 토글 가능 (공동 편집)
+    await login(client, db_session, b)
+    res = await client.patch(
+        f"/api/chat/with/{a.id}/notice/check", json={"line_index": 2, "checked": True}
+    )
+    assert res.status_code == 200
+    assert res.json()["text"].endswith("[x] 예습")

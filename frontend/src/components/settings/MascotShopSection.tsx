@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { PurchaseConfirmDialog } from "@/components/shop/PurchaseConfirmDialog";
-import { MascotSvg } from "@/components/theme/mascots";
+import {
+  MESSAGE_MAX_WIDTH,
+  MascotSvg,
+  messageWidthUnits,
+} from "@/components/theme/mascots";
 import {
   SHOP_EVENT,
   dispatchShopUpdated,
@@ -59,7 +63,8 @@ export function MascotShopSection() {
         event_only_item: "이벤트로만 받을 수 있는 아이템이에요",
         not_owned: "먼저 구매해야 착용할 수 있어요",
         no_ticket: "말풍선 변경권이 필요해요 — 먼저 구매해주세요",
-        invalid_message: "문구는 공백 없이 1~6자로 적어주세요",
+        invalid_message:
+          "문구가 너무 길거나 쓸 수 없는 문자가 있어요 — 한글 6자·영문 12자까지, 특수문자 불가",
       }[code] ?? "구매에 실패했어요 — 잠시 후 다시 시도해주세요.",
     );
   }
@@ -315,8 +320,8 @@ export function MascotShopSection() {
       <p className="mt-4 mb-1 text-xs font-bold opacity-70">말풍선 문구 변경권</p>
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="opacity-70">
-          보유 {shop.message_ticket.count}개 — 캐릭터 말풍선 문구(1~6자)를 바꿀
-          수 있어요
+          보유 {shop.message_ticket.count}개 — 캐릭터 말풍선 문구를 바꿀 수 있어요
+          (한글 6자·영문 12자까지)
           {shop.message_ticket.current_message &&
             ` · 현재 "${shop.message_ticket.current_message}"`}
         </span>
@@ -388,7 +393,7 @@ export function MascotShopSection() {
           >
             <p className="font-bold">말풍선 문구 바꾸기</p>
             <p className="mt-2 text-sm">
-              캐릭터가 말풍선에 이 문구를 들고 다녀요 (1~6자).
+              캐릭터가 말풍선에 이 문구를 들고 다녀요 — 한글 최대 6자, 영어·숫자 최대 12자 (일본어 가능, 특수문자 불가).
             </p>
             <p className="mt-1.5 rounded-md border-2 border-brick-yellow/60 bg-highlight/30 p-2.5 text-xs">
               변경권 <b>1개가 사용</b>돼요. 다시 바꾸려면 새 변경권이 필요하니
@@ -397,13 +402,24 @@ export function MascotShopSection() {
             <input
               type="text"
               value={draftMessage}
-              onChange={(e) => setDraftMessage(e.target.value)}
-              maxLength={6}
+              onChange={(e) => {
+                // 허용 문자만(특수문자·이모지 차단) + 폭 한도까지 자름
+                let next = e.target.value.replace(
+                  /[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9 !?.,~^+\-\u3040-\u30ff\u4e00-\u9fffー]/g,
+                  "",
+                );
+                while (messageWidthUnits(next) > MESSAGE_MAX_WIDTH) {
+                  next = next.slice(0, -1);
+                }
+                setDraftMessage(next);
+              }}
+              maxLength={MESSAGE_MAX_WIDTH}
               placeholder="예: 화이팅!"
               className="mt-3 w-full rounded-md border-2 border-ink/20 bg-white px-3 py-2.5 text-base focus:border-brick-blue focus:outline-none"
             />
             <p className="mt-1 text-right text-xs opacity-50">
-              {draftMessage.trim().length}/6자
+              {messageWidthUnits(draftMessage.trim())}/{MESSAGE_MAX_WIDTH}칸
+              (한글 1자=2칸)
             </p>
             <div className="mt-3 flex gap-2">
               <button

@@ -116,10 +116,22 @@ function Scarf({ x, y, width }: { x: number; y: number; width: number }) {
   );
 }
 
+/** 말풍선 표시 폭 — 한글·한자·가나=2칸, 그 외=1칸 (백엔드 message_width 미러).
+ *  한도 12칸 = 한글 6자 = 영문 12자 (shop.py MESSAGE_MAX_WIDTH) */
+export const MESSAGE_MAX_WIDTH = 12;
+const WIDE_CH_RE = /[가-힣ㄱ-ㅎㅏ-ㅣ\u3040-\u30ff\u4e00-\u9fff]/;
+
+export function messageWidthUnits(text: string): number {
+  let w = 0;
+  for (const ch of text) w += WIDE_CH_RE.test(ch) ? 2 : 1;
+  return w;
+}
+
 function Bubble({ text, flip }: { text: string; flip?: boolean }) {
-  // 커스텀 문구(변경권, 최대 6자) 대응 — 글자 수에 맞춰 왼쪽으로 늘어난다
+  // 커스텀 문구(변경권, 최대 12칸) 대응 — 표시 폭에 맞춰 왼쪽으로 늘어난다
   // (오른쪽 끝 102 고정 — 캐릭터 머리 위 위치 유지)
-  const width = Math.min(92, Math.max(38, 14 + text.length * 12));
+  const units = messageWidthUnits(text);
+  const width = Math.min(92, Math.max(38, 14 + units * 6.4));
   const x = 102 - width;
   return (
     // 컨테이너가 좌우 반전(scale-x -1)돼도 글자는 읽혀야 한다 — 말풍선만 역반전
@@ -146,10 +158,13 @@ function Bubble({ text, flip }: { text: string; flip?: boolean }) {
         x={x + width / 2}
         y="19"
         textAnchor="middle"
-        fontSize="13"
+        fontSize={units >= 9 ? 11 : 13}
         fontWeight="700"
         fill={INK}
         fontFamily="var(--font-gaegu), sans-serif"
+        // 폭 7칸+ 은 말풍선에 강제 맞춤 — 어떤 글자 조합도 밖으로 넘치지 않는다
+        textLength={units >= 7 ? width - 12 : undefined}
+        lengthAdjust="spacingAndGlyphs"
       >
         {text}
       </text>
@@ -176,7 +191,6 @@ function Henyang({
       fill="none"
       className={avatar ? undefined : "mascot-anim-giggle"}
     >
-      {!avatar && <Bubble text={message || "헤헤"} flip={flip} />}
       {/* 귀 */}
       <path
         d="M16 46 L22 18 L40 36 Z"
@@ -243,6 +257,8 @@ function Henyang({
       {outfits.includes("scarf") && <Scarf x={20} y={78} width={52} />}
       {outfits.includes("ribbon") && <Ribbon x={68} y={38} scale={0.9} />}
       {outfits.includes("crown") && <Crown x={32} y={14} />}
+      {/* 말풍선은 맨 위 레이어 — 귀·왕관에 가리지 않게 (2026-08-21 가림 보고) */}
+      {!avatar && <Bubble text={message || "헤헤"} flip={flip} />}
     </svg>
   );
 }
@@ -266,7 +282,6 @@ function Bricky({
       fill="none"
       className={avatar ? undefined : "mascot-anim-bounce"}
     >
-      {!avatar && <Bubble text={message || "착착"} flip={flip} />}
       {/* 스터드 2개 (레고 윗면) */}
       <rect
         x="22"
@@ -342,6 +357,8 @@ function Bricky({
       {outfits.includes("scarf") && <Scarf x={14} y={82} width={64} />}
       {outfits.includes("ribbon") && <Ribbon x={61} y={24} scale={0.8} />}
       {outfits.includes("crown") && <Crown x={32} y={12} />}
+      {/* 말풍선은 맨 위 레이어 — 귀·왕관에 가리지 않게 (2026-08-21 가림 보고) */}
+      {!avatar && <Bubble text={message || "착착"} flip={flip} />}
     </svg>
   );
 }
@@ -365,7 +382,6 @@ function Mongi({
       fill="none"
       className={avatar ? undefined : "mascot-anim-float"}
     >
-      {!avatar && <Bubble text={message || "몽!"} flip={flip} />}
       {/* 다리 4개 — 물결 */}
       <path
         d="M18 78 q-6 8 2 10 M34 82 q-4 8 4 6 M58 82 q4 8 -4 6 M74 78 q6 8 -2 10"
@@ -411,6 +427,8 @@ function Mongi({
       {outfits.includes("scarf") && <Scarf x={16} y={79} width={60} />}
       {outfits.includes("ribbon") && <Ribbon x={70} y={34} scale={0.9} />}
       {outfits.includes("crown") && <Crown x={32} y={16} />}
+      {/* 말풍선은 맨 위 레이어 — 귀·왕관에 가리지 않게 (2026-08-21 가림 보고) */}
+      {!avatar && <Bubble text={message || "몽!"} flip={flip} />}
     </svg>
   );
 }

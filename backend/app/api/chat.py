@@ -677,6 +677,26 @@ async def put_notice(
     return notice
 
 
+class NoticeCheckBody(BaseModel):
+    line_index: int
+    checked: bool
+
+
+@router.patch("/with/{other_id}/notice/check")
+async def check_notice(
+    other_id: int,
+    payload: NoticeCheckBody,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """체크 항목 토글 — 시스템 줄 없이 WS 재조회만 (chat-notice.md §공지 체크리스트)."""
+    notice, conv = await notice_service.toggle_check(
+        db, user.id, other_id, payload.line_index, payload.checked
+    )
+    await _push_notice_sync(conv)
+    return notice
+
+
 @router.delete("/with/{other_id}/notice", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_notice(
     other_id: int,
