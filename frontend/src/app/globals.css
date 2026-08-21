@@ -626,38 +626,27 @@ html[data-theme="candy"] .brick-studs::before {
   animation: cheer-float 4.5s ease-out forwards;
 }
 
-/* 학습 카드 전환 — 왼쪽 하단을 중심점으로 호를 그리며 오른쪽→왼쪽 슬라이드
- * (2026-08-21 사용자 피드백: 3D 뒤집기 회전이 어지러움 유발 — 플립 폐기).
- * 시간축은 항상 왼쪽: 새 면은 오른쪽에서 들어오고, 지난 면은 왼쪽으로 나간다.
- * "문제 다시 보기"(뒤로)는 역재생 — 문제가 왼쪽에서 복귀, 정답이 오른쪽으로 물러남 */
+/* 학습 카드 전환 — 짧은 크로스페이드만 (2026-08-21 2차 피드백: 호 슬라이드도
+ * 어지럽다 — 이동·회전 전면 폐기, 모션 최소화). 전환은 180ms 페이드가 전부다.
+ * 클래스명(arc/left/right)은 세션 페이지와의 호환 유지 — 의미는 페이드/숨김 */
 .card-face {
-  transform-origin: 0% 100%;
-  transition:
-    transform 0.35s cubic-bezier(0.22, 0.9, 0.35, 1),
-    opacity 0.3s ease;
+  transition: opacity 0.18s ease;
 }
-.card-face-out-left {
-  transform: translateX(-14%) rotate(-5deg);
-  opacity: 0;
-  pointer-events: none;
-}
+.card-face-out-left,
 .card-face-out-right {
-  transform: translateX(45%) rotate(5deg);
   opacity: 0;
   pointer-events: none;
 }
 @keyframes card-arc-in {
   from {
-    transform: translateX(55%) rotate(6deg);
     opacity: 0;
   }
 }
 .card-arc-in {
-  animation: card-arc-in 0.35s cubic-bezier(0.22, 0.9, 0.35, 1);
+  animation: card-arc-in 0.18s ease;
 }
-/* 판정 모션 (2026-08-21 요청: 맞음/틀림이 몸으로 느껴지되 어지럽지 않게).
- * 호 슬라이드가 끝날 무렵(0.2s 딜레이) 시작 — transform 충돌 방지를 위해
- * card-face 내부 래퍼에 건다. 회전 없음. */
+/* 판정 큐 (2026-08-21 요청: 맞음/틀림 인지) — 카드 전환 페이드화 이후에도
+ * 유지하되 미세하게: 정답=1.2% 안착 팝, 오답=±5px 좌우 1회 반. 회전·이동 없음 */
 @keyframes grade-ok {
   0% {
     transform: scale(0.99);
@@ -670,7 +659,7 @@ html[data-theme="candy"] .brick-studs::before {
   }
 }
 .card-grade-ok {
-  animation: grade-ok 0.28s cubic-bezier(0.34, 1.4, 0.5, 1) 0.2s both;
+  animation: grade-ok 0.28s cubic-bezier(0.34, 1.4, 0.5, 1) 0.1s both;
 }
 @keyframes grade-bad {
   0%,
@@ -688,7 +677,7 @@ html[data-theme="candy"] .brick-studs::before {
   }
 }
 .card-grade-bad {
-  animation: grade-bad 0.32s ease-out 0.2s both;
+  animation: grade-bad 0.32s ease-out 0.1s both;
 }
 
 @media (prefers-reduced-motion: reduce) {
