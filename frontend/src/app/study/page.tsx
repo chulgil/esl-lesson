@@ -6,6 +6,7 @@ import { Brick } from "@/components/brick/Brick";
 import { PlayerBadge } from "@/components/game/PlayerBadge";
 import { AchievementBadges } from "@/components/study/AchievementBadges";
 import { CardCollection } from "@/components/study/CardCollection";
+import { CollapsibleSection } from "@/components/study/CollapsibleSection";
 import { LongTermMemoryCard } from "@/components/study/LongTermMemoryCard";
 import { MyPhrasesCard } from "@/components/study/MyPhrasesCard";
 import { StudyingFriendsCard } from "@/components/study/StudyingFriendsCard";
@@ -270,11 +271,15 @@ export default function StudyHubPage() {
           </section>
         )}
 
-        {/* 내 카드 컬렉션 — 홈에서 이관 (2026-08-03). 누적 자산은 학습 탭에 모은다 */}
+        {/* 내 카드 컬렉션 — 홈에서 이관 (2026-08-03). 누적 자산은 학습 탭에 모은다.
+          접기 기본 (cake-benchmark P2 C3): 오늘 행동이 아닌 누적 지표는 접는다 */}
         {stats && (
-          <section className="mt-5 max-w-4xl rounded-xl border-2 border-ink/15 bg-white p-5 shadow-sm">
-            <h2 className="font-hand text-2xl font-bold">내 카드 컬렉션</h2>
-            <p className="mt-1 mb-3 text-xs opacity-60">
+          <CollapsibleSection
+            title="내 카드 컬렉션"
+            borderClass="border-ink/15"
+            summary={`만난 카드 ${stats.levels.reduce((sum, lv) => sum + lv.cards, 0)}장`}
+          >
+            <p className="mb-3 text-xs opacity-60">
               한 번이라도 학습한 카드 / 내가 담은 콘텐츠의 전체 — 오늘 목표와는
               무관하게 쌓여요
             </p>
@@ -287,7 +292,7 @@ export default function StudyHubPage() {
                 metCount={stats.levels.reduce((sum, lv) => sum + lv.cards, 0)}
               />
             )}
-          </section>
+          </CollapsibleSection>
         )}
 
         <div className="mt-5 grid max-w-4xl gap-5 lg:grid-cols-2">
@@ -295,17 +300,15 @@ export default function StudyHubPage() {
             href="/study/network"
             className="group flex flex-col rounded-xl border-2 border-brick-blue/40 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
           >
+            {/* 텍스트 다이어트 (cake-benchmark P2 C3): 상세 설명 목록은 상세
+              화면이 말한다 — 이동 카드는 제목 + 한 줄이면 충분 */}
             <h2 className="font-hand text-2xl font-bold group-hover:underline group-hover:decoration-highlight group-hover:decoration-4 group-hover:underline-offset-4">
               어휘망
             </h2>
             <p className="mt-1 text-sm opacity-80">
               내가 배운 단어들이 비슷한 뜻끼리 연결된 지도
             </p>
-            <ul className="mt-3 flex flex-col gap-1.5 text-xs leading-relaxed opacity-70">
-              <li>· 단어를 탭하면 뜻·뉘앙스·예문 카드가 열려요</li>
-              <li>· 점선 단어는 아직 안 배운 추천 — 한 번에 학습에 추가</li>
-            </ul>
-            <span className="mt-4 text-sm font-bold text-brick-blue">
+            <span className="mt-3 text-sm font-bold text-brick-blue">
               열어보기 →
             </span>
           </Link>
@@ -325,11 +328,7 @@ export default function StudyHubPage() {
             <p className="mt-1 text-sm opacity-80">
               친구를 추가하고, 학습 중인 친구를 관전해요
             </p>
-            <ul className="mt-3 flex flex-col gap-1.5 text-xs leading-relaxed opacity-70">
-              <li>· 이메일로 친구 요청 — 상대가 수락하면 연결</li>
-              <li>· 친구가 허락하면 학습 화면을 실시간으로 볼 수 있어요</li>
-            </ul>
-            <span className="mt-4 text-sm font-bold text-brick-red">
+            <span className="mt-3 text-sm font-bold text-brick-red">
               {friendSignal && friendSignal.studying > 0
                 ? `지금 ${friendSignal.studying}명 학습 중 →`
                 : "친구 보기 →"}
@@ -337,11 +336,20 @@ export default function StudyHubPage() {
           </Link>
         </div>
 
-        {/* 주간 랭킹 — 친구와의 학습량 경쟁 (P1 데일리 루프) */}
+        {/* 주간 랭킹 — 친구와의 학습량 경쟁 (P1 데일리 루프).
+          접기 기본 — 내 순위는 summary 에 남겨 열어볼 이유를 준다 */}
         {ranks !== null && ranks.length > 0 && (
-          <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-yellow/50 bg-white p-5 shadow-sm">
-            <h2 className="font-hand text-2xl font-bold">이번 주 학습 랭킹</h2>
-            <p className="mt-1 text-xs opacity-60">
+          <CollapsibleSection
+            title="이번 주 학습 랭킹"
+            borderClass="border-brick-yellow/50"
+            summary={(() => {
+              const mine = ranks.find((r) => r.me);
+              return mine
+                ? `내 순위 ${mine.rank}위 · ${ranks.length}명`
+                : `${ranks.length}명 집계 중`;
+            })()}
+          >
+            <p className="text-xs opacity-60">
               최근 7일 복습 수 — 친구와 함께 집계돼요
             </p>
             <ol className="mt-3 flex flex-col gap-1.5">
@@ -372,23 +380,21 @@ export default function StudyHubPage() {
                 아직 나 혼자예요 — 친구를 추가하면 함께 순위가 매겨져요!
               </p>
             )}
-          </section>
+          </CollapsibleSection>
         )}
 
-        {/* 업적 스티커 — 소급 반영, 진행률 표시 (P3) */}
+        {/* 업적 스티커 — 소급 반영, 진행률 표시 (P3). 접기 기본 — 달성 수만 노출 */}
         {badges !== null && badges.length > 0 && (
-          <section className="mt-5 max-w-4xl rounded-xl border-2 border-brick-green/40 bg-white p-5 shadow-sm">
-            <h2 className="font-hand text-2xl font-bold">
-              업적 스티커
-              <span className="ml-2 align-middle text-sm font-normal opacity-60">
-                {badges.filter((b) => b.achieved).length}/{badges.length} 달성
-              </span>
-            </h2>
-            <p className="mt-1 mb-3 text-xs opacity-60">
+          <CollapsibleSection
+            title="업적 스티커"
+            borderClass="border-brick-green/40"
+            summary={`${badges.filter((b) => b.achieved).length}/${badges.length} 달성`}
+          >
+            <p className="mb-3 text-xs opacity-60">
               공부하고 게임하다 보면 하나씩 붙어요
             </p>
             <AchievementBadges items={badges} />
-          </section>
+          </CollapsibleSection>
         )}
       </div>
     </main>
