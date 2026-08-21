@@ -6,6 +6,7 @@ import { Showcase } from "@/components/landing/Showcase";
 import { DailyGoalCard } from "@/components/study/DailyGoalCard";
 import { DailyQuestsCard } from "@/components/study/DailyQuestsCard";
 import { OnboardingChecklist } from "@/components/study/OnboardingChecklist";
+import { ResumeRoutineCard } from "@/components/study/ResumeRoutineCard";
 import { StreakCelebration } from "@/components/study/StreakCelebration";
 import { StreakSaverThanks } from "@/components/study/StreakSaverThanks";
 import { StudyingFriendsCard } from "@/components/study/StudyingFriendsCard";
@@ -122,6 +123,9 @@ function Dashboard({ me }: { me: Me }) {
           카드가 만들어져요.
         </p>
       )}
+
+      {/* 이어하기 — 진행 중 정복 루틴 얇은 1줄 (cake-benchmark P1, 복귀 마찰 제거) */}
+      <ResumeRoutineCard />
 
       {/* 지금 학습 중인 친구 — 관전 진입점 (study-spectate.md 진입 경로 재설계) */}
       <StudyingFriendsCard />

@@ -447,16 +447,16 @@ export function ChatWidget() {
           aria-label={`대화 열기${unread > 0 ? ` — 새 글 ${unread}개` : ""}`}
           className={
             excel
-              ? "fixed right-4 bottom-20 z-50 flex min-h-10 items-center gap-1.5 rounded-full bg-[#185c37] px-4 font-sans text-xs font-bold text-white shadow-lg hover:bg-[#217346] sm:bottom-4"
+              ? "fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-50 flex min-h-10 items-center gap-1.5 rounded-full bg-[#185c37] px-4 font-sans text-xs font-bold text-white shadow-lg hover:bg-[#217346] sm:bottom-4"
               : mascotLauncher
                 ? // 캐릭터 런처 — 산 마스코트가 버튼 자체가 된다 (연필 대체).
                   // idle 애니메이션은 새 메시지가 있을 때만 (없으면 정지, 2026-08-11).
                   // z-30: 하단 탭바(z-40) 뒤로 — 움직일 때 메뉴 위로 겹쳐 잘려
                   // 보이던 문제 (2026-08-12 보고, 좌하단 MascotPeek 와 동일 층)
-                  `fixed right-1 bottom-16 z-30 origin-bottom-right scale-75 transition hover:-translate-y-0.5 sm:right-3 sm:bottom-2 sm:scale-100 ${
+                  `fixed right-1 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-30 origin-bottom-right scale-75 transition hover:-translate-y-0.5 sm:right-3 sm:bottom-2 sm:scale-100 ${
                     unread > 0 ? "mascot-launcher-attn" : ""
                   }`
-                : `fixed right-4 bottom-20 z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5 sm:bottom-4 ${
+                : `fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-50 flex h-13 w-13 items-center justify-center rounded-full border-2 border-ink/15 bg-white shadow-lg transition hover:-translate-y-0.5 sm:bottom-4 ${
                     unread > 0 ? "launcher-attn" : ""
                   }`
           }
@@ -914,7 +914,11 @@ function WidgetRoom({
             onChange={p.onInputChange}
             onSend={p.onSend}
             onPasteImage={p.onAttachImageFile}
-            placeholder={roomInputPlaceholder(p.sourceLang, p.targetLang, p.room?.mode ?? "learn")}
+            placeholder={roomInputPlaceholder(
+              p.sourceLang,
+              p.targetLang,
+              p.room?.mode ?? "learn",
+            )}
             className={`min-h-11 min-w-0 flex-1 px-2 py-2.5 text-base focus:outline-none sm:min-h-9 sm:py-2 sm:text-[13px] ${
               excel
                 ? "rounded-sm border border-[#c9cfd6] focus:border-[#217346]"

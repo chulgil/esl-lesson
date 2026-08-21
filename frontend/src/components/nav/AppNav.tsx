@@ -219,10 +219,11 @@ export function AppNav() {
         </div>
       </div>
 
-      {/* 모바일: 하단 탭바 고정 — 이동 5탭 (계정성 메뉴는 상단 프로필) */}
+      {/* 모바일: 하단 탭바 고정 — 이동 5탭 (계정성 메뉴는 상단 프로필).
+          pb-safe: 노치 기기 홈 인디케이터에 탭이 짤리지 않게 (viewport-fit=cover) */}
       <nav
         aria-label="주요 메뉴"
-        className="fixed inset-x-0 bottom-0 z-40 flex border-t-2 border-ink/15 bg-white sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex border-t-2 border-ink/15 bg-white pb-[env(safe-area-inset-bottom)] sm:hidden"
       >
         {TABS.map((tab) => {
           const active = tab.match(pathname);

@@ -529,7 +529,7 @@ body.mascot-launcher .henyang-peek {
 @media (max-width: 639px) {
   /* 모바일 하단 탭바(로그인 시) 위로 올려 겹침 방지 */
   body.with-bottom-nav .henyang-peek {
-    bottom: 4.75rem;
+    bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -556,7 +556,8 @@ html[data-theme="candy"] .brick-studs::before {
 /* 모바일 하단 탭바가 본문을 가리지 않도록 (AppNav 가 body 에 토글) */
 @media (max-width: 639px) {
   body.with-bottom-nav {
-    padding-bottom: 4.5rem;
+    /* 탭바 높이 + 노치 기기 홈 인디케이터 inset (viewport-fit=cover) */
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
   }
   /* 대전 중에는 하단 탭바·상단 미니바 숨김 (게임 입력바와 겹침 방지, 집중 모드) */
   body.game-focus nav[aria-label="주요 메뉴"],

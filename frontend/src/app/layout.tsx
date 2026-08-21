@@ -35,6 +35,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   interactiveWidget: "resizes-content",
+  // 노치 기기에서 env(safe-area-inset-*) 활성화 — 하단 탭바가 홈 인디케이터에
+  // 짤리지 않게 탭바·플로팅 요소가 inset 만큼 올라간다 (2026-08-21 사용자 보고)
+  viewportFit: "cover",
 };
 
 export const metadata: Metadata = {

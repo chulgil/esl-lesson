@@ -283,6 +283,8 @@ export interface LibraryContent {
   subscribed: boolean;
   /** "creativeCommon" | "youtube"(표준) | null(미확인) — CC 배지·저작자표시용 */
   youtube_license: string | null;
+  /** 카드 썸네일용 (i.ytimg.com) — 유튜브 외 소스는 null */
+  youtube_video_id: string | null;
   item_count: number;
   /** 항목 difficulty_hint 분포에서 파생 — 항목이 없으면 null */
   difficulty: "beginner" | "intermediate" | "advanced" | null;

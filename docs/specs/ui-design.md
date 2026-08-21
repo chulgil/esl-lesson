@@ -155,6 +155,23 @@
 - **홈 카드 예산**: 상시 카드는 목표·미션 2장까지, 카드 기본 상태는 3행 이하
   (제목줄 + 본문 1~2행). 넘치면 접기 또는 학습 탭 이관. 조건부 배너(성적표·복귀
   감사·학습 중 친구)는 1회성/일시 노출만 허용.
+- **이어하기 줄** (2026-08-21 C6): 진행 중(1~5단계) 정복 루틴이 있으면 CTA 아래
+  얇은 1줄(`ResumeRoutineCard`) — 최다 진행 1개만, 없으면 렌더 안 함. 카드가
+  아니라 줄이므로 카드 예산에 세지 않는다.
+
+### 노치 safe-area 계약 (2026-08-21)
+
+`viewport-fit=cover` 활성 — 노치 기기에서 하단 탭이 홈 인디케이터에 짤리던 보고.
+바닥에 붙는 fixed 요소는 반드시 `env(safe-area-inset-bottom)` 을 더한다:
+
+| 요소 | 적용 |
+|---|---|
+| 하단 탭바 (`AppNav`) | `pb-[env(safe-area-inset-bottom)]` — 배경은 바닥까지, 탭은 위로 |
+| 본문 여백 (`body.with-bottom-nav`) | `calc(4.5rem + inset)` |
+| 채팅 런처·마스코트 런처 | `bottom: calc(기존값 + inset)` |
+| 좌하단 마스코트 (`henyang-peek`) | `calc(4.75rem + inset)` |
+
+미적용 잔여: chat-focus·game-focus 바닥 입력줄 (cake-benchmark P2).
 
 ### 첫 주 계약 — 온보딩 체크리스트 + `/method` (2026-08-06)
 
