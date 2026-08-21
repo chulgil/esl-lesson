@@ -314,7 +314,8 @@ html[data-theme="lego"] .notebook-lines {
  * 그대로 차지해 AppNav 만큼 잘려 보이는 문제 — 로그인 상태에서 h-dvh
  * 전체화면을 쓰는 대화방(NoteSkin/ExcelChrome) 전용. */
 .h-dvh-nav-safe {
-  height: calc(100dvh - 66px - 48px);
+  /* 탭바 66px 는 노치 기기에서 inset 만큼 더 높아진다 (viewport-fit=cover) */
+  height: calc(100dvh - 66px - 48px - env(safe-area-inset-bottom, 0px));
 }
 @media (min-width: 640px) {
   .h-dvh-nav-safe {
@@ -578,6 +579,8 @@ html[data-theme="candy"] .brick-studs::before {
   }
   body.chat-focus .h-dvh-nav-safe {
     height: calc(100dvh - 48px); /* 상단 미니바만 남음 */
+    /* 입력줄이 홈 인디케이터에 겹치지 않게 (노치 safe-area 계약, ui-design.md) */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   body.chat-focus .henyang-peek {
     display: none; /* 입력줄 시야 확보 — 게임 집중 모드와 동일 취지 */
